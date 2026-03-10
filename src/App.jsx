@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useAuth } from './hooks/useAuth'
+import { useFeed } from './hooks/useFeed'
+import { useMessages } from './hooks/useMessages'
 
 
 const P = {
@@ -2788,26 +2790,28 @@ const RequestCard = ({ req, onAccept, onDecline }) => {
   );
 };
 
-const ConvoItem = ({ convo, isActive, onClick }) => {
-  const isGroup = convo.type === "group";
-  const others = convo.participants.filter(id => id !== "me").map(getUser);
-  const lastMsg = convo.messages[convo.messages.length - 1];
-  const unread = convo.messages.filter(m => m.from !== "me" && !m.read).length;
-  if (!lastMsg) return null;
-  const lastSender = getUser(lastMsg.from);
+const ConvoItem = ({ convo, isActive, onClick, currentUserId }) => {
+  const isGroup = convo.isGroup;
+  const lastMsg = convo.lastMessage;
+  const unread = convo.unreadCount || 0;
+  const displayUser = convo.displayAvatar;
   return (
     <div onClick={onClick} style={{ display: "flex", alignItems: "center", gap: 12, padding: "11px 14px", borderRadius: 16, cursor: "pointer", background: isActive ? P.lavenderLight : "transparent", border: `1.5px solid ${isActive ? P.lavender : "transparent"}`, transition: "all 0.15s", marginBottom: 3 }}>
-      {isGroup ? <GroupAvatar participants={convo.participants} size={44} /> : <UserAvatar user={others[0]} size={44} showStatus />}
+      {isGroup
+        ? <div style={{ width: 44, height: 44, borderRadius: "50%", background: P.lavender, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, flexShrink: 0 }}>👥</div>
+        : <UserAvatar user={displayUser} size={44} showStatus />}
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 3 }}>
           <span style={{ fontFamily: FF_S, fontSize: 14, fontWeight: unread > 0 ? 700 : 500, color: P.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-            {isGroup ? convo.name : others[0]?.name}
+            {convo.displayName}
           </span>
-          <span style={{ fontFamily: FF_S, fontSize: 11, color: P.inkFaint, flexShrink: 0, marginLeft: 8 }}>{fmtTime(lastMsg.ts)}</span>
+          {lastMsg && <span style={{ fontFamily: FF_S, fontSize: 11, color: P.inkFaint, flexShrink: 0, marginLeft: 8 }}>{fmtTime(new Date(lastMsg.created_at).getTime())}</span>}
         </div>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <span style={{ fontFamily: FF_S, fontSize: 12.5, color: unread > 0 ? P.ink : P.inkFaint, fontWeight: unread > 0 ? 500 : 400, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>
-            {lastMsg.from === "me" ? "You: " : isGroup ? `${lastSender?.name.split(" ")[0]}: ` : ""}{lastMsg.text}
+            {lastMsg
+              ? `${lastMsg.sender_id === currentUserId ? "You: " : isGroup ? `${lastMsg.profiles?.name?.split(" ")[0]}: ` : ""}${lastMsg.content}`
+              : "No messages yet"}
           </span>
           {unread > 0 && <div style={{ width: 18, height: 18, borderRadius: "50%", background: P.lavender, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: FF_S, fontSize: 10, fontWeight: 700, color: P.ink, flexShrink: 0, marginLeft: 8 }}>{unread}</div>}
         </div>
@@ -2816,81 +2820,81 @@ const ConvoItem = ({ convo, isActive, onClick }) => {
   );
 };
 
-const ConversationView = ({ convo }) => {
-  const [messages, setMessages] = useState(convo.messages);
+const ConversationView = ({ convo, messages, messagesLoading, sendMessage, setTyping, typingUsers, currentUserId }) => {
   const [input, setInput] = useState("");
-  const [typingUser, setTypingUser] = useState(null);
   const bottomRef = useRef(null);
-  const others = convo.participants.filter(id => id !== "me").map(getUser);
-  const isGroup = convo.type === "group";
+  const isGroup = convo.isGroup;
+  const other = convo.displayAvatar;
 
-  useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-    setMessages(msgs => msgs.map(m => ({ ...m, read: true })));
-  }, [convo.id]);
+  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages, typingUsers]);
 
-  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages, typingUser]);
-
-  const send = () => {
+  const send = async () => {
     if (!input.trim()) return;
-    setMessages(prev => [...prev, { id: `m${Date.now()}`, from: "me", text: input.trim(), ts: Date.now(), read: false }]);
+    const text = input.trim();
     setInput("");
-    const responder = others[Math.floor(Math.random() * others.length)];
-    setTimeout(() => {
-      setTypingUser(responder);
-      setTimeout(() => {
-        setTypingUser(null);
-        const replies = ["Haha yes exactly! 😄", "That's such a good point", "I was just thinking the same thing!", "Love that for you ✨", "Okay wait tell me more", "I need to add that to my Nook too"];
-        setMessages(prev => [...prev, { id: `m${Date.now()}`, from: responder.id, text: replies[Math.floor(Math.random() * replies.length)], ts: Date.now(), read: true }]);
-      }, 1800);
-    }, 500);
+    setTyping(false);
+    await sendMessage(text);
+  };
+
+  const handleInputChange = (e) => {
+    setInput(e.target.value);
+    setTyping(e.target.value.length > 0);
   };
 
   const grouped = messages.reduce((acc, msg, i) => {
     const prev = messages[i - 1];
-    acc.push({ ...msg, isFirst: !prev || prev.from !== msg.from || (msg.ts - prev.ts) > 300000 });
+    const ts = new Date(msg.created_at).getTime();
+    const prevTs = prev ? new Date(prev.created_at).getTime() : 0;
+    acc.push({ ...msg, isFirst: !prev || prev.sender_id !== msg.sender_id || (ts - prevTs) > 300000 });
     return acc;
   }, []);
 
-  const other = others[0];
-  const subColor = other?.status === "online" ? P.online : other?.status === "away" ? P.away : P.inkFaint;
-
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
+      {/* Header */}
       <div style={{ background: P.white, borderBottom: `1px solid ${P.lavender}44`, padding: "14px 24px", display: "flex", alignItems: "center", gap: 14, flexShrink: 0 }}>
-        {isGroup ? <GroupAvatar participants={convo.participants} size={40} /> : <UserAvatar user={other} size={40} showStatus />}
+        {isGroup
+          ? <div style={{ width: 40, height: 40, borderRadius: "50%", background: P.lavender, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18 }}>👥</div>
+          : <UserAvatar user={other} size={40} showStatus />}
         <div style={{ flex: 1 }}>
-          <div style={{ fontFamily: FF_D, fontSize: 17, color: P.ink }}>{isGroup ? convo.name : other?.name}</div>
-          <div style={{ fontFamily: FF_S, fontSize: 12, color: isGroup ? P.inkFaint : subColor, marginTop: 1 }}>
-            {isGroup ? `${convo.participants.length} members` : `${other?.handle} · ${other?.status === "online" ? "● Online" : other?.status === "away" ? "◐ Away" : "○ Offline"}`}
+          <div style={{ fontFamily: FF_D, fontSize: 17, color: P.ink }}>{convo.displayName}</div>
+          <div style={{ fontFamily: FF_S, fontSize: 12, color: P.inkFaint, marginTop: 1 }}>
+            {isGroup ? `${convo.conversation_members?.length || 0} members` : other?.handle || ""}
           </div>
         </div>
       </div>
 
+      {/* Messages */}
       <div style={{ flex: 1, overflowY: "auto", padding: "20px 24px", display: "flex", flexDirection: "column", gap: 2, background: P.bg }}>
+        {messagesLoading && (
+          <div style={{ textAlign: "center", padding: "40px 0", color: P.inkFaint, fontFamily: FF_S, fontSize: 13 }}>Loading messages…</div>
+        )}
+        {!messagesLoading && messages.length === 0 && (
+          <div style={{ textAlign: "center", padding: "60px 0", color: P.inkFaint }}>
+            <div style={{ fontSize: 32, marginBottom: 10 }}>👋</div>
+            <p style={{ fontFamily: FF_S, fontSize: 14, margin: 0 }}>Say hello! Start the conversation.</p>
+          </div>
+        )}
         {grouped.map((msg, i) => {
-          const isMe = msg.from === "me";
-          const sender = getUser(msg.from);
-          const isLast = !grouped[i + 1] || grouped[i + 1].from !== msg.from;
+          const isMe = msg.sender_id === currentUserId;
+          const sender = msg.profiles;
+          const isLast = !grouped[i + 1] || grouped[i + 1].sender_id !== msg.sender_id;
           return (
             <div key={msg.id} style={{ display: "flex", flexDirection: isMe ? "row-reverse" : "row", alignItems: "flex-end", gap: 8, marginTop: msg.isFirst ? 14 : 2, animation: "fadeUp 0.2s ease both" }}>
               {!isMe && <div style={{ width: 28, flexShrink: 0 }}>{isLast && <UserAvatar user={sender} size={28} />}</div>}
               <div style={{ maxWidth: "68%", display: "flex", flexDirection: "column", alignItems: isMe ? "flex-end" : "flex-start" }}>
-                {msg.isFirst && !isMe && isGroup && <span style={{ fontFamily: FF_S, fontSize: 11, color: P.inkFaint, marginBottom: 3, marginLeft: 4 }}>{sender?.name.split(" ")[0]}</span>}
-                <div style={{ background: isMe ? P.lavender : P.white, border: isMe ? "none" : `1.5px solid ${P.lavender}44`, borderRadius: isMe ? "16px 4px 16px 16px" : "4px 16px 16px 16px", padding: "9px 14px", fontFamily: FF_S, fontSize: 14, color: P.ink, lineHeight: 1.5, boxShadow: isMe ? `0 2px 12px ${P.lavender}50` : "0 1px 4px rgba(61,53,80,0.06)" }}>{msg.text}</div>
-                {isLast && (
-                  <div style={{ display: "flex", alignItems: "center", gap: 4, marginTop: 3 }}>
-                    <span style={{ fontFamily: FF_S, fontSize: 10, color: P.inkFaint }}>{fmtTime(msg.ts)}</span>
-                    {isMe && <span style={{ fontSize: 10, color: msg.read ? P.online : P.inkFaint }}>{msg.read ? "✓✓" : "✓"}</span>}
-                  </div>
-                )}
+                {msg.isFirst && !isMe && isGroup && <span style={{ fontFamily: FF_S, fontSize: 11, color: P.inkFaint, marginBottom: 3, marginLeft: 4 }}>{sender?.name?.split(" ")[0]}</span>}
+                <div style={{ background: isMe ? P.lavender : P.white, border: isMe ? "none" : `1.5px solid ${P.lavender}44`, borderRadius: isMe ? "16px 4px 16px 16px" : "4px 16px 16px 16px", padding: "9px 14px", fontFamily: FF_S, fontSize: 14, color: P.ink, lineHeight: 1.5, boxShadow: isMe ? `0 2px 12px ${P.lavender}50` : "0 1px 4px rgba(61,53,80,0.06)" }}>{msg.content}</div>
+                {isLast && <span style={{ fontFamily: FF_S, fontSize: 10, color: P.inkFaint, marginTop: 3 }}>{fmtTime(new Date(msg.created_at).getTime())}</span>}
               </div>
             </div>
           );
         })}
-        {typingUser && (
+        {typingUsers.length > 0 && (
           <div style={{ display: "flex", alignItems: "flex-end", gap: 8, marginTop: 14, animation: "fadeUp 0.2s ease" }}>
-            <UserAvatar user={typingUser} size={28} />
+            <div style={{ width: 28, height: 28, borderRadius: "50%", background: P.lavenderLight, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12 }}>
+              {typingUsers[0]?.name?.[0] || "?"}
+            </div>
             <div style={{ background: P.white, border: `1.5px solid ${P.lavender}44`, borderRadius: "4px 16px 16px 16px", padding: "10px 16px", display: "flex", gap: 4, alignItems: "center" }}>
               {[0,1,2].map(i => <div key={i} style={{ width: 6, height: 6, borderRadius: "50%", background: P.lavender, animation: "bounce 1.2s ease infinite", animationDelay: `${i * 0.2}s` }} />)}
             </div>
@@ -2899,8 +2903,9 @@ const ConversationView = ({ convo }) => {
         <div ref={bottomRef} />
       </div>
 
+      {/* Input */}
       <div style={{ padding: "14px 20px", background: P.white, borderTop: `1px solid ${P.lavender}44`, display: "flex", gap: 10, alignItems: "flex-end", flexShrink: 0 }}>
-        <textarea value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }} placeholder="Write a message… (Enter to send)" rows={1}
+        <textarea value={input} onChange={handleInputChange} onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }} placeholder="Write a message… (Enter to send)" rows={1}
           style={{ flex: 1, border: `1.5px solid ${P.lavender}`, borderRadius: 14, padding: "10px 14px", fontFamily: FF_S, fontSize: 14, background: P.lavenderLight, color: P.ink, outline: "none", resize: "none", lineHeight: 1.5 }} />
         <button onClick={send} style={{ background: input.trim() ? P.lavender : P.lavenderLight, border: "none", borderRadius: 12, width: 42, height: 42, cursor: input.trim() ? "pointer" : "default", fontSize: 18, transition: "all 0.2s", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>↑</button>
       </div>
@@ -3397,48 +3402,46 @@ const DashboardPage = ({ view, onNavigate, profilePic, setProfilePic, widgetRequ
   );
 };
 
-const MessagesPage = ({ convos, setConvos, requests, setRequests }) => {
-  const [activeId, setActiveId] = useState("c1");
+const MessagesPage = ({ requests, setRequests }) => {
+  const { user } = useAuth();
+  const {
+    conversations, activeConversation, messages, loading, messagesLoading,
+    selectConversation, sendMessage, startDM, startGroupChat,
+    typingUsers, setTyping, totalUnread,
+  } = useMessages();
+
   const [msgTab, setMsgTab] = useState("messages");
   const [searchConvos, setSearchConvos] = useState("");
   const [showNew, setShowNew] = useState(false);
-  const activeConvo = convos.find(c => c.id === activeId);
+  const [showChat, setShowChat] = useState(false);
 
-  const acceptRequest = (req) => {
-    const newConvo = { id: `c${Date.now()}`, type: "dm", participants: ["me", req.from], messages: [{ id: "m1", from: req.from, text: req.preview, ts: req.ts, read: false }] };
-    setConvos(prev => [newConvo, ...prev]);
-    setRequests(prev => prev.filter(r => r.id !== req.id));
-    setActiveId(newConvo.id);
-    setMsgTab("messages");
+  const handleSelect = (id) => {
+    selectConversation(id);
+    setShowChat(true);
   };
 
-  const startConvo = ({ tab, selected, groupName }) => {
+  const startConvo = async ({ tab, selected, groupName }) => {
     if (tab === "dm") {
-      const existing = convos.find(c => c.type === "dm" && c.participants.includes(selected[0]));
-      if (existing) { setActiveId(existing.id); setShowNew(false); return; }
-      const newConvo = { id: `c${Date.now()}`, type: "dm", participants: ["me", selected[0]], messages: [] };
-      setConvos(prev => [newConvo, ...prev]);
-      setActiveId(newConvo.id);
+      const { conversationId, error } = await startDM(selected[0]);
+      if (!error && conversationId) handleSelect(conversationId);
     } else {
-      const newConvo = { id: `c${Date.now()}`, type: "group", name: groupName, participants: ["me", ...selected], messages: [] };
-      setConvos(prev => [newConvo, ...prev]);
-      setActiveId(newConvo.id);
+      const { conversationId, error } = await startGroupChat(selected, groupName);
+      if (!error && conversationId) handleSelect(conversationId);
     }
     setShowNew(false);
     setMsgTab("messages");
   };
 
-  const filtered = convos.filter(c => {
+  const acceptRequest = (req) => {
+    setRequests(prev => prev.filter(r => r.id !== req.id));
+    setMsgTab("messages");
+  };
+
+  const filtered = conversations.filter(c => {
     if (!searchConvos.trim()) return true;
     const q = searchConvos.toLowerCase();
-    if (c.type === "group") return c.name.toLowerCase().includes(q);
-    const other = getUser(c.participants.find(id => id !== "me"));
-    return other?.name.toLowerCase().includes(q) || other?.handle.toLowerCase().includes(q);
+    return c.displayName?.toLowerCase().includes(q);
   });
-
-  const [showChat, setShowChat] = useState(false); // mobile: show chat pane vs list pane
-
-  const selectConvo = (id) => { setActiveId(id); setShowChat(true); };
 
   return (
     <div className="nook-msg-layout">
@@ -3467,9 +3470,15 @@ const MessagesPage = ({ convos, setConvos, requests, setRequests }) => {
         </div>
         <div style={{ flex: 1, overflowY: "auto", padding: "0 8px" }}>
           {msgTab === "messages" && (
-            filtered.length === 0
-              ? <p style={{ textAlign: "center", color: P.inkFaint, fontSize: 13, padding: "30px 16px" }}>No conversations found</p>
-              : filtered.map(c => <ConvoItem key={c.id} convo={c} isActive={activeId === c.id} onClick={() => selectConvo(c.id)} />)
+            loading
+              ? <p style={{ textAlign: "center", color: P.inkFaint, fontSize: 13, padding: "30px 16px" }}>Loading…</p>
+              : filtered.length === 0
+                ? <div style={{ textAlign: "center", padding: "48px 16px", color: P.inkFaint }}>
+                    <div style={{ fontSize: 28, marginBottom: 8 }}>✉️</div>
+                    <p style={{ fontFamily: FF_S, fontSize: 13, margin: 0 }}>No conversations yet</p>
+                    <p style={{ fontFamily: FF_S, fontSize: 12, margin: "6px 0 0", color: P.inkFaint }}>Start one with the + New button</p>
+                  </div>
+                : filtered.map(c => <ConvoItem key={c.id} convo={c} isActive={activeConversation?.id === c.id} onClick={() => handleSelect(c.id)} currentUserId={user?.id} />)
           )}
           {msgTab === "requests" && (
             requests.length === 0
@@ -3484,12 +3493,20 @@ const MessagesPage = ({ convos, setConvos, requests, setRequests }) => {
 
       {/* Chat area */}
       <div className={`nook-msg-main${!showChat ? " nook-msg-hidden" : ""}`} style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
-        {/* Mobile back button */}
         <button className="nook-msg-back" onClick={() => setShowChat(false)} style={{ display: "none", alignItems: "center", gap: 8, padding: "12px 16px", background: P.white, border: "none", borderBottom: `1px solid ${P.lavender}33`, cursor: "pointer", fontFamily: FF_S, fontSize: 13, color: "#9B85D8", fontWeight: 600 }}>
           ← Back to messages
         </button>
-        {activeConvo
-          ? <ConversationView key={activeId} convo={activeConvo} />
+        {activeConversation
+          ? <ConversationView
+              key={activeConversation.id}
+              convo={activeConversation}
+              messages={messages}
+              messagesLoading={messagesLoading}
+              sendMessage={sendMessage}
+              setTyping={setTyping}
+              typingUsers={typingUsers}
+              currentUserId={user?.id}
+            />
           : <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: 12, color: P.inkFaint, background: P.bg }}>
               <div style={{ fontSize: 40 }}>✉️</div>
               <p style={{ fontFamily: FF_D, fontSize: 20, color: P.inkLight, margin: 0 }}>Select a conversation</p>
@@ -5044,28 +5061,106 @@ const FeedCard = ({ item, user, following, toggleFollow, onViewUser }) => {
   );
 };
 
-const FeedPage = ({ following, toggleFollow, onNavigate, onViewUser }) => {
-  const [filter, setFilter] = useState("all");
+const RealFeedCard = ({ item, currentUserId, onLike, onComment, onDelete, onViewUser }) => {
+  const [showComments, setShowComments] = useState(false);
+  const [commentText, setCommentText] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const isOwn = item.user_id === currentUserId;
+  const poster = item.profiles;
+
+  const submitComment = async () => {
+    if (!commentText.trim() || submitting) return;
+    setSubmitting(true);
+    await onComment(commentText.trim());
+    setCommentText("");
+    setSubmitting(false);
+  };
+
+  return (
+    <div style={{ background: P.white, borderRadius: 20, padding: "20px 24px", boxShadow: "0 2px 16px rgba(61,53,80,0.06)", border: `1px solid ${P.lavender}22` }}>
+      <div style={{ display: "flex", alignItems: "flex-start", gap: 12, marginBottom: 14 }}>
+        <div onClick={() => onViewUser?.(poster)} style={{ cursor: "pointer" }}>
+          <UserAvatar user={poster} size={40} />
+        </div>
+        <div style={{ flex: 1 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+            <div>
+              <span style={{ fontFamily: FF_S, fontSize: 14, fontWeight: 600, color: P.ink }}>{poster?.name}</span>
+              <span style={{ fontFamily: FF_S, fontSize: 12, color: P.inkFaint, marginLeft: 8 }}>{poster?.handle}</span>
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <span style={{ fontFamily: FF_S, fontSize: 11, color: P.inkFaint }}>{fmtTime(new Date(item.created_at).getTime())}</span>
+              {isOwn && <button onClick={onDelete} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 13, color: P.inkFaint, padding: "2px 6px", borderRadius: 8 }}>✕</button>}
+            </div>
+          </div>
+          {item.content && <p style={{ fontFamily: FF_S, fontSize: 14, color: P.ink, margin: "8px 0 0", lineHeight: 1.6 }}>{item.content}</p>}
+          {item.image_url && <img src={item.image_url} alt="" style={{ width: "100%", borderRadius: 12, marginTop: 10, maxHeight: 320, objectFit: "cover" }} />}
+        </div>
+      </div>
+      <div style={{ display: "flex", gap: 16, paddingTop: 12, borderTop: `1px solid ${P.lavender}22` }}>
+        <button onClick={onLike} style={{ background: "none", border: "none", cursor: "pointer", fontFamily: FF_S, fontSize: 13, color: item.isLiked ? "#D8708A" : P.inkFaint, display: "flex", alignItems: "center", gap: 5, fontWeight: item.isLiked ? 600 : 400 }}>
+          {item.isLiked ? "♥" : "♡"} {item.likeCount}
+        </button>
+        <button onClick={() => setShowComments(s => !s)} style={{ background: "none", border: "none", cursor: "pointer", fontFamily: FF_S, fontSize: 13, color: P.inkFaint, display: "flex", alignItems: "center", gap: 5 }}>
+          💬 {item.commentCount}
+        </button>
+      </div>
+      {showComments && (
+        <div style={{ marginTop: 14 }}>
+          {(item.comments || []).map(c => (
+            <div key={c.id} style={{ display: "flex", gap: 10, marginBottom: 10 }}>
+              <UserAvatar user={c.profiles} size={28} />
+              <div style={{ background: P.lavenderLight, borderRadius: 12, padding: "8px 12px", flex: 1 }}>
+                <span style={{ fontFamily: FF_S, fontSize: 12, fontWeight: 600, color: P.ink }}>{c.profiles?.name} </span>
+                <span style={{ fontFamily: FF_S, fontSize: 13, color: P.ink }}>{c.body}</span>
+              </div>
+            </div>
+          ))}
+          <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+            <input value={commentText} onChange={e => setCommentText(e.target.value)} onKeyDown={e => e.key === "Enter" && submitComment()} placeholder="Write a comment…"
+              style={{ flex: 1, border: `1.5px solid ${P.lavender}`, borderRadius: 20, padding: "7px 14px", fontFamily: FF_S, fontSize: 13, background: P.lavenderLight, color: P.ink, outline: "none" }} />
+            <button onClick={submitComment} disabled={!commentText.trim() || submitting}
+              style={{ background: commentText.trim() ? P.lavender : P.lavenderLight, border: "none", borderRadius: 20, padding: "7px 16px", cursor: commentText.trim() ? "pointer" : "default", fontFamily: FF_S, fontSize: 13, fontWeight: 600, color: P.ink }}>
+              Post
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+const FeedPage = ({ onNavigate, onViewUser }) => {
+  const { user } = useAuth();
+  const {
+    posts, loading, error, hasMore,
+    createPost, deletePost, toggleLike, addComment, deleteComment,
+    toggleFollow, isFollowing, loadMore, refresh,
+    feedFilter, setFeedFilter,
+  } = useFeed();
+
   const [search, setSearch] = useState("");
+  const [newPostText, setNewPostText] = useState("");
+  const [posting, setPosting] = useState(false);
+  const [showCompose, setShowCompose] = useState(false);
 
-  const feedItems = FEED_SEED
-    .filter(item => following.includes(item.uid))
-    .filter(item => filter === "all" || item.type === filter)
-    .filter(item => {
-      if (!search) return true;
-      const q = search.toLowerCase();
-      const u = USERS.find(u => u.id === item.uid);
-      return (
-        u?.name.toLowerCase().includes(q) ||
-        item.title?.toLowerCase().includes(q) ||
-        item.book?.toLowerCase().includes(q) ||
-        item.caption?.toLowerCase().includes(q) ||
-        item.goal?.toLowerCase().includes(q)
-      );
-    })
-    .sort((a, b) => b.ts - a.ts);
+  const filtered = posts.filter(item => {
+    if (!search) return true;
+    const q = search.toLowerCase();
+    return (
+      item.profiles?.name?.toLowerCase().includes(q) ||
+      item.content?.toLowerCase().includes(q)
+    );
+  });
 
-  const unfollowedUsers = USERS.filter(u => !following.includes(u.id));
+  const handlePost = async () => {
+    if (!newPostText.trim()) return;
+    setPosting(true);
+    await createPost(newPostText);
+    setNewPostText("");
+    setShowCompose(false);
+    setPosting(false);
+  };
 
   return (
     <div style={{ minHeight: "100vh", background: P.bg, padding: "32px 0" }}>
@@ -5073,19 +5168,37 @@ const FeedPage = ({ following, toggleFollow, onNavigate, onViewUser }) => {
 
         {/* Main feed column */}
         <div>
-          {/* Header */}
           <div style={{ marginBottom: 24 }}>
             <h1 style={{ fontFamily: FF_D, fontSize: 32, color: P.ink, margin: "0 0 6px", fontWeight: 400 }}>Your Feed</h1>
-            <p style={{ fontFamily: FF_S, fontSize: 14, color: P.inkLight, margin: 0 }}>
-              Updates from the {following.length} {following.length === 1 ? "person" : "people"} you follow
-            </p>
+            <p style={{ fontFamily: FF_S, fontSize: 14, color: P.inkLight, margin: 0 }}>What's happening in your community</p>
+          </div>
+
+          {/* Compose */}
+          <div style={{ background: P.white, borderRadius: 20, padding: "16px 20px", marginBottom: 20, boxShadow: "0 2px 16px rgba(61,53,80,0.06)", border: `1px solid ${P.lavender}33` }}>
+            {showCompose ? (
+              <>
+                <textarea value={newPostText} onChange={e => setNewPostText(e.target.value)} placeholder="What's on your mind?" rows={3} autoFocus
+                  style={{ width: "100%", border: `1.5px solid ${P.lavender}`, borderRadius: 12, padding: "10px 14px", fontFamily: FF_S, fontSize: 14, background: P.lavenderLight, color: P.ink, outline: "none", resize: "none", boxSizing: "border-box" }} />
+                <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", marginTop: 10 }}>
+                  <button onClick={() => { setShowCompose(false); setNewPostText(""); }} style={{ background: "none", border: "none", cursor: "pointer", fontFamily: FF_S, fontSize: 13, color: P.inkFaint }}>Cancel</button>
+                  <button onClick={handlePost} disabled={posting || !newPostText.trim()} style={{ background: newPostText.trim() ? P.lavender : P.lavenderLight, border: "none", borderRadius: 12, padding: "8px 20px", cursor: newPostText.trim() ? "pointer" : "default", fontFamily: FF_S, fontSize: 13, fontWeight: 600, color: P.ink }}>
+                    {posting ? "Posting…" : "Post"}
+                  </button>
+                </div>
+              </>
+            ) : (
+              <div onClick={() => setShowCompose(true)} style={{ display: "flex", alignItems: "center", gap: 12, cursor: "text" }}>
+                <div style={{ width: 36, height: 36, borderRadius: "50%", background: P.lavender, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, flexShrink: 0 }}>✦</div>
+                <div style={{ flex: 1, border: `1.5px solid ${P.lavender}44`, borderRadius: 20, padding: "9px 16px", fontFamily: FF_S, fontSize: 14, color: P.inkFaint, background: P.lavenderLight }}>Share something with your community…</div>
+              </div>
+            )}
           </div>
 
           {/* Filter bar */}
           <div style={{ display: "flex", gap: 8, marginBottom: 20, flexWrap: "wrap", alignItems: "center" }}>
             <div style={{ display: "flex", gap: 6, flex: 1, flexWrap: "wrap" }}>
-              {[["all","All"],["blog","Blog ✍"],["photo","Photos 📸"],["reading","Reading 📖"],["goal","Goals ★"],["mood","Mood ☀"]].map(([v, label]) => (
-                <button key={v} onClick={() => setFilter(v)} style={{ background: filter === v ? P.lavender : P.white, border: `1.5px solid ${filter === v ? P.lavender : P.lavender + "55"}`, borderRadius: 20, padding: "6px 14px", cursor: "pointer", fontFamily: FF_S, fontSize: 12, fontWeight: filter === v ? 600 : 400, color: P.ink, transition: "all 0.15s" }}>{label}</button>
+              {[["all","All"],["following","Following"]].map(([v, label]) => (
+                <button key={v} onClick={() => setFeedFilter(v)} style={{ background: feedFilter === v ? P.lavender : P.white, border: `1.5px solid ${feedFilter === v ? P.lavender : P.lavender + "55"}`, borderRadius: 20, padding: "6px 14px", cursor: "pointer", fontFamily: FF_S, fontSize: 12, fontWeight: feedFilter === v ? 600 : 400, color: P.ink, transition: "all 0.15s" }}>{label}</button>
               ))}
             </div>
             <div style={{ position: "relative" }}>
@@ -5095,72 +5208,44 @@ const FeedPage = ({ following, toggleFollow, onNavigate, onViewUser }) => {
           </div>
 
           {/* Feed */}
-          {following.length === 0 ? (
+          {loading && posts.length === 0 ? (
+            <div style={{ background: P.white, borderRadius: 20, padding: "60px 40px", textAlign: "center" }}>
+              <p style={{ fontFamily: FF_S, fontSize: 14, color: P.inkFaint }}>Loading feed…</p>
+            </div>
+          ) : error ? (
+            <div style={{ background: P.white, borderRadius: 20, padding: "40px", textAlign: "center" }}>
+              <p style={{ fontFamily: FF_S, fontSize: 14, color: P.inkFaint }}>Couldn't load feed. <button onClick={refresh} style={{ background: "none", border: "none", color: "#9B85D8", cursor: "pointer", fontFamily: FF_S, fontSize: 14 }}>Try again</button></p>
+            </div>
+          ) : filtered.length === 0 ? (
             <div style={{ background: P.white, borderRadius: 20, padding: "60px 40px", textAlign: "center", boxShadow: "0 2px 16px rgba(61,53,80,0.06)" }}>
               <div style={{ fontSize: 48, marginBottom: 16 }}>🌿</div>
-              <h3 style={{ fontFamily: FF_D, fontSize: 22, color: P.ink, fontWeight: 400, margin: "0 0 10px" }}>Your feed is empty</h3>
-              <p style={{ fontFamily: FF_S, fontSize: 14, color: P.inkLight, margin: "0 0 20px" }}>Follow some people to see their updates here.</p>
-            </div>
-          ) : feedItems.length === 0 ? (
-            <div style={{ background: P.white, borderRadius: 20, padding: "48px 40px", textAlign: "center", boxShadow: "0 2px 16px rgba(61,53,80,0.06)" }}>
-              <div style={{ fontSize: 40, marginBottom: 12 }}>🔍</div>
-              <p style={{ fontFamily: FF_S, fontSize: 14, color: P.inkLight, margin: 0 }}>No updates match that filter yet.</p>
+              <h3 style={{ fontFamily: FF_D, fontSize: 22, color: P.ink, fontWeight: 400, margin: "0 0 10px" }}>Nothing here yet</h3>
+              <p style={{ fontFamily: FF_S, fontSize: 14, color: P.inkLight, margin: "0 0 20px" }}>Be the first to post, or switch to "All" to see everyone.</p>
             </div>
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-              {feedItems.map(item => {
-                const user = USERS.find(u => u.id === item.uid);
-                if (!user) return null;
-                return <FeedCard key={item.id} item={item} user={user} following={following} toggleFollow={toggleFollow} onViewUser={onViewUser} />;
-              })}
+              {filtered.map(item => (
+                <RealFeedCard
+                  key={item.id}
+                  item={item}
+                  currentUserId={user?.id}
+                  onLike={() => toggleLike(item.id)}
+                  onComment={(body) => addComment(item.id, body)}
+                  onDelete={() => deletePost(item.id)}
+                  onViewUser={onViewUser}
+                />
+              ))}
+              {hasMore && (
+                <button onClick={loadMore} style={{ background: P.white, border: `1.5px solid ${P.lavender}`, borderRadius: 16, padding: "12px", cursor: "pointer", fontFamily: FF_S, fontSize: 13, color: P.inkLight, fontWeight: 600 }}>
+                  Load more
+                </button>
+              )}
             </div>
           )}
         </div>
 
         {/* Sidebar */}
         <div style={{ display: "flex", flexDirection: "column", gap: 18, position: "sticky", top: 96 }}>
-
-          {/* Who you follow */}
-          <div style={{ background: P.white, borderRadius: 20, padding: "20px", boxShadow: "0 2px 16px rgba(61,53,80,0.06)" }}>
-            <h4 style={{ fontFamily: FF_D, fontSize: 16, color: P.ink, margin: "0 0 14px", fontWeight: 400 }}>Following ({following.length})</h4>
-            {following.length === 0 ? (
-              <p style={{ fontFamily: FF_S, fontSize: 12, color: P.inkFaint, margin: 0 }}>Nobody yet — discover people below!</p>
-            ) : (
-              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                {USERS.filter(u => following.includes(u.id)).map(u => (
-                  <div key={u.id} style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                    <UserAvatar user={u} size={34} showStatus />
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontFamily: FF_S, fontSize: 13, fontWeight: 600, color: P.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{u.name}</div>
-                      <div style={{ fontFamily: FF_S, fontSize: 11, color: P.inkFaint }}>{u.handle}</div>
-                    </div>
-                    <button onClick={() => toggleFollow(u.id)} style={{ background: P.lavenderLight, border: "none", borderRadius: 20, padding: "3px 10px", cursor: "pointer", fontFamily: FF_S, fontSize: 10, color: P.inkFaint, fontWeight: 600, flexShrink: 0 }}>Unfollow</button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Discover */}
-          {unfollowedUsers.length > 0 && (
-            <div style={{ background: P.white, borderRadius: 20, padding: "20px", boxShadow: "0 2px 16px rgba(61,53,80,0.06)" }}>
-              <h4 style={{ fontFamily: FF_D, fontSize: 16, color: P.ink, margin: "0 0 14px", fontWeight: 400 }}>Discover people</h4>
-              <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-                {unfollowedUsers.map(u => (
-                  <div key={u.id} style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                    <UserAvatar user={u} size={34} showStatus />
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontFamily: FF_S, fontSize: 13, fontWeight: 600, color: P.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{u.name}</div>
-                      <div style={{ fontFamily: FF_S, fontSize: 11, color: P.inkFaint, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{u.bio}</div>
-                    </div>
-                    <button onClick={() => toggleFollow(u.id)} style={{ background: P.lavender, border: "none", borderRadius: 20, padding: "4px 12px", cursor: "pointer", fontFamily: FF_S, fontSize: 10, fontWeight: 600, color: P.ink, flexShrink: 0, transition: "all 0.15s" }}>+ Follow</button>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Your own profile shortcut */}
           <div style={{ background: `linear-gradient(135deg, ${P.lavenderLight}, ${P.white})`, borderRadius: 20, padding: "20px", boxShadow: "0 2px 16px rgba(61,53,80,0.06)", border: `1px solid ${P.lavender}44` }}>
             <p style={{ fontFamily: FF_S, fontSize: 12, color: P.inkFaint, margin: "0 0 10px" }}>Your Nook</p>
             <p style={{ fontFamily: FF_D, fontSize: 15, color: P.ink, margin: "0 0 14px", lineHeight: 1.4 }}>Share your own updates — keep your widgets fresh!</p>
@@ -5933,8 +6018,8 @@ export default function App() {
       {["dashboard","customize"].includes(page) && (
         <DashboardPage view={page} onNavigate={navigate} profilePic={profilePic} setProfilePic={setProfilePic} widgetRequests={widgetRequests} setWidgetRequests={setWidgetRequests} following={following} toggleFollow={toggleFollow} onViewUser={openUserProfile} />
       )}
-      {page === "messages" && <MessagesPage convos={convos} setConvos={setConvos} requests={requests} setRequests={setRequests} />}
-      {page === "feed"     && <FeedPage following={following} toggleFollow={toggleFollow} onNavigate={navigate} onViewUser={openUserProfile} />}
+      {page === "messages" && <MessagesPage requests={requests} setRequests={setRequests} />}
+      {page === "feed"     && <FeedPage onNavigate={navigate} onViewUser={openUserProfile} />}
       {page === "work"     && <WorkPage />}
       {page === "admin"    && <AdminPage widgetRequests={widgetRequests} setWidgetRequests={setWidgetRequests} />}
       {page === "settings" && <SettingsPage profilePic={profilePic} setProfilePic={setProfilePic} onLogout={logout} />}
