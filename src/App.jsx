@@ -2947,8 +2947,6 @@ const HomePage = ({ onNavigate, profilePic }) => {
 
 const AuthPage = ({ mode, onSwitch, onEnter }) => {
   const [form, setForm] = useState({ name: "", email: "", password: "" });
-  const [err, setErr] = useState("");
-  const [submitting, setSubmitting] = useState(false);
   const isLogin = mode === "login";
   return (
     <div style={{ minHeight: "calc(100vh - 61px)", background: P.bg, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
@@ -2972,8 +2970,7 @@ const AuthPage = ({ mode, onSwitch, onEnter }) => {
           <input value={form.password} onChange={e => setForm({ ...form, password: e.target.value })} placeholder="••••••••" type="password"
             style={{ width: "100%", border: `1.5px solid ${P.lavender}`, borderRadius: 12, padding: "10px 14px", fontFamily: FF_S, fontSize: 14, background: P.lavenderLight, color: P.ink, outline: "none", boxSizing: "border-box" }} />
         </div>
-        {err && <div style={{ background: "#FEE2E2", border: "1px solid #FCA5A5", borderRadius: 10, padding: "10px 14px", marginBottom: 14, fontFamily: FF_S, fontSize: 13, color: "#DC2626" }}>{err}</div>}
-                <button onClick={async () => { setErr(""); const res = await onEnter(form); if (res?.error) setErr(res.error); }} disabled={submitting} style={{ width: "100%", background: P.lavender, border: "none", borderRadius: 14, padding: "13px", cursor: submitting ? "default" : "pointer", fontSize: 15, fontWeight: 600, color: P.ink, boxShadow: `0 4px 16px ${P.lavender}80`, opacity: submitting ? 0.7 : 1 }}>
+        <button onClick={onEnter} style={{ width: "100%", background: P.lavender, border: "none", borderRadius: 14, padding: "13px", cursor: "pointer", fontSize: 15, fontWeight: 600, color: P.ink, boxShadow: `0 4px 16px ${P.lavender}80` }}>
           {isLogin ? "Sign in →" : "Create my Nook →"}
         </button>
         <p style={{ textAlign: "center", color: P.inkLight, fontSize: 13, marginTop: 20 }}>
@@ -4437,6 +4434,10 @@ const AdminPage = ({ widgetRequests, setWidgetRequests }) => {
       </div>
 
       <div className="nook-admin-grid2">
+        {card(
+          <>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+              <span style={{ fontFamily: FF_D, fontSize: 16, color: P.ink }}>Daily visitors (7d)</span>
               <span style={{ fontFamily: FF_S, fontSize: 11, color: P.inkFaint }}>This week</span>
             </div>
             <MiniBar data={DAU_DATA} valueKey="visitors" labelKey="day" color="#9B85D8" height={90} />
@@ -5768,13 +5769,15 @@ function App() {
 
   const unreadNotifs = notifications.filter(n => !n.read).length;
   const totalUnread = convos.reduce((a, c) => a + c.messages.filter(m => m.from !== "me" && !m.read).length, 0);
-  const { user, profile, loading: authLoading, signUp, signIn, signOut } = useAuth();
-  const isLoggedIn = !!user && !["home", "login", "signup"].includes(page);
+  const isLoggedIn = !["home", "login", "signup"].includes(page);
 
   const navigate = (p) => { setPage(p); setShowNotifs(false); };
-  const logout = async () => { await signOut(); setPage("home"); setHasOnboarded(false); };
+  const logout = () => { setPage("home"); setHasOnboarded(false); };
 
-    const completeOnboarding = () => { setHasOnboarded(true); setShowOnboarding(false); navigate("dashboard"); };
+  const handleSignup = () => {
+    if (!hasOnboarded) { setShowOnboarding(true); } else { navigate("dashboard"); }
+  };
+  const completeOnboarding = () => { setHasOnboarded(true); setShowOnboarding(false); navigate("dashboard"); };
 
   const openUserProfile = (uid) => { const u = USERS.find(u => u.id === uid); if (u) setViewingUser(u); };
 
@@ -5923,16 +5926,8 @@ function App() {
       />
 
       {page === "home"    && <HomePageNew onNavigate={navigate} profilePic={profilePic} />}
-      {page === "login"   && <AuthPage mode="login"  onSwitch={() => navigate("signup")} onEnter={async (form) => {
-          const { error } = await signIn({ email: form.email, password: form.password });
-          if (error) return { error: error.message };
-          navigate("dashboard");
-        }} />}
-      {page === "signup"  && <AuthPage mode="signup" onSwitch={() => navigate("login")}  onEnter={async (form) => {
-          const { error, demo } = await signUp({ email: form.email, password: form.password, name: form.name });
-          if (error) return { error: error.message };
-          if (!hasOnboarded) { setShowOnboarding(true); } else { navigate("dashboard"); }
-        }} />}
+      {page === "login"   && <AuthPage mode="login"  onSwitch={() => navigate("signup")} onEnter={() => navigate("dashboard")} />}
+      {page === "signup"  && <AuthPage mode="signup" onSwitch={() => navigate("login")}  onEnter={handleSignup} />}
 
       {["dashboard","customize"].includes(page) && (
         <DashboardPage view={page} onNavigate={navigate} profilePic={profilePic} setProfilePic={setProfilePic} widgetRequests={widgetRequests} setWidgetRequests={setWidgetRequests} following={following} toggleFollow={toggleFollow} onViewUser={openUserProfile} />
