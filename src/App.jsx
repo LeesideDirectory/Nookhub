@@ -2952,7 +2952,19 @@ const HomePage = ({ onNavigate, profilePic }) => {
 
 const AuthPage = ({ mode, onSwitch, onEnter }) => {
   const [form, setForm] = useState({ name: "", email: "", password: "" });
+  const [err, setErr] = useState("");
+  const [submitting, setSubmitting] = useState(false);
   const isLogin = mode === "login";
+
+  const handleSubmit = async () => {
+    setErr("");
+    if (!form.email || !form.password) { setErr("Please fill in all fields."); return; }
+    setSubmitting(true);
+    const result = await onEnter({ email: form.email, password: form.password, name: form.name });
+    if (result?.error) setErr(result.error);
+    setSubmitting(false);
+  };
+
   return (
     <div style={{ minHeight: "calc(100vh - 61px)", background: P.bg, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
       <div style={{ background: P.white, borderRadius: 24, padding: "44px", border: `1.5px solid ${P.lavender}55`, boxShadow: "0 8px 40px rgba(201,184,240,0.2)", width: "100%", maxWidth: 420 }}>
@@ -2968,15 +2980,18 @@ const AuthPage = ({ mode, onSwitch, onEnter }) => {
         <div style={{ marginBottom: 14 }}>
           <label style={{ display: "block", fontFamily: FF_S, fontSize: 13, color: P.inkLight, marginBottom: 5 }}>Email</label>
           <input value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} placeholder="hello@example.com" type="email"
+            onKeyDown={e => e.key === "Enter" && handleSubmit()}
             style={{ width: "100%", border: `1.5px solid ${P.lavender}`, borderRadius: 12, padding: "10px 14px", fontFamily: FF_S, fontSize: 14, background: P.lavenderLight, color: P.ink, outline: "none", boxSizing: "border-box" }} />
         </div>
-        <div style={{ marginBottom: 28 }}>
+        <div style={{ marginBottom: 20 }}>
           <label style={{ display: "block", fontFamily: FF_S, fontSize: 13, color: P.inkLight, marginBottom: 5 }}>Password</label>
           <input value={form.password} onChange={e => setForm({ ...form, password: e.target.value })} placeholder="••••••••" type="password"
+            onKeyDown={e => e.key === "Enter" && handleSubmit()}
             style={{ width: "100%", border: `1.5px solid ${P.lavender}`, borderRadius: 12, padding: "10px 14px", fontFamily: FF_S, fontSize: 14, background: P.lavenderLight, color: P.ink, outline: "none", boxSizing: "border-box" }} />
         </div>
-        <button onClick={onEnter} style={{ width: "100%", background: P.lavender, border: "none", borderRadius: 14, padding: "13px", cursor: "pointer", fontSize: 15, fontWeight: 600, color: P.ink, boxShadow: `0 4px 16px ${P.lavender}80` }}>
-          {isLogin ? "Sign in →" : "Create my Nook →"}
+        {err && <div style={{ background: "#FDF0F0", border: "1.5px solid #F0B8C8", borderRadius: 10, padding: "10px 14px", marginBottom: 16, fontFamily: FF_S, fontSize: 13, color: "#C04060" }}>{err}</div>}
+        <button onClick={handleSubmit} disabled={submitting} style={{ width: "100%", background: submitting ? P.lavenderLight : P.lavender, border: "none", borderRadius: 14, padding: "13px", cursor: submitting ? "default" : "pointer", fontSize: 15, fontWeight: 600, color: P.ink, boxShadow: `0 4px 16px ${P.lavender}80` }}>
+          {submitting ? "Please wait…" : isLogin ? "Sign in →" : "Create my Nook →"}
         </button>
         <p style={{ textAlign: "center", color: P.inkLight, fontSize: 13, marginTop: 20 }}>
           {isLogin ? "Don't have a Nook?" : "Already have a Nook?"}{" "}
@@ -5885,6 +5900,17 @@ export default function App() {
 
   const openUserProfile = (uid) => { const u = USERS.find(u => u.id === uid); if (u) setViewingUser(u); };
 
+  // Redirect unauthenticated users away from protected pages
+  const protectedPages = ["dashboard","customize","messages","feed","work","admin","settings"];
+  useEffect(() => {
+    if (!authLoading && !user && protectedPages.includes(page)) {
+      setPage("login");
+    }
+    if (!authLoading && user && ["login","signup"].includes(page)) {
+      setPage("dashboard");
+    }
+  }, [user, authLoading, page]);
+
   // Show nothing while Supabase checks session — prevents flash of login page
   if (authLoading) return (
     <div style={{ minHeight: "100vh", background: "#F5F2FC", display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -6037,18 +6063,17 @@ export default function App() {
       />
 
       {page === "home"    && <HomePageNew onNavigate={navigate} profilePic={profilePic} />}
-      {page === "login"   && (user ? navigate("dashboard") || null : <AuthPage mode="login"  onSwitch={() => navigate("signup")} onEnter={handleLogin} />)}
-      {page === "signup"  && (user ? navigate("dashboard") || null : <AuthPage mode="signup" onSwitch={() => navigate("login")}  onEnter={handleSignup} />)}
+      {page === "login"   && !user && <AuthPage mode="login"  onSwitch={() => navigate("signup")} onEnter={handleLogin} />}
+      {page === "signup"  && !user && <AuthPage mode="signup" onSwitch={() => navigate("login")}  onEnter={handleSignup} />}
 
-      {["dashboard","customize"].includes(page) && (
-        user ? <DashboardPage view={page} onNavigate={navigate} profilePic={profilePic} setProfilePic={setProfilePic} widgetRequests={widgetRequests} setWidgetRequests={setWidgetRequests} following={following} toggleFollow={toggleFollow} onViewUser={openUserProfile} />
-             : navigate("login") || null
+      {["dashboard","customize"].includes(page) && user && (
+        <DashboardPage view={page} onNavigate={navigate} profilePic={profilePic} setProfilePic={setProfilePic} widgetRequests={widgetRequests} setWidgetRequests={setWidgetRequests} following={following} toggleFollow={toggleFollow} onViewUser={openUserProfile} />
       )}
-      {page === "messages" && (user ? <MessagesPage requests={requests} setRequests={setRequests} /> : navigate("login") || null)}
-      {page === "feed"     && (user ? <FeedPage onNavigate={navigate} onViewUser={openUserProfile} /> : navigate("login") || null)}
-      {page === "work"     && (user ? <WorkPage /> : navigate("login") || null)}
-      {page === "admin"    && (user ? <AdminPage widgetRequests={widgetRequests} setWidgetRequests={setWidgetRequests} /> : navigate("login") || null)}
-      {page === "settings" && (user ? <SettingsPage profilePic={profilePic} setProfilePic={setProfilePic} onLogout={logout} /> : navigate("login") || null)}
+      {page === "messages" && user && <MessagesPage requests={requests} setRequests={setRequests} />}
+      {page === "feed"     && user && <FeedPage onNavigate={navigate} onViewUser={openUserProfile} />}
+      {page === "work"     && user && <WorkPage />}
+      {page === "admin"    && user && <AdminPage widgetRequests={widgetRequests} setWidgetRequests={setWidgetRequests} />}
+      {page === "settings" && user && <SettingsPage profilePic={profilePic} setProfilePic={setProfilePic} onLogout={logout} />}
 
       {/* User profile modal */}
       {viewingUser && (
