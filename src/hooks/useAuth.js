@@ -2,13 +2,11 @@ import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 
 export function useAuth() {
-  const [user, setUser] = useState(null)      // Supabase user object
-  const [profile, setProfile] = useState(null) // our profiles table row
+  const [user, setUser] = useState(null)
+  const [profile, setProfile] = useState(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    if (!supabase) { setLoading(false); return }
-
     // Get initial session
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null)
@@ -17,13 +15,11 @@ export function useAuth() {
     })
 
     // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (_event, session) => {
-        setUser(session?.user ?? null)
-        if (session?.user) fetchProfile(session.user.id)
-        else { setProfile(null); setLoading(false) }
-      }
-    )
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null)
+      if (session?.user) fetchProfile(session.user.id)
+      else { setProfile(null); setLoading(false) }
+    })
 
     return () => subscription.unsubscribe()
   }, [])
@@ -39,46 +35,54 @@ export function useAuth() {
   }
 
   async function signUp({ email, password, name, handle }) {
-    if (!supabase) return { error: null, demo: true }
-
-    const { data, error } = await supabase.auth.signUp({ email, password })
-    if (error) return { error }
-
-    if (data.user) {
-      await supabase.from('profiles').insert({
-        id: data.user.id,
+    try {
+      const { data, error } = await supabase.auth.signUp({
         email,
-        name: name || email.split('@')[0],
-        handle: handle || '@' + email.split('@')[0].toLowerCase().replace(/[^a-z0-9]/g, ''),
-        bio: '',
-        avatar_color: '#C9B8F0',
-        joined: new Date().toISOString(),
+        password,
+        options: { data: { name, handle } }
       })
+      if (error) return { error: error.message }
+
+      // Create profile row
+      if (data.user) {
+        await supabase.from('profiles').upsert({
+          id: data.user.id,
+          email,
+          name: name || email.split('@')[0],
+          handle: handle || '@' + email.split('@')[0],
+          bio: '',
+          avatar_color: ['#C9B8F0','#B4E8D8','#F8CEBA','#B8D8F0','#F0B8C8'][Math.floor(Math.random()*5)],
+          created_at: new Date().toISOString()
+        })
+      }
+      return { data, error: null }
+    } catch (e) {
+      return { error: e.message }
     }
-    return { error: null }
   }
 
   async function signIn({ email, password }) {
-    if (!supabase) return { error: null, demo: true }
-    const { error } = await supabase.auth.signInWithPassword({ email, password })
-    return { error }
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password })
+      if (error) return { error: error.message }
+      return { data, error: null }
+    } catch (e) {
+      return { error: e.message }
+    }
   }
 
   async function signOut() {
-    if (!supabase) return
     await supabase.auth.signOut()
   }
 
   async function updateProfile(updates) {
-    if (!supabase || !user) return { error: 'Not authenticated' }
-    const { data, error } = await supabase
+    if (!user) return
+    const { error } = await supabase
       .from('profiles')
       .update(updates)
       .eq('id', user.id)
-      .select()
-      .single()
-    if (data) setProfile(data)
-    return { error }
+    if (error) throw error
+    setProfile(prev => ({ ...prev, ...updates }))
   }
 
   return { user, profile, loading, signUp, signIn, signOut, updateProfile }

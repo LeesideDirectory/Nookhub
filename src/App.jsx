@@ -5892,24 +5892,30 @@ export default function App() {
   const handleSignup = async ({ email, password, name }) => {
     const { error } = await signUp({ email, password, name });
     if (!error) {
-      if (!hasOnboarded) { setShowOnboarding(true); } else { navigate("dashboard"); }
+      if (!hasOnboarded) { setShowOnboarding(true); } else { setPage("dashboard"); }
     }
     return { error };
   };
-  const completeOnboarding = () => { setHasOnboarded(true); setShowOnboarding(false); navigate("dashboard"); };
+  const completeOnboarding = () => {
+    setHasOnboarded(true);
+    setShowOnboarding(false);
+    setPage("dashboard");
+  };
 
   const openUserProfile = (uid) => { const u = USERS.find(u => u.id === uid); if (u) setViewingUser(u); };
 
   // Redirect unauthenticated users away from protected pages
   const protectedPages = ["dashboard","customize","messages","feed","work","admin","settings"];
   useEffect(() => {
-    if (!authLoading && !user && protectedPages.includes(page)) {
+    if (authLoading) return;
+    if (showOnboarding) return; // never redirect mid-onboarding
+    if (!user && protectedPages.includes(page)) {
       setPage("login");
     }
-    if (!authLoading && user && ["login","signup"].includes(page)) {
+    if (user && ["login","signup"].includes(page)) {
       setPage("dashboard");
     }
-  }, [user, authLoading, page]);
+  }, [user, authLoading, page, showOnboarding]);
 
   // Show nothing while Supabase checks session — prevents flash of login page
   if (authLoading) return (
