@@ -4630,6 +4630,7 @@ const AdminPage = ({ widgetRequests, setWidgetRequests }) => {
       <div>
         {sectionHead("Widget Requests", "Feature requests submitted by users")}
         <div className="nook-admin-grid4" style={{ marginBottom: 24 }}>
+          {["new","reviewing","planned","declined"].map(s => (
             <div key={s} style={{ background: P.white, border: `1.5px solid ${STATUS_CFG[s].dot}33`, borderRadius: 16, padding: "16px 18px", cursor: "pointer" }} onClick={() => setWqFilter(s)}>
               <div style={{ fontFamily: FF_D, fontSize: 28, color: STATUS_CFG[s].dot, lineHeight: 1 }}>{counts[s]}</div>
               <div style={{ fontFamily: FF_S, fontSize: 12, color: P.inkLight, marginTop: 4 }}>{STATUS_CFG[s].label}</div>
@@ -5710,7 +5711,7 @@ const HomePageNew = ({ onNavigate, profilePic }) => {
   );
 };
 
-function App() {
+export default function App() {
   const [page, setPage] = useState("home");
   const [convos, setConvos] = useState(INITIAL_CONVOS);
   const [requests, setRequests] = useState(INITIAL_REQUESTS);
