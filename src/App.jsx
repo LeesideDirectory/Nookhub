@@ -5797,6 +5797,7 @@ const HomePageNew = ({ onNavigate, profilePic }) => {
 };
 
 export default function App() {
+  const { user, profile, loading: authLoading, signIn, signUp, signOut } = useAuth();
   const [page, setPage] = useState("home");
   const [convos, setConvos] = useState(INITIAL_CONVOS);
   const [requests, setRequests] = useState(INITIAL_REQUESTS);
@@ -5855,17 +5856,41 @@ export default function App() {
 
   const unreadNotifs = notifications.filter(n => !n.read).length;
   const totalUnread = convos.reduce((a, c) => a + c.messages.filter(m => m.from !== "me" && !m.read).length, 0);
-  const isLoggedIn = !["home", "login", "signup"].includes(page);
+  const isLoggedIn = !!user;
 
-  const navigate = (p) => { setPage(p); setShowNotifs(false); };
-  const logout = () => { setPage("home"); setHasOnboarded(false); };
+  const navigate = (p) => {
+    // Guard: redirect to login if not authenticated and trying to access protected pages
+    const publicPages = ["home", "login", "signup"];
+    if (!user && !publicPages.includes(p)) { setPage("login"); return; }
+    setPage(p);
+    setShowNotifs(false);
+  };
 
-  const handleSignup = () => {
-    if (!hasOnboarded) { setShowOnboarding(true); } else { navigate("dashboard"); }
+  const logout = async () => { await signOut(); setPage("home"); setHasOnboarded(false); };
+
+  const handleLogin = async ({ email, password }) => {
+    const { error } = await signIn({ email, password });
+    if (!error) navigate("dashboard");
+    return { error };
+  };
+
+  const handleSignup = async ({ email, password, name }) => {
+    const { error } = await signUp({ email, password, name });
+    if (!error) {
+      if (!hasOnboarded) { setShowOnboarding(true); } else { navigate("dashboard"); }
+    }
+    return { error };
   };
   const completeOnboarding = () => { setHasOnboarded(true); setShowOnboarding(false); navigate("dashboard"); };
 
   const openUserProfile = (uid) => { const u = USERS.find(u => u.id === uid); if (u) setViewingUser(u); };
+
+  // Show nothing while Supabase checks session — prevents flash of login page
+  if (authLoading) return (
+    <div style={{ minHeight: "100vh", background: "#F5F2FC", display: "flex", alignItems: "center", justifyContent: "center" }}>
+      <div style={{ fontFamily: "'DM Serif Display', serif", fontSize: 28, color: "#C9B8F0" }}>✦ Nook</div>
+    </div>
+  );
 
   return (
     <>
@@ -6012,17 +6037,18 @@ export default function App() {
       />
 
       {page === "home"    && <HomePageNew onNavigate={navigate} profilePic={profilePic} />}
-      {page === "login"   && <AuthPage mode="login"  onSwitch={() => navigate("signup")} onEnter={() => navigate("dashboard")} />}
-      {page === "signup"  && <AuthPage mode="signup" onSwitch={() => navigate("login")}  onEnter={handleSignup} />}
+      {page === "login"   && (user ? navigate("dashboard") || null : <AuthPage mode="login"  onSwitch={() => navigate("signup")} onEnter={handleLogin} />)}
+      {page === "signup"  && (user ? navigate("dashboard") || null : <AuthPage mode="signup" onSwitch={() => navigate("login")}  onEnter={handleSignup} />)}
 
       {["dashboard","customize"].includes(page) && (
-        <DashboardPage view={page} onNavigate={navigate} profilePic={profilePic} setProfilePic={setProfilePic} widgetRequests={widgetRequests} setWidgetRequests={setWidgetRequests} following={following} toggleFollow={toggleFollow} onViewUser={openUserProfile} />
+        user ? <DashboardPage view={page} onNavigate={navigate} profilePic={profilePic} setProfilePic={setProfilePic} widgetRequests={widgetRequests} setWidgetRequests={setWidgetRequests} following={following} toggleFollow={toggleFollow} onViewUser={openUserProfile} />
+             : navigate("login") || null
       )}
-      {page === "messages" && <MessagesPage requests={requests} setRequests={setRequests} />}
-      {page === "feed"     && <FeedPage onNavigate={navigate} onViewUser={openUserProfile} />}
-      {page === "work"     && <WorkPage />}
-      {page === "admin"    && <AdminPage widgetRequests={widgetRequests} setWidgetRequests={setWidgetRequests} />}
-      {page === "settings" && <SettingsPage profilePic={profilePic} setProfilePic={setProfilePic} onLogout={logout} />}
+      {page === "messages" && (user ? <MessagesPage requests={requests} setRequests={setRequests} /> : navigate("login") || null)}
+      {page === "feed"     && (user ? <FeedPage onNavigate={navigate} onViewUser={openUserProfile} /> : navigate("login") || null)}
+      {page === "work"     && (user ? <WorkPage /> : navigate("login") || null)}
+      {page === "admin"    && (user ? <AdminPage widgetRequests={widgetRequests} setWidgetRequests={setWidgetRequests} /> : navigate("login") || null)}
+      {page === "settings" && (user ? <SettingsPage profilePic={profilePic} setProfilePic={setProfilePic} onLogout={logout} /> : navigate("login") || null)}
 
       {/* User profile modal */}
       {viewingUser && (
