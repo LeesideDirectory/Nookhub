@@ -3017,6 +3017,23 @@ const DashboardPage = ({ user: userProp, view, onNavigate, profilePic, setProfil
   // true once we've finished loading from Supabase (prevents saving before load)
   const loadedRef = useRef(false);
 
+  // ── Lifted widget data — declared here so load effect can update them ────
+  const [readingItems, setReadingItems] = useState(
+    savedWidgetData.reading?.items ?? INITIAL_WIDGETS.find(w => w.id === "reading").data.items
+  );
+  const [goals, setGoals] = useState(
+    savedWidgetData.goals?.items ?? INITIAL_WIDGETS.find(w => w.id === "goals").data.items
+  );
+  const [habits, setHabits] = useState(
+    savedWidgetData.habitstreak?.habits ?? INITIAL_WIDGETS.find(w => w.id === "habitstreak").data.habits.map(h => ({ ...h, history: [] }))
+  );
+  const [pods, setPods] = useState(
+    savedWidgetData.podcast?.pods ?? INITIAL_WIDGETS.find(w => w.id === "podcast").data.pods
+  );
+  const [exerciseChecked, setExerciseChecked] = useState(
+    () => new Set(savedWidgetData.exercise?.checked ?? [])
+  );
+
   // Load widget config: Supabase first, fall back to localStorage
   useEffect(() => {
     if (!user?.id) return;
@@ -3052,6 +3069,12 @@ const DashboardPage = ({ user: userProp, view, onNavigate, profilePic, setProfil
           });
           // Also restore widgetData state from DB so widgets render with their content
           setWidgetData(mergedData);
+          // Update lifted state variables that don't react to widgetData changes
+          if (mergedData.reading?.items)     setReadingItems(mergedData.reading.items);
+          if (mergedData.goals?.items)       setGoals(mergedData.goals.items);
+          if (mergedData.habitstreak?.habits) setHabits(mergedData.habitstreak.habits);
+          if (mergedData.podcast?.pods)      setPods(mergedData.podcast.pods);
+          if (mergedData.exercise?.checked)  setExerciseChecked(new Set(mergedData.exercise.checked));
           console.log('[Nook] Setting widgets, enabled:', ordered.filter(w=>w.enabled).map(w=>w.id));
           setWidgets(ordered);
           setWidgetOrder(ordered.map(w => w.id));
@@ -3156,20 +3179,6 @@ const DashboardPage = ({ user: userProp, view, onNavigate, profilePic, setProfil
   }, [widgets, widgetOrder, STORAGE_KEY, ORDER_KEY, user?.id]);
 
   // widgetOrder is saved explicitly via saveWidgetConfig on user actions
-
-  // ── Lifted widget data (shared with ArchiveWidget) ────────────────────────
-  // These restore from savedWidgetData (localStorage) or fall back to INITIAL_WIDGETS defaults
-  const initReading = savedWidgetData.reading?.items ?? INITIAL_WIDGETS.find(w => w.id === "reading").data.items;
-  const initGoals   = savedWidgetData.goals?.items   ?? INITIAL_WIDGETS.find(w => w.id === "goals").data.items;
-  const initHabits  = savedWidgetData.habitstreak?.habits ?? INITIAL_WIDGETS.find(w => w.id === "habitstreak").data.habits.map(h => ({ ...h, history: [] }));
-  const initPods    = savedWidgetData.podcast?.pods   ?? INITIAL_WIDGETS.find(w => w.id === "podcast").data.pods;
-  const initExercise = savedWidgetData.exercise?.checked ?? [];
-
-  const [readingItems, setReadingItems] = useState(initReading);
-  const [goals, setGoals]               = useState(initGoals);
-  const [habits, setHabits]             = useState(initHabits);
-  const [pods, setPods]                 = useState(initPods);
-  const [exerciseChecked, setExerciseChecked] = useState(() => new Set(initExercise));
 
   // Persist lifted state to widgetData whenever it changes
   useEffect(() => { setWidgetData(prev => ({ ...prev, reading:     { items: readingItems } })); }, [readingItems]);
