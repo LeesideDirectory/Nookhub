@@ -235,11 +235,19 @@ const Nav = ({ page, onNavigate, onLogout, unreadCount, isLoggedIn, isAdmin, me,
   );
 };
 
-const TodoWidget = ({ data, color }) => {
-  const [items, setItems] = useState(data.items);
+const TodoWidget = ({ data, color, onDataChange }) => {
+  const [items, setItems] = useState(data.items || []);
   const [input, setInput] = useState("");
-  const toggle = (i) => setItems(items.map((it, idx) => idx === i ? { ...it, done: !it.done } : it));
-  const add = () => { if (input.trim()) { setItems([...items, { text: input.trim(), done: false }]); setInput(""); } };
+  const toggle = (i) => {
+    const next = items.map((it, idx) => idx === i ? { ...it, done: !it.done } : it);
+    setItems(next); onDataChange?.({ items: next });
+  };
+  const add = () => {
+    if (input.trim()) {
+      const next = [...items, { text: input.trim(), done: false }];
+      setItems(next); setInput(""); onDataChange?.({ items: next });
+    }
+  };
   return (
     <div>
       {items.map((it, i) => (
@@ -409,26 +417,24 @@ const ReadingWidget = ({ data, color, items: extItems, setItems: extSetItems }) 
   );
 };
 
-const MoodWidget = ({ data, color }) => {
+const MoodWidget = ({ data, color, onDataChange }) => {
   const EMOJIS   = ["", "😞", "😕", "😐", "🙂", "😊"];
   const LABELS   = ["", "Rough", "Low", "Okay", "Good", "Great"];
   const COLORS   = ["", "#D8708A", "#E8956A", "#C8A830", "#5DCAAA", "#9B85D8"];
 
-  // Seed 30 days of history
   const buildHistory = () => {
     const days = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
     const history = [];
     for (let i = 29; i >= 0; i--) {
       const d = new Date(); d.setDate(d.getDate() - i);
       const label = days[d.getDay() === 0 ? 6 : d.getDay() - 1];
-      const seed = [4,3,5,4,5,3,4,5,4,3,5,4,4,3,5,4,5,4,3,4,5,3,4,5,4,4,3,5,4,5][29 - i];
-      history.push({ date: d.toISOString().slice(0,10), day: label, mood: seed, note: "" });
+      history.push({ date: d.toISOString().slice(0,10), day: label, mood: 0, note: "" });
     }
     return history;
   };
 
-  const [history, setHistory] = useState(buildHistory);
-  const [tab, setTab]         = useState("week");   // week | month | log
+  const [history, setHistory] = useState(() => data.history || buildHistory());
+  const [tab, setTab]         = useState("week");
   const [editIdx, setEditIdx] = useState(null);
   const [noteVal, setNoteVal] = useState("");
 
@@ -436,11 +442,13 @@ const MoodWidget = ({ data, color }) => {
   const month = history.slice(-30);
   const today = history[history.length - 1];
 
-  const setMood = (dateStr, mood) =>
-    setHistory(h => h.map(d => d.date === dateStr ? { ...d, mood } : d));
+  const setMood = (dateStr, mood) => {
+    const next = history.map(d => d.date === dateStr ? { ...d, mood } : d);
+    setHistory(next); onDataChange?.({ history: next });
+  };
   const saveNote = (dateStr) => {
-    setHistory(h => h.map(d => d.date === dateStr ? { ...d, note: noteVal } : d));
-    setEditIdx(null);
+    const next = history.map(d => d.date === dateStr ? { ...d, note: noteVal } : d);
+    setHistory(next); setEditIdx(null); onDataChange?.({ history: next });
   };
 
   const avg = (arr) => Math.round(arr.reduce((a, b) => a + b.mood, 0) / arr.length);
@@ -558,15 +566,15 @@ const MoodWidget = ({ data, color }) => {
   );
 };
 
-const LinksWidget = ({ data, color }) => {
-  const [items, setItems] = useState(data.items);
+const LinksWidget = ({ data, color, onDataChange }) => {
+  const [items, setItems] = useState(data.items || []);
   const [draftTitle, setDraftTitle] = useState("");
   const [draftUrl, setDraftUrl] = useState("");
-  const remove = (i) => setItems(it => it.filter((_, idx) => idx !== i));
+  const remove = (i) => { const next = items.filter((_, idx) => idx !== i); setItems(next); onDataChange?.({ items: next }); };
   const add = () => {
     if (!draftTitle.trim()) return;
-    setItems(it => [...it, { title: draftTitle.trim(), url: draftUrl.trim() || "#" }]);
-    setDraftTitle(""); setDraftUrl("");
+    const next = [...items, { title: draftTitle.trim(), url: draftUrl.trim() || "#" }];
+    setItems(next); setDraftTitle(""); setDraftUrl(""); onDataChange?.({ items: next });
   };
   return (
     <div>
@@ -588,16 +596,16 @@ const LinksWidget = ({ data, color }) => {
   );
 };
 
-const GratitudeWidget = ({ data, color }) => {
-  const [entries, setEntries] = useState(data.entries);
+const GratitudeWidget = ({ data, color, onDataChange }) => {
+  const [entries, setEntries] = useState(data.entries || []);
   const [input, setInput] = useState("");
   const [editIdx, setEditIdx] = useState(null);
   const [editVal, setEditVal] = useState("");
 
-  const add = () => { if (!input.trim()) return; setEntries(e => [input.trim(), ...e]); setInput(""); };
-  const remove = (i) => setEntries(e => e.filter((_, idx) => idx !== i));
+  const add = () => { if (!input.trim()) return; const next = [input.trim(), ...entries]; setEntries(next); setInput(""); onDataChange?.({ entries: next }); };
+  const remove = (i) => { const next = entries.filter((_, idx) => idx !== i); setEntries(next); onDataChange?.({ entries: next }); };
   const startEdit = (i) => { setEditIdx(i); setEditVal(entries[i]); };
-  const saveEdit = () => { setEntries(e => e.map((x, i) => i === editIdx ? editVal : x)); setEditIdx(null); };
+  const saveEdit = () => { const next = entries.map((x, i) => i === editIdx ? editVal : x); setEntries(next); setEditIdx(null); onDataChange?.({ entries: next }); };
 
   return (
     <div>
@@ -628,8 +636,8 @@ const GratitudeWidget = ({ data, color }) => {
   );
 };
 
-const SobrietyWidget = ({ data, color }) => {
-  const [startDate, setStartDate] = useState(data.startDate);
+const SobrietyWidget = ({ data, color, onDataChange }) => {
+  const [startDate, setStartDate] = useState(data.startDate || new Date().toISOString().slice(0,10));
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(startDate);
   const days = Math.floor((Date.now() - new Date(startDate).getTime()) / 86400000);
@@ -663,7 +671,7 @@ const SobrietyWidget = ({ data, color }) => {
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
           <input type="date" value={draft} onChange={e => setDraft(e.target.value)}
             style={{ flex: 1, border: `1.5px solid ${color.accent}`, borderRadius: 8, padding: "5px 10px", fontFamily: FF_S, fontSize: 13, background: color.bg, color: P.ink, outline: "none" }} />
-          <button onClick={() => { setStartDate(draft); setEditing(false); }} style={{ background: color.dot, color: "#fff", border: "none", borderRadius: 8, padding: "5px 12px", cursor: "pointer", fontSize: 13, fontWeight: 600 }}>Save</button>
+          <button onClick={() => { setStartDate(draft); setEditing(false); onDataChange?.({ startDate: draft }); }} style={{ background: color.dot, color: "#fff", border: "none", borderRadius: 8, padding: "5px 12px", cursor: "pointer", fontSize: 13, fontWeight: 600 }}>Save</button>
         </div>
       ) : (
         <button onClick={() => setEditing(true)} style={{ background: color.accent + "88", border: "none", borderRadius: 8, padding: "6px 14px", cursor: "pointer", fontFamily: FF_S, fontSize: 12, color: P.inkLight, width: "100%" }}>
@@ -936,15 +944,16 @@ const SportsWidget = ({ data, color }) => {
   );
 };
 
-const HobbiesWidget = ({ data, color }) => {
-  const [hobbies, setHobbies] = useState(data.hobbies);
+const HobbiesWidget = ({ data, color, onDataChange }) => {
+  const [hobbies, setHobbies] = useState(data.hobbies || []);
   const [adding, setAdding] = useState(false);
   const [draft, setDraft] = useState({ name: "", emoji: "🎨", note: "", level: 1 });
   const LEVELS = ["Curious", "Beginner", "Developing", "Skilled", "Passionate"];
-  const remove = (id) => setHobbies(hs => hs.filter(h => h.id !== id));
-  const updateNote = (id, note) => setHobbies(hs => hs.map(h => h.id === id ? { ...h, note } : h));
-  const updateLevel = (id, level) => setHobbies(hs => hs.map(h => h.id === id ? { ...h, level } : h));
-  const add = () => { if (!draft.name.trim()) return; setHobbies(hs => [...hs, { id: `h${Date.now()}`, ...draft }]); setDraft({ name: "", emoji: "🎨", note: "", level: 1 }); setAdding(false); };
+  const update = (next) => { setHobbies(next); onDataChange?.({ hobbies: next }); };
+  const remove = (id) => update(hobbies.filter(h => h.id !== id));
+  const updateNote = (id, note) => update(hobbies.map(h => h.id === id ? { ...h, note } : h));
+  const updateLevel = (id, level) => update(hobbies.map(h => h.id === id ? { ...h, level } : h));
+  const add = () => { if (!draft.name.trim()) return; update([...hobbies, { id: `h${Date.now()}`, ...draft }]); setDraft({ name: "", emoji: "🎨", note: "", level: 1 }); setAdding(false); };
   return (
     <div>
       {hobbies.map(h => (
@@ -1060,19 +1069,20 @@ const TwitterWidget = ({ data, color }) => {
   );
 };
 
-const ProjectsWidget = ({ data, color }) => {
-  const [projects, setProjects] = useState(data.projects);
+const ProjectsWidget = ({ data, color, onDataChange }) => {
+  const [projects, setProjects] = useState(data.projects || []);
   const [adding, setAdding] = useState(false);
   const [draft, setDraft] = useState({ name: "", desc: "", url: "", status: "building", emoji: "🚀", logo: null });
   const logoRefs = useRef({});
   const STATUS = { building: { label: "Building", bg: color.dot + "22", text: color.dot }, beta: { label: "Beta", bg: "#5DCAAA22", text: "#3BAA80" }, live: { label: "Live 🟢", bg: "#C9B8F022", text: "#9B85D8" }, paused: { label: "Paused", bg: "#F0B8C822", text: "#D8708A" } };
+  const save = (next) => { setProjects(next); onDataChange?.({ projects: next }); };
   const cycleStatus = (id) => {
     const order = ["building", "beta", "live", "paused"];
-    setProjects(ps => ps.map(p => p.id === id ? { ...p, status: order[(order.indexOf(p.status) + 1) % order.length] } : p));
+    save(projects.map(p => p.id === id ? { ...p, status: order[(order.indexOf(p.status) + 1) % order.length] } : p));
   };
-  const remove = (id) => setProjects(ps => ps.filter(p => p.id !== id));
-  const update = (id, field, val) => setProjects(ps => ps.map(p => p.id === id ? { ...p, [field]: val } : p));
-  const add = () => { if (!draft.name.trim()) return; setProjects(ps => [...ps, { id: `p${Date.now()}`, ...draft }]); setDraft({ name: "", desc: "", url: "", status: "building", emoji: "🚀", logo: null }); setAdding(false); };
+  const remove = (id) => save(projects.filter(p => p.id !== id));
+  const update = (id, field, val) => save(projects.map(p => p.id === id ? { ...p, [field]: val } : p));
+  const add = () => { if (!draft.name.trim()) return; save([...projects, { id: `p${Date.now()}`, ...draft }]); setDraft({ name: "", desc: "", url: "", status: "building", emoji: "🚀", logo: null }); setAdding(false); };
   const handleLogo = (id, file) => {
     if (!file) return;
     const r = new FileReader();
@@ -1218,17 +1228,18 @@ const PodcastWidget = ({ data, color, pods: extPods, setPods: extSetPods }) => {
   );
 };
 
-const TravelWidget = ({ data, color }) => {
-  const [trips, setTrips] = useState(data.trips);
+const TravelWidget = ({ data, color, onDataChange }) => {
+  const [trips, setTrips] = useState(data.trips || []);
   const [adding, setAdding] = useState(false);
   const [draft, setDraft] = useState({ place: "", date: "", note: "", photo: null, emoji: "✈" });
   const fileRefs = useRef({});
-  const remove = (id) => setTrips(ts => ts.filter(t => t.id !== id));
-  const updateNote = (id, note) => setTrips(ts => ts.map(t => t.id === id ? { ...t, note } : t));
+  const save = (next) => { setTrips(next); onDataChange?.({ trips: next }); };
+  const remove = (id) => save(trips.filter(t => t.id !== id));
+  const updateNote = (id, note) => save(trips.map(t => t.id === id ? { ...t, note } : t));
   const handlePhoto = (id, e) => {
     const file = e.target.files?.[0]; if (!file) return;
     const reader = new FileReader();
-    reader.onload = ev => setTrips(ts => ts.map(t => t.id === id ? { ...t, photo: ev.target.result } : t));
+    reader.onload = ev => save(trips.map(t => t.id === id ? { ...t, photo: ev.target.result } : t));
     reader.readAsDataURL(file);
   };
   const handleNewPhoto = (e) => {
@@ -1237,7 +1248,7 @@ const TravelWidget = ({ data, color }) => {
     reader.onload = ev => setDraft(d => ({ ...d, photo: ev.target.result }));
     reader.readAsDataURL(file);
   };
-  const addTrip = () => { if (!draft.place.trim()) return; setTrips(ts => [{ id: `t${Date.now()}`, ...draft }, ...ts]); setDraft({ place: "", date: "", note: "", photo: null, emoji: "✈" }); setAdding(false); };
+  const addTrip = () => { if (!draft.place.trim()) return; save([{ id: `t${Date.now()}`, ...draft }, ...trips]); setDraft({ place: "", date: "", note: "", photo: null, emoji: "✈" }); setAdding(false); };
   return (
     <div>
       {trips.map(t => (
@@ -1290,15 +1301,16 @@ const TravelWidget = ({ data, color }) => {
   );
 };
 
-const ArticlesWidget = ({ data, color }) => {
+const ArticlesWidget = ({ data, color, onDataChange }) => {
   const TYPES = ["written", "reading"];
   const tStyle = { written: { label: "Written ✍", bg: color.dot + "22", text: color.dot }, reading: { label: "Interesting", bg: "#C9B8F022", text: "#9B85D8" } };
-  const [articles, setArticles] = useState(data.articles);
+  const [articles, setArticles] = useState(data.articles || []);
   const [adding, setAdding] = useState(false);
   const [draft, setDraft] = useState({ title: "", url: "", type: "reading", date: "", note: "" });
-  const remove = (id) => setArticles(as => as.filter(a => a.id !== id));
-  const cycleType = (id) => setArticles(as => as.map(a => a.id === id ? { ...a, type: TYPES[(TYPES.indexOf(a.type) + 1) % TYPES.length] } : a));
-  const add = () => { if (!draft.title.trim()) return; setArticles(as => [{ id: `a${Date.now()}`, ...draft }, ...as]); setDraft({ title: "", url: "", type: "reading", date: "", note: "" }); setAdding(false); };
+  const save = (next) => { setArticles(next); onDataChange?.({ articles: next }); };
+  const remove = (id) => save(articles.filter(a => a.id !== id));
+  const cycleType = (id) => save(articles.map(a => a.id === id ? { ...a, type: TYPES[(TYPES.indexOf(a.type) + 1) % TYPES.length] } : a));
+  const add = () => { if (!draft.title.trim()) return; save([{ id: `a${Date.now()}`, ...draft }, ...articles]); setDraft({ title: "", url: "", type: "reading", date: "", note: "" }); setAdding(false); };
   return (
     <div>
       {articles.map(a => (
@@ -2558,7 +2570,7 @@ const ShareWidgetModal = ({ widget, onClose }) => {
   );
 };
 
-const WidgetCard = ({ widget, onTogglePublic, isOwnDashboard, dragHandleProps, onToggleExpand, isExpanded, liveData }) => {
+const WidgetCard = ({ widget, onTogglePublic, isOwnDashboard, dragHandleProps, onToggleExpand, isExpanded, liveData, onDataChange }) => {
   const color = WIDGET_COLORS[widget.colorIdx];
   const Renderer = WIDGET_RENDERERS[widget.id];
   const [showShare, setShowShare] = useState(false);
@@ -2574,7 +2586,6 @@ const WidgetCard = ({ widget, onTogglePublic, isOwnDashboard, dragHandleProps, o
           <span style={{ fontFamily: FF_D, fontSize: 17, color: P.ink, fontWeight: 400 }}>{widget.title}</span>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          {/* Expand/collapse button */}
           {isOwnDashboard && onToggleExpand && (
             <button
               onClick={onToggleExpand}
@@ -2585,7 +2596,6 @@ const WidgetCard = ({ widget, onTogglePublic, isOwnDashboard, dragHandleProps, o
               {isExpanded ? "⊟ Collapse" : "⊞ Expand"}
             </button>
           )}
-          {/* Share button */}
           {(isOwnDashboard || widget.isPublic) && (
             <button onClick={() => setShowShare(true)} title="Share widget" style={{ background: "none", border: `1px solid ${color.accent}`, borderRadius: 8, padding: "4px 9px", cursor: "pointer", fontFamily: FF_S, fontSize: 12, color: P.inkLight, display: "flex", alignItems: "center", gap: 4, transition: "all 0.15s" }}
               onMouseEnter={e => { e.currentTarget.style.background = color.accent; }}
@@ -2604,7 +2614,7 @@ const WidgetCard = ({ widget, onTogglePublic, isOwnDashboard, dragHandleProps, o
           )}
         </div>
       </div>
-      <Renderer data={widget.data} color={color} isOwnDashboard={isOwnDashboard} {...(liveData || {})} />
+      <Renderer data={widget.data} color={color} isOwnDashboard={isOwnDashboard} onDataChange={onDataChange} {...(liveData || {})} />
     </div>
     {showShare && <ShareWidgetModal widget={widget} onClose={() => setShowShare(false)} />}
     </>
@@ -2946,7 +2956,20 @@ const DashboardPage = ({ view, onNavigate, profilePic, setProfilePic, widgetRequ
     if (STORAGE_KEY) {
       try {
         const saved = localStorage.getItem(STORAGE_KEY);
-        if (saved) return JSON.parse(saved);
+        if (saved) {
+          const ws = JSON.parse(saved);
+          // Merge in any saved widget data
+          if (DATA_KEY) {
+            try {
+              const savedData = localStorage.getItem(DATA_KEY);
+              if (savedData) {
+                const dataMap = JSON.parse(savedData);
+                return ws.map(w => dataMap[w.id] ? { ...w, data: { ...w.data, ...dataMap[w.id] } } : w);
+              }
+            } catch {}
+          }
+          return ws;
+        }
       } catch {}
     }
     return initialWidgets || INITIAL_WIDGETS.map(w => ({ ...w, enabled: false, isPublic: false }));
@@ -2978,8 +3001,24 @@ const DashboardPage = ({ view, onNavigate, profilePic, setProfilePic, widgetRequ
   const toggleExpand = (id) => setExpandedWidgets(s => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
   const fileInputRef = useRef(null);
 
-  // Persist widget state whenever it changes
+  const DATA_KEY = user ? `nook_widget_data_${user.id}` : null;
+
+  const [widgetData, setWidgetData] = useState(() => {
+    if (DATA_KEY) {
+      try { const s = localStorage.getItem(DATA_KEY); if (s) return JSON.parse(s); } catch {}
+    }
+    return {};
+  });
+
   useEffect(() => {
+    if (DATA_KEY) {
+      try { localStorage.setItem(DATA_KEY, JSON.stringify(widgetData)); } catch {}
+    }
+  }, [widgetData, DATA_KEY]);
+
+  const onDataChange = useCallback((widgetId, newData) => {
+    setWidgetData(prev => ({ ...prev, [widgetId]: newData }));
+  }, []);
     if (STORAGE_KEY && widgets.length > 0) {
       try { localStorage.setItem(STORAGE_KEY, JSON.stringify(widgets)); } catch {}
     }
@@ -3253,7 +3292,7 @@ const DashboardPage = ({ view, onNavigate, profilePic, setProfilePic, widgetRequ
                             onDrop={(e) => onDrop(e, w.id)}
                             onDragEnd={onDragEnd}
                             style={{ gridColumn: expandedWidgets.has(w.id) ? "1 / -1" : "auto", opacity: dragId === w.id ? 0.45 : 1, outline: dragOverId === w.id && dragId !== w.id ? `2px dashed ${P.lavender}` : "none", borderRadius: 22, transition: "opacity 0.15s" }}>
-                            <WidgetCard widget={w} onTogglePublic={() => togglePublic(w.id)} isOwnDashboard onToggleExpand={() => toggleExpand(w.id)} isExpanded={expandedWidgets.has(w.id)} dragHandleProps={{ draggable: false }} liveData={getLiveData(w.id)} />
+                            <WidgetCard widget={w} onTogglePublic={() => togglePublic(w.id)} isOwnDashboard onToggleExpand={() => toggleExpand(w.id)} isExpanded={expandedWidgets.has(w.id)} dragHandleProps={{ draggable: false }} liveData={getLiveData(w.id)} onDataChange={(newData) => onDataChange(w.id, newData)} />
                           </div>
                         ))}
                       </div>
