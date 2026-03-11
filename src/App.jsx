@@ -3030,16 +3030,25 @@ const DashboardPage = ({ view, onNavigate, profilePic, setProfilePic, widgetRequ
   }, [widgetOrder, ORDER_KEY]);
 
   // ── Lifted widget data (shared with ArchiveWidget) ────────────────────────
-  const initReading = INITIAL_WIDGETS.find(w => w.id === "reading").data.items;
-  const initGoals   = INITIAL_WIDGETS.find(w => w.id === "goals").data.items;
-  const initHabits  = INITIAL_WIDGETS.find(w => w.id === "habitstreak").data.habits.map(h => ({ ...h, history: [] }));
-  const initPods    = INITIAL_WIDGETS.find(w => w.id === "podcast").data.pods;
+  // These restore from savedWidgetData (localStorage) or fall back to INITIAL_WIDGETS defaults
+  const initReading = savedWidgetData.reading?.items ?? INITIAL_WIDGETS.find(w => w.id === "reading").data.items;
+  const initGoals   = savedWidgetData.goals?.items   ?? INITIAL_WIDGETS.find(w => w.id === "goals").data.items;
+  const initHabits  = savedWidgetData.habitstreak?.habits ?? INITIAL_WIDGETS.find(w => w.id === "habitstreak").data.habits.map(h => ({ ...h, history: [] }));
+  const initPods    = savedWidgetData.podcast?.pods   ?? INITIAL_WIDGETS.find(w => w.id === "podcast").data.pods;
+  const initExercise = savedWidgetData.exercise?.checked ?? [];
 
   const [readingItems, setReadingItems] = useState(initReading);
   const [goals, setGoals]               = useState(initGoals);
   const [habits, setHabits]             = useState(initHabits);
   const [pods, setPods]                 = useState(initPods);
-  const [exerciseChecked, setExerciseChecked] = useState(() => new Set());
+  const [exerciseChecked, setExerciseChecked] = useState(() => new Set(initExercise));
+
+  // Persist lifted state to widgetData whenever it changes
+  useEffect(() => { setWidgetData(prev => ({ ...prev, reading:     { items: readingItems } })); }, [readingItems]);
+  useEffect(() => { setWidgetData(prev => ({ ...prev, goals:       { items: goals } })); }, [goals]);
+  useEffect(() => { setWidgetData(prev => ({ ...prev, habitstreak: { habits } })); }, [habits]);
+  useEffect(() => { setWidgetData(prev => ({ ...prev, podcast:     { pods } })); }, [pods]);
+  useEffect(() => { setWidgetData(prev => ({ ...prev, exercise:    { checked: [...exerciseChecked] } })); }, [exerciseChecked]);
   const togglePublic = (id) => setWidgets(w => w.map(x => x.id === id ? { ...x, isPublic: !x.isPublic } : x));
   const toggleEnabled = (id) => {
     setWidgets(w => w.map(x => x.id === id ? { ...x, enabled: !x.enabled } : x));
