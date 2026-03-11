@@ -5186,18 +5186,77 @@ const RealFeedCard = ({ item, currentUserId, onLike, onComment, onDelete, onView
 };
 
 
-const FeedSidebar = ({ onNavigate, toggleFollow, following = [], onViewUser }) => {
+const FeedSidebar = ({ onNavigate, toggleFollow, following = [], onViewUser, currentUserId }) => {
   const [query, setQuery] = useState("");
   const [focused, setFocused] = useState(false);
+  const [searchResults, setSearchResults] = useState([]);
+  const [searching, setSearching] = useState(false);
+  const [suggestedUsers, setSuggestedUsers] = useState([]);
+  const [followedProfiles, setFollowedProfiles] = useState([]);
 
-  const results = query.trim().length > 0
-    ? USERS.filter(u => {
-        const q = query.toLowerCase();
-        return u.name.toLowerCase().includes(q) || u.handle.toLowerCase().includes(q);
-      })
-    : [];
+  // Load suggested users (real profiles from Supabase, excluding self)
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const { supabase } = await import('./lib/supabase');
+        const { data } = await supabase
+          .from('profiles')
+          .select('id, name, handle, avatar_color, bio')
+          .neq('id', currentUserId || '')
+          .limit(10);
+        if (data) setSuggestedUsers(data);
+      } catch {}
+    };
+    load();
+  }, [currentUserId]);
 
-  const followed = USERS.filter(u => following.includes(u.id));
+  // Load profiles for people we follow
+  useEffect(() => {
+    if (!following.length) { setFollowedProfiles([]); return; }
+    const load = async () => {
+      try {
+        const { supabase } = await import('./lib/supabase');
+        const { data } = await supabase
+          .from('profiles')
+          .select('id, name, handle, avatar_color, bio')
+          .in('id', following);
+        if (data) setFollowedProfiles(data);
+      } catch {}
+    };
+    load();
+  }, [following]);
+
+  // Debounced search against real profiles
+  useEffect(() => {
+    if (!query.trim()) { setSearchResults([]); return; }
+    const timer = setTimeout(async () => {
+      setSearching(true);
+      try {
+        const { supabase } = await import('./lib/supabase');
+        const q = query.trim().toLowerCase();
+        const { data } = await supabase
+          .from('profiles')
+          .select('id, name, handle, avatar_color, bio')
+          .neq('id', currentUserId || '')
+          .or(`name.ilike.%${q}%,handle.ilike.%${q}%`)
+          .limit(8);
+        setSearchResults(data || []);
+      } catch {
+        setSearchResults([]);
+      }
+      setSearching(false);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [query, currentUserId]);
+
+  const notFollowed = suggestedUsers.filter(u => !following.includes(u.id));
+
+  // Normalise a DB profile row to the shape UserRow expects
+  const norm = (u) => ({
+    ...u,
+    color: u.avatar_color || P.lavender,
+    initials: (u.name || u.handle || "?").slice(0, 2).toUpperCase(),
+  });
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 18, position: "sticky", top: 96 }}>
@@ -5218,12 +5277,14 @@ const FeedSidebar = ({ onNavigate, toggleFollow, following = [], onViewUser }) =
 
         {/* Search results */}
         {query.trim().length > 0 && (
-          results.length === 0 ? (
+          searching ? (
+            <p style={{ fontFamily: FF_S, fontSize: 13, color: P.inkFaint, margin: 0, textAlign: "center", padding: "10px 0" }}>Searching…</p>
+          ) : searchResults.length === 0 ? (
             <p style={{ fontFamily: FF_S, fontSize: 13, color: P.inkFaint, margin: 0, textAlign: "center", padding: "10px 0" }}>No users found</p>
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-              {results.map(u => (
-                <UserRow key={u.id} u={u} isFollowing={following.includes(u.id)} onToggle={() => toggleFollow(u.id)} onView={() => onViewUser(u)} />
+              {searchResults.map(u => (
+                <UserRow key={u.id} u={norm(u)} isFollowing={following.includes(u.id)} onToggle={() => toggleFollow(u.id)} onView={() => onViewUser(norm(u))} />
               ))}
             </div>
           )
@@ -5232,23 +5293,27 @@ const FeedSidebar = ({ onNavigate, toggleFollow, following = [], onViewUser }) =
         {/* Following list when not searching */}
         {query.trim().length === 0 && (
           <>
-            {followed.length > 0 ? (
+            {followedProfiles.length > 0 && (
               <>
                 <div style={{ fontFamily: FF_S, fontSize: 11, color: P.inkFaint, fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 10 }}>Following</div>
                 <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                  {followed.map(u => (
-                    <UserRow key={u.id} u={u} isFollowing={true} onToggle={() => toggleFollow(u.id)} onView={() => onViewUser(u)} />
+                  {followedProfiles.map(u => (
+                    <UserRow key={u.id} u={norm(u)} isFollowing={true} onToggle={() => toggleFollow(u.id)} onView={() => onViewUser(norm(u))} />
                   ))}
                 </div>
                 <div style={{ borderTop: `1px solid ${P.lavender}22`, margin: "14px 0 10px" }} />
               </>
-            ) : null}
-            <div style={{ fontFamily: FF_S, fontSize: 11, color: P.inkFaint, fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 10 }}>Suggested</div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-              {USERS.filter(u => !following.includes(u.id)).slice(0, 4).map(u => (
-                <UserRow key={u.id} u={u} isFollowing={false} onToggle={() => toggleFollow(u.id)} onView={() => onViewUser(u)} />
-              ))}
-            </div>
+            )}
+            {notFollowed.length > 0 && (
+              <>
+                <div style={{ fontFamily: FF_S, fontSize: 11, color: P.inkFaint, fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 10 }}>Suggested</div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                  {notFollowed.slice(0, 4).map(u => (
+                    <UserRow key={u.id} u={norm(u)} isFollowing={false} onToggle={() => toggleFollow(u.id)} onView={() => onViewUser(norm(u))} />
+                  ))}
+                </div>
+              </>
+            )}
           </>
         )}
       </div>
@@ -5394,7 +5459,7 @@ const FeedPage = ({ onNavigate, onViewUser, following, toggleFollowApp }) => {
         </div>
 
         {/* Sidebar */}
-        <FeedSidebar onNavigate={onNavigate} following={following} toggleFollow={toggleFollowApp || toggleFollow} onViewUser={onViewUser} />
+        <FeedSidebar onNavigate={onNavigate} following={following} toggleFollow={toggleFollowApp || toggleFollow} onViewUser={onViewUser} currentUserId={user?.id} />
       </div>
     </div>
   );
@@ -5984,7 +6049,6 @@ export default function App() {
       const saved = localStorage.getItem("nook_state");
       if (saved) {
         const s = JSON.parse(saved);
-        if (s.following) setFollowing(s.following);
         if (s.profilePic) setProfilePic(s.profilePic);
         if (s.hasOnboarded) setHasOnboarded(true);
       }
@@ -5992,22 +6056,43 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    try { localStorage.setItem("nook_state", JSON.stringify({ following, profilePic, hasOnboarded })); } catch {}
-  }, [following, profilePic, hasOnboarded]);
+    try { localStorage.setItem("nook_state", JSON.stringify({ profilePic, hasOnboarded })); } catch {}
+  }, [profilePic, hasOnboarded]);
+
+  // Load follows from Supabase when user is available
+  useEffect(() => {
+    if (!user) { setFollowing([]); return; }
+    const load = async () => {
+      try {
+        const { supabase } = await import('./lib/supabase');
+        const { data } = await supabase
+          .from('follows')
+          .select('following_id')
+          .eq('follower_id', user.id);
+        if (data) setFollowing(data.map(r => r.following_id));
+      } catch {}
+    };
+    load();
+  }, [user?.id]);
 
   useEffect(() => {
     try { sessionStorage.setItem("nook_page", page); } catch {}
   }, [page]);
 
-  const toggleFollow = (uid) => {
+  const toggleFollow = async (uid) => {
     const isNowFollowing = !following.includes(uid);
+    // Optimistic update
     setFollowing(fs => isNowFollowing ? [...fs, uid] : fs.filter(id => id !== uid));
-    if (isNowFollowing) {
-      const user = USERS.find(u => u.id === uid);
-      if (user) {
-        const notif = { id: `n${Date.now()}`, type: "follow", uid: "me", ts: Date.now(), read: false, text: `You are now following ${user.name}` };
-        setNotifications(ns => [notif, ...ns]);
-      }
+    // Persist to Supabase if logged in
+    if (user) {
+      try {
+        const { supabase } = await import('./lib/supabase');
+        if (isNowFollowing) {
+          await supabase.from('follows').upsert({ follower_id: user.id, following_id: uid }, { onConflict: 'follower_id,following_id' });
+        } else {
+          await supabase.from('follows').delete().eq('follower_id', user.id).eq('following_id', uid);
+        }
+      } catch {}
     }
   };
 
