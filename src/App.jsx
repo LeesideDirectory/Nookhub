@@ -778,8 +778,8 @@ const FAKE_IG_POSTS = [
   { id: 9, bg: "#FEF0EA", emoji: "🍊", likes: 221, caption: "colour everywhere" },
 ];
 
-const InstagramWidget = ({ data, color }) => {
-  const [username, setUsername] = useState(data.username);
+const InstagramWidget = ({ data, color, onDataChange }) => {
+  const [username, setUsername] = useState(data.username || "");
   const [editingUser, setEditingUser] = useState(false);
   const [draftUser, setDraftUser] = useState(username);
   const [activePost, setActivePost] = useState(null);
@@ -793,7 +793,7 @@ const InstagramWidget = ({ data, color }) => {
             <div style={{ display: "flex", gap: 6 }}>
               <input value={draftUser} onChange={e => setDraftUser(e.target.value)}
                 style={{ flex: 1, border: `1.5px solid ${color.accent}`, borderRadius: 8, padding: "4px 8px", fontFamily: FF_S, fontSize: 13, background: color.bg, color: P.ink, outline: "none" }} />
-              <button onClick={() => { setUsername(draftUser); setEditingUser(false); }} style={{ background: color.dot, color: "#fff", border: "none", borderRadius: 8, padding: "4px 10px", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>✓</button>
+              <button onClick={() => { setUsername(draftUser); setEditingUser(false); onDataChange?.({ username: draftUser }); }} style={{ background: color.dot, color: "#fff", border: "none", borderRadius: 8, padding: "4px 10px", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>✓</button>
             </div>
           ) : (
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -831,8 +831,8 @@ const InstagramWidget = ({ data, color }) => {
   );
 };
 
-const SportsWidget = ({ data, color }) => {
-  const [activities, setActivities] = useState(data.activities);
+const SportsWidget = ({ data, color, onDataChange }) => {
+  const [activities, setActivities] = useState(data.activities || []);
   const [activeId, setActiveId] = useState(data.activities[0]?.id);
   const [adding, setAdding] = useState(false);
   const [newSession, setNewSession] = useState({ date: new Date().toISOString().slice(0, 10), time: "", value: "", note: "", location: "" });
@@ -845,20 +845,19 @@ const SportsWidget = ({ data, color }) => {
 
   const addSession = () => {
     if (!newSession.value) return;
-    setActivities(acts => acts.map(a => a.id === activeId
+    const next = activities.map(a => a.id === activeId
       ? { ...a, sessions: [...a.sessions, { ...newSession, value: Number(newSession.value) }] }
-      : a));
+      : a);
+    setActivities(next); onDataChange?.({ activities: next });
     setNewSession({ date: new Date().toISOString().slice(0, 10), time: "", value: "", note: "", location: "" });
     setAdding(false);
   };
-  const removeSession = (idx) => setActivities(acts => acts.map(a => a.id === activeId
-    ? { ...a, sessions: a.sessions.filter((_, i) => i !== idx) }
-    : a));
+  const removeSession = (idx) => { const next = activities.map(a => a.id === activeId ? { ...a, sessions: a.sessions.filter((_, i) => i !== idx) } : a); setActivities(next); onDataChange?.({ activities: next }); };
   const addActivity = () => {
     if (!newActivity.type.trim()) return;
     const id = `s${Date.now()}`;
-    setActivities(acts => [...acts, { id, ...newActivity, sessions: [] }]);
-    setActiveId(id);
+    const next = [...activities, { id, ...newActivity, sessions: [] }];
+    setActivities(next); setActiveId(id); onDataChange?.({ activities: next });
     setNewActivity({ type: "", icon: "🏃", unit: "km" });
     setAddingActivity(false);
   };
@@ -994,7 +993,7 @@ const HobbiesWidget = ({ data, color, onDataChange }) => {
   );
 };
 
-const LinkedInWidget = ({ data, color }) => {
+const LinkedInWidget = ({ data, color, onDataChange }) => {
   const [info, setInfo] = useState(data);
   const [editUser, setEditUser] = useState(false);
   const [draftUser, setDraftUser] = useState(data.username);
@@ -1008,7 +1007,7 @@ const LinkedInWidget = ({ data, color }) => {
           {editUser ? (
             <div style={{ display: "flex", gap: 6 }}>
               <input value={draftUser} onChange={e => setDraftUser(e.target.value)} style={{ flex: 1, border: `1.5px solid ${color.accent}`, borderRadius: 8, padding: "4px 8px", fontFamily: FF_S, fontSize: 13, background: color.bg, color: P.ink, outline: "none" }} />
-              <button onClick={() => { setInfo(i => ({ ...i, username: draftUser })); setEditUser(false); }} style={{ background: color.dot, color: "#fff", border: "none", borderRadius: 8, padding: "4px 10px", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>✓</button>
+              <button onClick={() => { const next = { ...info, username: draftUser }; setInfo(next); setEditUser(false); onDataChange?.(next); }} style={{ background: color.dot, color: "#fff", border: "none", borderRadius: 8, padding: "4px 10px", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>✓</button>
             </div>
           ) : (
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -1030,7 +1029,7 @@ const LinkedInWidget = ({ data, color }) => {
   );
 };
 
-const TwitterWidget = ({ data, color }) => {
+const TwitterWidget = ({ data, color, onDataChange }) => {
   const [info, setInfo] = useState(data);
   const [editUser, setEditUser] = useState(false);
   const [draftUser, setDraftUser] = useState(data.username);
@@ -1044,7 +1043,7 @@ const TwitterWidget = ({ data, color }) => {
           {editUser ? (
             <div style={{ display: "flex", gap: 6 }}>
               <input value={draftUser} onChange={e => setDraftUser(e.target.value)} style={{ flex: 1, border: `1.5px solid ${color.accent}`, borderRadius: 8, padding: "4px 8px", fontFamily: FF_S, fontSize: 13, background: color.bg, color: P.ink, outline: "none" }} />
-              <button onClick={() => { setInfo(i => ({ ...i, username: draftUser })); setEditUser(false); }} style={{ background: color.dot, color: "#fff", border: "none", borderRadius: 8, padding: "4px 10px", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>✓</button>
+              <button onClick={() => { const next = { ...info, username: draftUser }; setInfo(next); setEditUser(false); onDataChange?.(next); }} style={{ background: color.dot, color: "#fff", border: "none", borderRadius: 8, padding: "4px 10px", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>✓</button>
             </div>
           ) : (
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -1830,16 +1829,16 @@ const GalleryPostModal = ({ post, onClose, onUpdate, onDelete, isOwner, color })
   );
 };
 
-const GalleryWidget = ({ data, color, isOwnDashboard }) => {
-  const [posts, setPosts] = useState(() => data.posts.length > 0 ? data.posts : GALLERY_SEED);
+const GalleryWidget = ({ data, color, isOwnDashboard, onDataChange }) => {
+  const [posts, setPosts] = useState(() => data.posts?.length > 0 ? data.posts : GALLERY_SEED);
   const [activePost, setActivePost] = useState(null);
   const [adding, setAdding] = useState(false);
   const [draft, setDraft] = useState({ caption: "", tags: "", link: "", linkLabel: "", mediaSrc: null, mediaType: "image" });
   const fileRef = useRef(null);
   const allUsers = ["@cleo","@soren","@iris","@felix","@ada","@theo"];
-
-  const updatePost = (updated) => setPosts(ps => ps.map(p => p.id === updated.id ? updated : p));
-  const deletePost = (id) => setPosts(ps => ps.filter(p => p.id !== id));
+  const savePosts = (next) => { setPosts(next); onDataChange?.({ posts: next }); };
+  const updatePost = (updated) => savePosts(posts.map(p => p.id === updated.id ? updated : p));
+  const deletePost = (id) => savePosts(posts.filter(p => p.id !== id));
 
   const handleFile = (file) => {
     if (!file) return;
@@ -1852,7 +1851,7 @@ const GalleryWidget = ({ data, color, isOwnDashboard }) => {
   const addPost = () => {
     const tags = draft.tags.split(/[\s,]+/).filter(t => t.startsWith("@") && t.length > 1);
     const COLORS = ["#F8CEBA","#B4E8D8","#C9B8F0","#B8D8F0","#F0B8C8","#F5E8B0"];
-    setPosts(ps => [{ id: `g${Date.now()}`, mediaType: draft.mediaType, mediaSrc: draft.mediaSrc, caption: draft.caption, tags, link: draft.link, linkLabel: draft.linkLabel, ts: Date.now(), color: COLORS[ps.length % COLORS.length] }, ...ps]);
+    savePosts([{ id: `g${Date.now()}`, mediaType: draft.mediaType, mediaSrc: draft.mediaSrc, caption: draft.caption, tags, link: draft.link, linkLabel: draft.linkLabel, ts: Date.now(), color: COLORS[posts.length % COLORS.length] }, ...posts]);
     setDraft({ caption: "", tags: "", link: "", linkLabel: "", mediaSrc: null, mediaType: "image" });
     setAdding(false);
   };
@@ -2105,18 +2104,19 @@ const BlogPostModal = ({ post, onClose, onSave, onDelete, isOwner, color }) => {
   );
 };
 
-const BlogWidget = ({ data, color, isOwnDashboard }) => {
+const BlogWidget = ({ data, color, isOwnDashboard, onDataChange }) => {
   const [posts, setPosts] = useState(() => data.posts?.length > 0 ? data.posts : BLOG_SEED);
   const [activePost, setActivePost] = useState(null);
   const [creating, setCreating] = useState(false);
   const [filterCat, setFilterCat] = useState("All");
   const [searchQ, setSearchQ] = useState("");
 
-  const savePost = (updated) => setPosts(ps => ps.map(p => p.id === updated.id ? updated : p));
-  const deletePost = (id) => setPosts(ps => ps.filter(p => p.id !== id));
+  const savePosts = (next) => { setPosts(next); onDataChange?.({ posts: next }); };
+  const savePost = (updated) => savePosts(posts.map(p => p.id === updated.id ? updated : p));
+  const deletePost = (id) => savePosts(posts.filter(p => p.id !== id));
   const createPost = () => {
     const newPost = { id: `bl${Date.now()}`, title: "Untitled", category: "Notes", tags: [], body: "", coverColor: "#C9B8F0", ts: Date.now(), readTime: 1, published: false };
-    setPosts(ps => [newPost, ...ps]);
+    savePosts([newPost, ...posts]);
     setActivePost(newPost);
     setCreating(false);
   };
@@ -2323,27 +2323,28 @@ const BookmarkEditModal = ({ bm, onSave, onClose }) => {
   );
 };
 
-const BookmarksWidget = ({ data, color, isOwnDashboard }) => {
+const BookmarksWidget = ({ data, color, isOwnDashboard, onDataChange }) => {
   const init = data.bookmarks || BOOKMARKS_SEED;
   const [daily, setDaily]       = useState(init.daily    || []);
   const [frequent, setFrequent] = useState(init.frequent || []);
-  const [editTarget, setEditTarget] = useState(null);   // { section, id }
-  const [addTarget, setAddTarget]   = useState(null);   // "daily" | "frequent"
-  const [view, setView] = useState("grid");             // "grid" | "list"
+  const [editTarget, setEditTarget] = useState(null);
+  const [addTarget, setAddTarget]   = useState(null);
+  const [view, setView] = useState("grid");
   const isOwner = isOwnDashboard !== false;
+  const saveAll = (newDaily, newFrequent) => { onDataChange?.({ bookmarks: { daily: newDaily, frequent: newFrequent } }); };
 
   const updateBm = (section, id, patch) => {
-    const setter = section === "daily" ? setDaily : setFrequent;
-    setter(bs => bs.map(b => b.id === id ? { ...b, ...patch } : b));
+    if (section === "daily") { const next = daily.map(b => b.id === id ? { ...b, ...patch } : b); setDaily(next); saveAll(next, frequent); }
+    else { const next = frequent.map(b => b.id === id ? { ...b, ...patch } : b); setFrequent(next); saveAll(daily, next); }
   };
   const deleteBm = (section, id) => {
-    const setter = section === "daily" ? setDaily : setFrequent;
-    setter(bs => bs.filter(b => b.id !== id));
+    if (section === "daily") { const next = daily.filter(b => b.id !== id); setDaily(next); saveAll(next, frequent); }
+    else { const next = frequent.filter(b => b.id !== id); setFrequent(next); saveAll(daily, next); }
   };
   const addBm = (section, draft) => {
     const newBm = { id: `bm${Date.now()}`, title: draft.title || "New link", url: draft.url || "#", emoji: draft.emoji || "🔗", color: draft.color || BOOKMARK_COLORS[0] };
-    if (section === "daily") setDaily(bs => [...bs, newBm]);
-    else setFrequent(bs => [...bs, newBm]);
+    if (section === "daily") { const next = [...daily, newBm]; setDaily(next); saveAll(next, frequent); }
+    else { const next = [...frequent, newBm]; setFrequent(next); saveAll(daily, next); }
     setAddTarget(null);
   };
 
