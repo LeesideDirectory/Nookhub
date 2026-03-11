@@ -3025,14 +3025,17 @@ const DashboardPage = ({ user: userProp, view, onNavigate, profilePic, setProfil
       try {
         const { data, error } = await supabase
           .from('widget_configs')
-          .select('widget_id, enabled, public, color_idx, sort_order')
+          .select('widget_id, enabled, public, color_idx, sort_order, data')
           .eq('user_id', user.id)
           .order('sort_order', { ascending: true });
 
-        console.log('[Nook] widget_configs result:', { data, error });
+        console.log('[Nook] widget_configs result:', { count: data?.length, error });
 
         if (data && data.length > 0) {
           console.log('[Nook] Found', data.length, 'widgets in Supabase, enabled:', data.filter(r=>r.enabled).map(r=>r.widget_id));
+          // Merge Supabase data column with localStorage (localStorage wins for unsaved changes)
+          const dbDataMap = Object.fromEntries(data.filter(r => r.data).map(r => [r.widget_id, r.data]));
+          const mergedData = { ...dbDataMap, ...savedWidgetData }; // localStorage overrides DB
           // Build config from Supabase
           const configMap = Object.fromEntries(data.map(r => [r.widget_id, r]));
           const merged = INITIAL_WIDGETS.map(w => ({
@@ -3040,13 +3043,15 @@ const DashboardPage = ({ user: userProp, view, onNavigate, profilePic, setProfil
             enabled: configMap[w.id]?.enabled ?? false,
             isPublic: configMap[w.id]?.public ?? false,
             colorIdx: configMap[w.id]?.color_idx ?? w.colorIdx ?? 0,
-            data: savedWidgetData[w.id] ? { ...w.data, ...savedWidgetData[w.id] } : w.data,
+            data: mergedData[w.id] ? { ...w.data, ...mergedData[w.id] } : w.data,
           }));
           const ordered = [...merged].sort((a, b) => {
             const ai = data.findIndex(r => r.widget_id === a.id);
             const bi = data.findIndex(r => r.widget_id === b.id);
             return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
           });
+          // Also restore widgetData state from DB so widgets render with their content
+          setWidgetData(mergedData);
           console.log('[Nook] Setting widgets, enabled:', ordered.filter(w=>w.enabled).map(w=>w.id));
           setWidgets(ordered);
           setWidgetOrder(ordered.map(w => w.id));
@@ -3116,13 +3121,17 @@ const DashboardPage = ({ user: userProp, view, onNavigate, profilePic, setProfil
 
   const onDataChange = useCallback((widgetId, newData) => {
     setWidgetData(prev => ({ ...prev, [widgetId]: newData }));
-  }, []);
+    // Save content to Supabase immediately
+    if (!user?.id) return;
+    supabase.from('widget_configs')
+      .upsert({ user_id: user.id, widget_id: widgetId, data: newData }, { onConflict: 'user_id,widget_id' })
+      .then(({ error }) => { if (error) console.log('[Nook] data save error:', error); });
+  }, [user?.id]);
 
   // Save widget config explicitly (called after user actions, not reactively)
   const saveWidgetConfig = useCallback(async (updatedWidgets, updatedOrder) => {
     const ws = updatedWidgets || widgets;
     const ord = updatedOrder || widgetOrder;
-    console.log('[Nook] saveWidgetConfig called, enabled:', ws.filter(w=>w.enabled).map(w=>w.id));
     // Save to localStorage immediately
     if (STORAGE_KEY) {
       try { localStorage.setItem(STORAGE_KEY, JSON.stringify(ws)); } catch {}
@@ -3142,7 +3151,7 @@ const DashboardPage = ({ user: userProp, view, onNavigate, profilePic, setProfil
         sort_order: ord.indexOf(w.id) >= 0 ? ord.indexOf(w.id) : i,
       }));
       const { error } = await supabase.from('widget_configs').upsert(rows, { onConflict: 'user_id,widget_id' });
-      console.log('[Nook] Supabase upsert result:', error || 'OK');
+      if (error) console.log('[Nook] config save error:', error);
     } catch(e) { console.log('[Nook] Save error:', e); }
   }, [widgets, widgetOrder, STORAGE_KEY, ORDER_KEY, user?.id]);
 
