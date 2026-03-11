@@ -5762,20 +5762,21 @@ export default function App() {
     setHasOnboarded(false);
   };
 
-  const [pendingEmail, setPendingEmail] = useState(() => {
-    try { return sessionStorage.getItem("nook_pending_email") || null; } catch { return null; }
-  });
+  const [pendingEmail, setPendingEmail] = useState(null);
 
   const handleLogin = async ({ email, password }) => {
+    try { sessionStorage.removeItem("nook_pending_email"); } catch {}
     const { error } = await signIn({ email, password });
     if (!error) navigate("dashboard");
     return { error };
   };
 
+  const [justSignedUp, setJustSignedUp] = useState(false);
+
   const handleSignup = async ({ email, password, name }) => {
     const { error } = await signUp({ email, password, name });
     if (!error) {
-      try { sessionStorage.setItem("nook_pending_email", email); } catch {}
+      setJustSignedUp(true);
       setPendingEmail(email);
     }
     return { error };
@@ -5805,31 +5806,24 @@ export default function App() {
   const openUserProfile = (uid) => { const u = USERS.find(u => u.id === uid); if (u) setViewingUser(u); };
 
   // Redirect unauthenticated users away from protected pages
+  // Only trigger onboarding for brand new signups
+  useEffect(() => {
+    if (justSignedUp && user) {
+      setJustSignedUp(false);
+      setShowOnboarding(true);
+    }
+  }, [justSignedUp, user]);
+
   const protectedPages = ["dashboard","customize","messages","feed","work","admin","settings"];
   useEffect(() => {
     if (authLoading) return;
     if (showOnboarding) return;
     if (!user && protectedPages.includes(page)) { setPage("login"); return; }
-    if (user && pendingEmail) {
-      // Brand new signup that just confirmed email
-      setPendingEmail(null);
-      try { sessionStorage.removeItem("nook_pending_email"); } catch {}
-      const alreadyOnboarded = (() => { try { return !!localStorage.getItem(`nook_onboarded_${user.id}`); } catch { return false; } })();
-      if (!alreadyOnboarded) { setShowOnboarding(true); return; }
-      setPage("dashboard"); return;
-    }
     if (user && ["login","signup","home"].includes(page)) {
-      // Set the flag for any existing user who has navigated here
-      // Only show onboarding if this is a fresh signup (flag not set AND no pending email means returning user)
-      const alreadyOnboarded = (() => { try { return !!localStorage.getItem(`nook_onboarded_${user.id}`); } catch { return false; } })();
-      if (!alreadyOnboarded) {
-        // Set the flag now — treat any login to home/login page as already onboarded
-        try { localStorage.setItem(`nook_onboarded_${user.id}`, "1"); } catch {}
-      }
       setPage("dashboard"); return;
     }
     if (page === "admin" && !isAdmin) { setPage("dashboard"); }
-  }, [user, authLoading, profile, page, showOnboarding, isAdmin, pendingEmail]);
+  }, [user, authLoading, page, showOnboarding, isAdmin]);
 
   // Show nothing while Supabase checks session — prevents flash of login page
   if (authLoading) return (
