@@ -2989,7 +2989,7 @@ const WidgetToggleCard = ({ w, onToggle }) => {
   );
 };
 
-const DashboardPage = ({ user: userProp, view, onNavigate, profilePic, setProfilePic, widgetRequests, setWidgetRequests, following, toggleFollow, initialWidgets }) => {
+const DashboardPage = ({ user: userProp, view, onNavigate, profilePic, setProfilePic, widgetRequests, setWidgetRequests, following, toggleFollow}) => {
   const { user: authUser, profile, updateProfile } = useAuth();
   const user = userProp || authUser;
 
@@ -3000,7 +3000,7 @@ const DashboardPage = ({ user: userProp, view, onNavigate, profilePic, setProfil
   const ORDER_KEY   = user ? `nook_widget_order_${user.id}` : null;
   const DATA_KEY    = user ? `nook_widget_data_${user.id}` : null;
 
-  // Load saved widget content data first
+  // Load saved widget content (todos, links etc) from localStorage
   const savedWidgetData = (() => {
     if (DATA_KEY) {
       try { const s = localStorage.getItem(DATA_KEY); if (s) return JSON.parse(s); } catch {}
@@ -3008,51 +3008,81 @@ const DashboardPage = ({ user: userProp, view, onNavigate, profilePic, setProfil
     return {};
   })();
 
-  const startingWidgets = (() => {
-    if (STORAGE_KEY) {
-      try {
-        const saved = localStorage.getItem(STORAGE_KEY);
-        if (saved) {
-          const ws = JSON.parse(saved);
-          // Merge saved widget content (todos, links, etc.) back into widget data
-          if (Object.keys(savedWidgetData).length > 0) {
-            return ws.map(w => savedWidgetData[w.id] ? { ...w, data: { ...w.data, ...savedWidgetData[w.id] } } : w);
-          }
-          return ws;
-        }
-      } catch {}
-    }
-    return initialWidgets || INITIAL_WIDGETS.map(w => ({ ...w, enabled: false, isPublic: false }));
-  })();
+  const [widgets, setWidgets] = useState(() =>
+    INITIAL_WIDGETS.map(w => ({ ...w, enabled: false, isPublic: false }))
+  );
+  const [widgetOrder, setWidgetOrder] = useState(() =>
+    INITIAL_WIDGETS.map(w => w.id)
+  );
+  // true once we've finished loading from Supabase (prevents saving before load)
+  const loadedRef = useRef(false);
 
-  const [widgets, setWidgets] = useState(startingWidgets);
-  const [widgetOrder, setWidgetOrder] = useState(() => {
-    if (ORDER_KEY) {
-      try {
-        const saved = localStorage.getItem(ORDER_KEY);
-        if (saved) return JSON.parse(saved);
-      } catch {}
-    }
-    return startingWidgets.map(w => w.id);
-  });
-
-  // When Supabase-loaded config arrives, apply it and mark load complete
+  // Load widget config: Supabase first, fall back to localStorage
   useEffect(() => {
-    if (!initialWidgets) return;
-    if (initialWidgets === "LOADED_EMPTY") {
-      // No Supabase data — keep whatever localStorage/defaults gave us, just unlock saving
-      supabaseLoadedRef.current = true;
-      return;
-    }
-    // Preserve any live widget data already in state
-    setWidgets(prev => initialWidgets.map(iw => {
-      const existing = prev.find(p => p.id === iw.id);
-      return existing ? { ...iw, data: existing.data } : iw;
-    }));
-    setWidgetOrder(initialWidgets.map(w => w.id));
-    // Now safe to save — we've loaded from Supabase
-    supabaseLoadedRef.current = true;
-  }, [initialWidgets]);
+    if (!user?.id) return;
+    const load = async () => {
+      try {
+        const { data } = await supabase
+          .from('widget_configs')
+          .select('widget_id, enabled, public, color_idx, sort_order')
+          .eq('user_id', user.id)
+          .order('sort_order', { ascending: true });
+
+        if (data && data.length > 0) {
+          // Build config from Supabase
+          const configMap = Object.fromEntries(data.map(r => [r.widget_id, r]));
+          const merged = INITIAL_WIDGETS.map(w => ({
+            ...w,
+            enabled: configMap[w.id]?.enabled ?? false,
+            isPublic: configMap[w.id]?.public ?? false,
+            colorIdx: configMap[w.id]?.color_idx ?? w.colorIdx ?? 0,
+            data: savedWidgetData[w.id] ? { ...w.data, ...savedWidgetData[w.id] } : w.data,
+          }));
+          const ordered = [...merged].sort((a, b) => {
+            const ai = data.findIndex(r => r.widget_id === a.id);
+            const bi = data.findIndex(r => r.widget_id === b.id);
+            return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
+          });
+          setWidgets(ordered);
+          setWidgetOrder(ordered.map(w => w.id));
+        } else {
+          // No Supabase data — try localStorage
+          if (STORAGE_KEY) {
+            try {
+              const saved = localStorage.getItem(STORAGE_KEY);
+              if (saved) {
+                const ws = JSON.parse(saved);
+                const merged = ws.map(w => savedWidgetData[w.id] ? { ...w, data: { ...w.data, ...savedWidgetData[w.id] } } : w);
+                setWidgets(merged);
+              }
+            } catch {}
+          }
+          if (ORDER_KEY) {
+            try {
+              const saved = localStorage.getItem(ORDER_KEY);
+              if (saved) setWidgetOrder(JSON.parse(saved));
+            } catch {}
+          }
+        }
+      } catch {
+        // Supabase failed — fall back to localStorage
+        if (STORAGE_KEY) {
+          try {
+            const saved = localStorage.getItem(STORAGE_KEY);
+            if (saved) {
+              const ws = JSON.parse(saved);
+              setWidgets(ws.map(w => savedWidgetData[w.id] ? { ...w, data: { ...w.data, ...savedWidgetData[w.id] } } : w));
+            }
+          } catch {}
+        }
+        if (ORDER_KEY) {
+          try { const saved = localStorage.getItem(ORDER_KEY); if (saved) setWidgetOrder(JSON.parse(saved)); } catch {}
+        }
+      }
+      loadedRef.current = true;
+    };
+    load();
+  }, [user?.id]); // eslint-disable-line
   const [editBio, setEditBio] = useState(false);
   const [bio, setBio] = useState(profile?.bio || "");
   const [bioLinks, setBioLinks] = useState([]);
@@ -3081,16 +3111,13 @@ const DashboardPage = ({ user: userProp, view, onNavigate, profilePic, setProfil
     setWidgetData(prev => ({ ...prev, [widgetId]: newData }));
   }, []);
 
-  // Track whether we've finished the initial load from Supabase (don't save until then)
-  const supabaseLoadedRef = useRef(false);
-
-  // Persist widget config (enabled/public/order) whenever it changes
+  // Persist widget config whenever it changes (only after initial load)
   useEffect(() => {
+    if (!loadedRef.current) return;
     if (STORAGE_KEY && widgets.length > 0) {
       try { localStorage.setItem(STORAGE_KEY, JSON.stringify(widgets)); } catch {}
     }
-    // Don't write back to Supabase until after initial load completes
-    if (!user?.id || !widgets.length || !supabaseLoadedRef.current) return;
+    if (!user?.id || !widgets.length) return;
     const save = async () => {
       try {
         const rows = widgets.map((w, i) => ({
@@ -6213,47 +6240,6 @@ export default function App() {
     }
     return { error };
   };
-  const [initialWidgets, setInitialWidgets] = useState(null);
-
-  // Load widget config from Supabase whenever user logs in
-  useEffect(() => {
-    if (!user?.id) { setInitialWidgets(null); return; }
-    const load = async () => {
-      try {
-        const { data } = await supabase
-          .from('widget_configs')
-          .select('widget_id, enabled, public, color_idx, sort_order')
-          .eq('user_id', user.id)
-          .order('sort_order', { ascending: true });
-        if (data && data.length > 0) {
-          const configMap = Object.fromEntries(data.map(r => [r.widget_id, r]));
-          const merged = INITIAL_WIDGETS.map(w => ({
-            ...w,
-            enabled: configMap[w.id]?.enabled ?? false,
-            isPublic: configMap[w.id]?.public ?? false,
-            colorIdx: configMap[w.id]?.color_idx ?? w.colorIdx ?? 0,
-          }));
-          const ordered = [...merged].sort((a, b) => {
-            const ai = data.findIndex(r => r.widget_id === a.id);
-            const bi = data.findIndex(r => r.widget_id === b.id);
-            return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
-          });
-          setInitialWidgets(ordered);
-          try { localStorage.setItem(`nook_widgets_${user.id}`, JSON.stringify(ordered)); } catch {}
-          try { localStorage.setItem(`nook_widget_order_${user.id}`, JSON.stringify(ordered.map(w => w.id))); } catch {}
-        } else {
-          // No Supabase data yet — signal DashboardPage to use localStorage and unlock saving
-          setInitialWidgets(null);
-          // Directly set the ref via a special sentinel so DashboardPage unlocks saving
-          setInitialWidgets("LOADED_EMPTY");
-        }
-      } catch {
-        setInitialWidgets("LOADED_EMPTY");
-      }
-    };
-    load();
-  }, [user?.id]);
-
   const completeOnboarding = async (name, bio, chosenIds) => {
     try {
             if (user && (name || bio)) {
@@ -6274,12 +6260,6 @@ export default function App() {
     } catch {}
     // Mark this specific user as onboarded in localStorage
     try { localStorage.setItem(`nook_onboarded_${user?.id}`, "1"); } catch {}
-    const widgets = INITIAL_WIDGETS.map(w => ({
-      ...w,
-      enabled: chosenIds.includes(w.id),
-      isPublic: chosenIds.includes(w.id),
-    }));
-    setInitialWidgets(widgets);
     setHasOnboarded(true);
     setShowOnboarding(false);
     setPage("dashboard");
@@ -6483,7 +6463,7 @@ export default function App() {
       {/* DashboardPage stays mounted while logged in — hidden via CSS to preserve widget state */}
       {user && (
         <div style={{ display: ["dashboard","customize"].includes(page) ? "block" : "none" }}>
-          <DashboardPage user={user} view={page} onNavigate={navigate} profilePic={profilePic} setProfilePic={setProfilePic} widgetRequests={widgetRequests} setWidgetRequests={setWidgetRequests} following={following} toggleFollow={toggleFollow} onViewUser={openUserProfile} initialWidgets={initialWidgets} />
+          <DashboardPage user={user} view={page} onNavigate={navigate} profilePic={profilePic} setProfilePic={setProfilePic} widgetRequests={widgetRequests} setWidgetRequests={setWidgetRequests} following={following} toggleFollow={toggleFollow} onViewUser={openUserProfile} />
         </div>
       )}
       {page === "messages" && user && <MessagesPage requests={requests} setRequests={setRequests} />}
