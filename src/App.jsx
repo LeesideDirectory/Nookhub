@@ -3035,6 +3035,22 @@ const DashboardPage = ({ user: userProp, view, onNavigate, profilePic, setProfil
     }
     return startingWidgets.map(w => w.id);
   });
+
+  // When Supabase-loaded config arrives (new device / first login), apply it
+  useEffect(() => {
+    if (!initialWidgets) return;
+    setWidgets(prev => {
+      // Only override if Supabase has actual enabled widgets (not all disabled)
+      const hasEnabled = initialWidgets.some(w => w.enabled);
+      if (!hasEnabled) return prev;
+      // Preserve any live widget data already in state
+      return initialWidgets.map(iw => {
+        const existing = prev.find(p => p.id === iw.id);
+        return existing ? { ...iw, data: existing.data } : iw;
+      });
+    });
+    setWidgetOrder(initialWidgets.map(w => w.id));
+  }, [initialWidgets]);
   const [editBio, setEditBio] = useState(false);
   const [bio, setBio] = useState(profile?.bio || "");
   const [bioLinks, setBioLinks] = useState([]);
@@ -3068,7 +3084,25 @@ const DashboardPage = ({ user: userProp, view, onNavigate, profilePic, setProfil
     if (STORAGE_KEY && widgets.length > 0) {
       try { localStorage.setItem(STORAGE_KEY, JSON.stringify(widgets)); } catch {}
     }
-  }, [widgets, STORAGE_KEY]);
+    // Also save to Supabase for cross-device sync
+    if (!user?.id || !widgets.length) return;
+    const save = async () => {
+      try {
+        const { supabase } = await import('../lib/supabase');
+        const rows = widgets.map((w, i) => ({
+          user_id: user.id,
+          widget_id: w.id,
+          enabled: !!w.enabled,
+          public: !!w.isPublic,
+          color_idx: w.colorIdx ?? 0,
+          sort_order: widgetOrder.indexOf(w.id) >= 0 ? widgetOrder.indexOf(w.id) : i,
+        }));
+        await supabase.from('widget_configs').upsert(rows, { onConflict: 'user_id,widget_id' });
+      } catch {}
+    };
+    const t = setTimeout(save, 1500); // debounce — don't hammer on every keystroke
+    return () => clearTimeout(t);
+  }, [widgets, STORAGE_KEY, user?.id, widgetOrder]);
 
   useEffect(() => {
     if (ORDER_KEY && widgetOrder.length > 0) {
@@ -6182,11 +6216,60 @@ export default function App() {
   };
   const [initialWidgets, setInitialWidgets] = useState(null);
 
+  // Load widget config from Supabase whenever user logs in
+  useEffect(() => {
+    if (!user?.id) { setInitialWidgets(null); return; }
+    const load = async () => {
+      try {
+        const { supabase } = await import('./lib/supabase');
+        const { data } = await supabase
+          .from('widget_configs')
+          .select('widget_id, enabled, public, color_idx, sort_order')
+          .eq('user_id', user.id)
+          .order('sort_order', { ascending: true });
+        if (data && data.length > 0) {
+          // Merge Supabase config onto INITIAL_WIDGETS (preserves default data/icon etc.)
+          const configMap = Object.fromEntries(data.map(r => [r.widget_id, r]));
+          const merged = INITIAL_WIDGETS.map(w => ({
+            ...w,
+            enabled: configMap[w.id]?.enabled ?? false,
+            isPublic: configMap[w.id]?.public ?? false,
+            colorIdx: configMap[w.id]?.color_idx ?? w.colorIdx ?? 0,
+          }));
+          // Sort by saved sort_order
+          const ordered = [...merged].sort((a, b) => {
+            const ai = data.findIndex(r => r.widget_id === a.id);
+            const bi = data.findIndex(r => r.widget_id === b.id);
+            return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
+          });
+          setInitialWidgets(ordered);
+          // Also update localStorage so it's in sync
+          try { localStorage.setItem(`nook_widgets_${user.id}`, JSON.stringify(ordered)); } catch {}
+          try { localStorage.setItem(`nook_widget_order_${user.id}`, JSON.stringify(ordered.map(w => w.id))); } catch {}
+        }
+        // If no Supabase data, DashboardPage will fall back to localStorage automatically
+      } catch {}
+    };
+    load();
+  }, [user?.id]);
+
   const completeOnboarding = async (name, bio, chosenIds) => {
     try {
       const { supabase } = await import('./lib/supabase');
       if (user && (name || bio)) {
         await supabase.from('profiles').update({ name, bio }).eq('id', user.id);
+      }
+      // Save initial widget choices to Supabase right away
+      if (user) {
+        const rows = INITIAL_WIDGETS.map((w, i) => ({
+          user_id: user.id,
+          widget_id: w.id,
+          enabled: chosenIds.includes(w.id),
+          public: chosenIds.includes(w.id),
+          color_idx: w.colorIdx ?? 0,
+          sort_order: i,
+        }));
+        await supabase.from('widget_configs').upsert(rows, { onConflict: 'user_id,widget_id' });
       }
     } catch {}
     // Mark this specific user as onboarded in localStorage
