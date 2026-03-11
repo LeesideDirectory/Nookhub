@@ -165,7 +165,6 @@ const Nav = ({ page, onNavigate, onLogout, unreadCount, isLoggedIn, isAdmin, me,
                 <button key={v} onClick={() => onNavigate(v)} style={{ background: page === v ? P.lavender : "transparent", border: `1.5px solid ${page === v ? P.lavender : P.lavender + "66"}`, borderRadius: 10, padding: "7px 15px", cursor: "pointer", fontFamily: FF_S, fontSize: 13, color: P.ink, fontWeight: page === v ? 600 : 400, transition: "all 0.2s", display: "flex", alignItems: "center", gap: 6 }}>
                   {label}
                   {v === "messages" && unreadCount > 0 && <span style={{ background: P.rose, borderRadius: 20, padding: "1px 7px", fontSize: 10, fontWeight: 700, color: P.ink }}>{unreadCount}</span>}
-                  {v === "feed" && following?.length > 0 && <span style={{ background: page === "feed" ? P.ink + "22" : P.lavender, borderRadius: 20, padding: "1px 7px", fontSize: 10, fontWeight: 700, color: P.ink }}>{following.length}</span>}
                 </button>
               ))}
               <div style={{ width: 1, height: 22, background: P.lavender + "55", margin: "0 4px" }} />
@@ -218,7 +217,6 @@ const Nav = ({ page, onNavigate, onLogout, unreadCount, isLoggedIn, isAdmin, me,
                 <button key={v} onClick={() => { onNavigate(v); close(); }} style={{ background: page === v ? P.lavenderLight : "transparent", border: `1px solid ${page === v ? P.lavender : "transparent"}`, borderRadius: 12, padding: "12px 16px", cursor: "pointer", fontFamily: FF_S, fontSize: 14, color: P.ink, fontWeight: page === v ? 600 : 400, textAlign: "left", display: "flex", alignItems: "center", gap: 8, justifyContent: "space-between" }}>
                   <span>{label}</span>
                   {v === "messages" && unreadCount > 0 && <span style={{ background: P.rose, borderRadius: 20, padding: "1px 8px", fontSize: 11, fontWeight: 700, color: P.ink }}>{unreadCount}</span>}
-                  {v === "feed" && following?.length > 0 && <span style={{ background: P.lavender, borderRadius: 20, padding: "1px 8px", fontSize: 11, fontWeight: 700, color: P.ink }}>{following.length}</span>}
                 </button>
               ))}
               <div style={{ height: 1, background: P.lavender + "33", margin: "8px 0" }} />
@@ -2940,7 +2938,18 @@ const DashboardPage = ({ view, onNavigate, profilePic, setProfilePic, widgetRequ
   const displayName = profile?.name || user?.email?.split('@')[0] || 'Your Nook';
   const displayHandle = profile?.handle || '@you';
 
-  const startingWidgets = initialWidgets || INITIAL_WIDGETS.map(w => ({ ...w, enabled: false, isPublic: false }));
+  const STORAGE_KEY = user ? `nook_widgets_${user.id}` : null;
+
+  const startingWidgets = (() => {
+    if (STORAGE_KEY) {
+      try {
+        const saved = localStorage.getItem(STORAGE_KEY);
+        if (saved) return JSON.parse(saved);
+      } catch {}
+    }
+    return initialWidgets || INITIAL_WIDGETS.map(w => ({ ...w, enabled: false, isPublic: false }));
+  })();
+
   const [widgets, setWidgets] = useState(startingWidgets);
   const [widgetOrder, setWidgetOrder] = useState(() => startingWidgets.map(w => w.id));
   const [editBio, setEditBio] = useState(false);
@@ -2958,6 +2967,13 @@ const DashboardPage = ({ view, onNavigate, profilePic, setProfilePic, widgetRequ
   const [showRequestModal, setShowRequestModal] = useState(false);
   const toggleExpand = (id) => setExpandedWidgets(s => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
   const fileInputRef = useRef(null);
+
+  // Persist widget state whenever it changes
+  useEffect(() => {
+    if (STORAGE_KEY && widgets.length > 0) {
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(widgets)); } catch {}
+    }
+  }, [widgets, STORAGE_KEY]);
 
   // ── Lifted widget data (shared with ArchiveWidget) ────────────────────────
   const initReading = INITIAL_WIDGETS.find(w => w.id === "reading").data.items;
@@ -3562,9 +3578,8 @@ const NOTE_COLORS = [
   { bg: P.roseLight,     border: P.rose,      dot: "#D8708A" },
 ];
 
-const WorkNotes = ({ notes: init }) => {
-  const [notes, setNotes]           = useState(init);
-  const [active, setActive]         = useState(init[0]?.id ?? null);
+const WorkNotes = ({ notes, setNotes }) => {
+  const [active, setActive]         = useState(notes[0]?.id ?? null);
   const [search, setSearch]         = useState("");
   const [creating, setCreating]     = useState(false);
   const [newTitle, setNewTitle]     = useState("");
@@ -3661,8 +3676,7 @@ const WorkNotes = ({ notes: init }) => {
   );
 };
 
-const WorkReminders = ({ reminders: init }) => {
-  const [reminders, setReminders] = useState(init);
+const WorkReminders = ({ reminders, setReminders }) => {
   const [adding, setAdding]       = useState(false);
   const [draft, setDraft]         = useState({ text: "", date: "", time: "", priority: "medium" });
 
@@ -4100,12 +4114,15 @@ const WorkOverview = ({ masterTodos, dailyTodos, reminders, meetings, onGoTo }) 
 };
 
 const WorkPage = () => {
+  const { user, profile } = useAuth();
   const [section, setSection]       = useState("overview");
   const [masterTodos, setMasterTodos] = useState(INIT_MASTER_TODOS);
   const [dailyTodos, setDailyTodos]   = useState(INIT_DAILY_TODOS);
-  const [reminders]                   = useState(INIT_REMINDERS);
+  const [reminders, setReminders]     = useState(INIT_REMINDERS);
   const [meetings]                    = useState(INIT_MEETINGS);
+  const [notes, setNotes]             = useState(INIT_NOTES);
 
+  const displayName = profile?.name || user?.email?.split('@')[0] || 'there';
   const goTo = (s) => setSection(s);
   const active = WORK_SECTIONS.find(s => s.id === section);
 
@@ -4133,15 +4150,15 @@ const WorkPage = () => {
         <div className="nook-work-header" style={{ background: P.white, borderBottom: `1px solid ${P.lavender}22`, padding: "18px 32px", display: "flex", alignItems: "baseline", gap: 12, position: "sticky", top: 0, zIndex: 10, flexWrap: "wrap" }}>
           <span style={{ fontSize: 20 }}>{active?.icon}</span>
           <h2 style={{ fontFamily: FF_D, fontSize: 22, color: P.ink, margin: 0, fontWeight: 400 }}>
-            {section === "overview" ? `Good ${new Date().getHours() < 12 ? "morning" : new Date().getHours() < 17 ? "afternoon" : "evening"}, Margot` : active?.label}
+            {section === "overview" ? `Good ${new Date().getHours() < 12 ? "morning" : new Date().getHours() < 17 ? "afternoon" : "evening"}, ${displayName.split(" ")[0]}` : active?.label}
           </h2>
           {section === "overview" && <span style={{ fontFamily: FF_S, fontSize: 13, color: P.inkFaint }}>{new Date().toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" })}</span>}
         </div>
         <div className="nook-page-pad">
           {section === "overview"  && <WorkOverview masterTodos={masterTodos} dailyTodos={dailyTodos} reminders={reminders} meetings={meetings} onGoTo={goTo} />}
           {section === "todos"     && <WorkTodos masterTodos={masterTodos} setMasterTodos={setMasterTodos} dailyTodos={dailyTodos} setDailyTodos={setDailyTodos} />}
-          {section === "notes"     && <WorkNotes />}
-          {section === "reminders" && <WorkReminders reminders={reminders} />}
+          {section === "notes"     && <WorkNotes notes={notes} setNotes={setNotes} />}
+          {section === "reminders" && <WorkReminders reminders={reminders} setReminders={setReminders} />}}
           {section === "kanban"    && <WorkKanban />}
           {section === "focus"     && <WorkFocus />}
           {section === "meetings"  && <WorkMeetings meetings={meetings} />}
@@ -5658,11 +5675,13 @@ const HomePageNew = ({ onNavigate, profilePic }) => {
 
 export default function App() {
   const { user, profile, loading: authLoading, signIn, signUp, signOut } = useAuth();
-  const [page, setPage] = useState("home");
+  const [page, setPage] = useState(() => {
+    try { return sessionStorage.getItem("nook_page") || "home"; } catch { return "home"; }
+  });
   const [convos, setConvos] = useState(INITIAL_CONVOS);
   const [requests, setRequests] = useState(INITIAL_REQUESTS);
   const [profilePic, setProfilePic] = useState(null);
-  const [following, setFollowing] = useState(["u1", "u2", "u3"]);
+  const [following, setFollowing] = useState([]);
   const [notifications, setNotifications] = useState(NOTIF_SEED);
   const [showNotifs, setShowNotifs] = useState(false);
   const [viewingUser, setViewingUser] = useState(null);
@@ -5702,6 +5721,10 @@ export default function App() {
     try { localStorage.setItem("nook_state", JSON.stringify({ following, profilePic, hasOnboarded })); } catch {}
   }, [following, profilePic, hasOnboarded]);
 
+  useEffect(() => {
+    try { sessionStorage.setItem("nook_page", page); } catch {}
+  }, [page]);
+
   const toggleFollow = (uid) => {
     const isNowFollowing = !following.includes(uid);
     setFollowing(fs => isNowFollowing ? [...fs, uid] : fs.filter(id => id !== uid));
@@ -5728,7 +5751,17 @@ export default function App() {
     setShowNotifs(false);
   };
 
-  const logout = async () => { await signOut(); setPage("home"); setHasOnboarded(false); };
+  const logout = async () => {
+    if (user) {
+      try { localStorage.removeItem(`nook_widgets_${user.id}`); } catch {}
+    }
+    await signOut();
+    try { sessionStorage.removeItem("nook_page"); } catch {}
+    setPage("home");
+    setHasOnboarded(false);
+  };
+
+  const [pendingEmail, setPendingEmail] = useState(null); // set after signup, shows verify screen
 
   const handleLogin = async ({ email, password }) => {
     const { error } = await signIn({ email, password });
@@ -5739,7 +5772,8 @@ export default function App() {
   const handleSignup = async ({ email, password, name }) => {
     const { error } = await signUp({ email, password, name });
     if (!error) {
-      if (!hasOnboarded) { setShowOnboarding(true); } else { setPage("dashboard"); }
+      // Show "check your email" screen — don't block the account, just inform
+      setPendingEmail(email);
     }
     return { error };
   };
@@ -5773,9 +5807,17 @@ export default function App() {
     if (authLoading) return;
     if (showOnboarding) return;
     if (!user && protectedPages.includes(page)) { setPage("login"); return; }
-    if (user && ["login","signup"].includes(page)) { setPage("dashboard"); return; }
+    if (user && pendingEmail) {
+      // User just confirmed email and session restored — go to onboarding
+      setPendingEmail(null);
+      if (!hasOnboarded) { setShowOnboarding(true); return; }
+    }
+    if (user && ["login","signup","home"].includes(page)) {
+      if (!hasOnboarded) { setShowOnboarding(true); return; }
+      setPage("dashboard"); return;
+    }
     if (page === "admin" && !isAdmin) { setPage("dashboard"); }
-  }, [user, authLoading, page, showOnboarding, isAdmin]);
+  }, [user, authLoading, page, showOnboarding, isAdmin, pendingEmail, hasOnboarded]);
 
   // Show nothing while Supabase checks session — prevents flash of login page
   if (authLoading) return (
@@ -5930,7 +5972,25 @@ export default function App() {
 
       {page === "home"    && <HomePageNew onNavigate={navigate} profilePic={profilePic} />}
       {page === "login"   && !user && <AuthPage mode="login"  onSwitch={() => navigate("signup")} onEnter={handleLogin} />}
-      {page === "signup"  && !user && <AuthPage mode="signup" onSwitch={() => navigate("login")}  onEnter={handleSignup} />}
+      {page === "signup"  && !user && !pendingEmail && <AuthPage mode="signup" onSwitch={() => navigate("login")}  onEnter={handleSignup} />}
+      {pendingEmail && !user && (
+        <div style={{ minHeight: "calc(100vh - 61px)", background: P.bg, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
+          <div style={{ background: P.white, borderRadius: 28, padding: "48px 44px", maxWidth: 440, width: "100%", textAlign: "center", boxShadow: "0 8px 40px rgba(61,53,80,0.10)", border: `1.5px solid ${P.lavender}44` }}>
+            <div style={{ fontSize: 48, marginBottom: 20 }}>✉️</div>
+            <h2 style={{ fontFamily: FF_D, fontSize: 26, color: P.ink, margin: "0 0 12px", fontWeight: 400 }}>Check your email</h2>
+            <p style={{ fontFamily: FF_S, fontSize: 15, color: P.inkLight, lineHeight: 1.6, margin: "0 0 8px" }}>
+              We sent a confirmation link to
+            </p>
+            <p style={{ fontFamily: FF_S, fontSize: 15, color: P.ink, fontWeight: 600, margin: "0 0 24px" }}>{pendingEmail}</p>
+            <p style={{ fontFamily: FF_S, fontSize: 13, color: P.inkFaint, lineHeight: 1.6, margin: "0 0 28px" }}>
+              Click the link in the email to verify your account. Once confirmed, you'll be taken through a short setup and then straight to your Nook.
+            </p>
+            <button onClick={() => { setPendingEmail(null); navigate("login"); }} style={{ background: P.lavenderLight, border: `1.5px solid ${P.lavender}`, borderRadius: 14, padding: "11px 28px", cursor: "pointer", fontFamily: FF_S, fontSize: 14, color: P.ink, fontWeight: 600 }}>
+              Back to login
+            </button>
+          </div>
+        </div>
+      )}
 
       {["dashboard","customize"].includes(page) && user && (
         <DashboardPage view={page} onNavigate={navigate} profilePic={profilePic} setProfilePic={setProfilePic} widgetRequests={widgetRequests} setWidgetRequests={setWidgetRequests} following={following} toggleFollow={toggleFollow} onViewUser={openUserProfile} initialWidgets={initialWidgets} />
