@@ -3373,7 +3373,7 @@ const DashboardPage = ({ user: userProp, view, onNavigate, profilePic, setProfil
           </div>
         </div>
 
-        {view === "dashboard" && (
+        <div style={{ display: view === "dashboard" ? "block" : "none" }}>
           <>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
               <h3 style={{ fontFamily: FF_D, fontSize: 20, color: P.ink, margin: 0, fontWeight: 400 }}>
@@ -3464,7 +3464,7 @@ const DashboardPage = ({ user: userProp, view, onNavigate, profilePic, setProfil
               );
             })()}
           </>
-        )}
+        </div>
 
         {view === "customize" && (() => {
           const CATEGORIES = [
