@@ -1,9 +1,10 @@
-// NOOK BUILD v42 - onboarding fix
+// NOOK BUILD v43 - supabase import fix
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useAuth } from './hooks/useAuth'
 import { useFeed } from './hooks/useFeed'
 import { useMessages } from './hooks/useMessages'
 import { useAdminData } from './hooks/useAdminData'
+import { supabase } from './lib/supabase'
 
 
 const P = {
@@ -2638,8 +2639,7 @@ const NewConvoModal = ({ onClose, onStart, currentUserId }) => {
     const timer = setTimeout(async () => {
       setSearching(true);
       try {
-        const { supabase } = await import('./lib/supabase');
-        const q = search.trim().replace(/^@/, "");
+                const q = search.trim().replace(/^@/, "");
         const { data } = await supabase
           .from('profiles')
           .select('id, name, handle, avatar_color, bio')
@@ -3088,8 +3088,7 @@ const DashboardPage = ({ user: userProp, view, onNavigate, profilePic, setProfil
     if (!user?.id || !widgets.length) return;
     const save = async () => {
       try {
-        const { supabase } = await import('../lib/supabase');
-        const rows = widgets.map((w, i) => ({
+                const rows = widgets.map((w, i) => ({
           user_id: user.id,
           widget_id: w.id,
           enabled: !!w.enabled,
@@ -5276,8 +5275,7 @@ const FeedSidebar = ({ onNavigate, toggleFollow, following = [], onViewUser, cur
   useEffect(() => {
     const load = async () => {
       try {
-        const { supabase } = await import('./lib/supabase');
-        const { data } = await supabase
+                const { data } = await supabase
           .from('profiles')
           .select('id, name, handle, avatar_color, bio')
           .neq('id', currentUserId || '')
@@ -5293,8 +5291,7 @@ const FeedSidebar = ({ onNavigate, toggleFollow, following = [], onViewUser, cur
     if (!following.length) { setFollowedProfiles([]); return; }
     const load = async () => {
       try {
-        const { supabase } = await import('./lib/supabase');
-        const { data } = await supabase
+                const { data } = await supabase
           .from('profiles')
           .select('id, name, handle, avatar_color, bio')
           .in('id', following);
@@ -5310,8 +5307,7 @@ const FeedSidebar = ({ onNavigate, toggleFollow, following = [], onViewUser, cur
     const timer = setTimeout(async () => {
       setSearching(true);
       try {
-        const { supabase } = await import('./lib/supabase');
-        const q = query.trim().toLowerCase();
+                const q = query.trim().toLowerCase();
         const { data } = await supabase
           .from('profiles')
           .select('id, name, handle, avatar_color, bio')
@@ -6142,8 +6138,7 @@ export default function App() {
     if (!user) { setFollowing([]); return; }
     const load = async () => {
       try {
-        const { supabase } = await import('./lib/supabase');
-        const { data } = await supabase
+                const { data } = await supabase
           .from('follows')
           .select('following_id')
           .eq('follower_id', user.id);
@@ -6164,8 +6159,7 @@ export default function App() {
     // Persist to Supabase if logged in
     if (user) {
       try {
-        const { supabase } = await import('./lib/supabase');
-        if (isNowFollowing) {
+                if (isNowFollowing) {
           await supabase.from('follows').upsert({ follower_id: user.id, following_id: uid }, { onConflict: 'follower_id,following_id' });
         } else {
           await supabase.from('follows').delete().eq('follower_id', user.id).eq('following_id', uid);
@@ -6221,8 +6215,7 @@ export default function App() {
     if (!user?.id) { setInitialWidgets(null); return; }
     const load = async () => {
       try {
-        const { supabase } = await import('./lib/supabase');
-        const { data } = await supabase
+                const { data } = await supabase
           .from('widget_configs')
           .select('widget_id, enabled, public, color_idx, sort_order')
           .eq('user_id', user.id)
@@ -6255,8 +6248,7 @@ export default function App() {
 
   const completeOnboarding = async (name, bio, chosenIds) => {
     try {
-      const { supabase } = await import('./lib/supabase');
-      if (user && (name || bio)) {
+            if (user && (name || bio)) {
         await supabase.from('profiles').update({ name, bio }).eq('id', user.id);
       }
       // Save initial widget choices to Supabase right away
