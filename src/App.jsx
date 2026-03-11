@@ -2951,6 +2951,15 @@ const DashboardPage = ({ view, onNavigate, profilePic, setProfilePic, widgetRequ
 
   const STORAGE_KEY = user ? `nook_widgets_${user.id}` : null;
   const ORDER_KEY   = user ? `nook_widget_order_${user.id}` : null;
+  const DATA_KEY    = user ? `nook_widget_data_${user.id}` : null;
+
+  // Load saved widget content data first
+  const savedWidgetData = (() => {
+    if (DATA_KEY) {
+      try { const s = localStorage.getItem(DATA_KEY); if (s) return JSON.parse(s); } catch {}
+    }
+    return {};
+  })();
 
   const startingWidgets = (() => {
     if (STORAGE_KEY) {
@@ -2958,15 +2967,9 @@ const DashboardPage = ({ view, onNavigate, profilePic, setProfilePic, widgetRequ
         const saved = localStorage.getItem(STORAGE_KEY);
         if (saved) {
           const ws = JSON.parse(saved);
-          // Merge in any saved widget data
-          if (DATA_KEY) {
-            try {
-              const savedData = localStorage.getItem(DATA_KEY);
-              if (savedData) {
-                const dataMap = JSON.parse(savedData);
-                return ws.map(w => dataMap[w.id] ? { ...w, data: { ...w.data, ...dataMap[w.id] } } : w);
-              }
-            } catch {}
+          // Merge saved widget content (todos, links, etc.) back into widget data
+          if (Object.keys(savedWidgetData).length > 0) {
+            return ws.map(w => savedWidgetData[w.id] ? { ...w, data: { ...w.data, ...savedWidgetData[w.id] } } : w);
           }
           return ws;
         }
@@ -3001,14 +3004,7 @@ const DashboardPage = ({ view, onNavigate, profilePic, setProfilePic, widgetRequ
   const toggleExpand = (id) => setExpandedWidgets(s => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
   const fileInputRef = useRef(null);
 
-  const DATA_KEY = user ? `nook_widget_data_${user.id}` : null;
-
-  const [widgetData, setWidgetData] = useState(() => {
-    if (DATA_KEY) {
-      try { const s = localStorage.getItem(DATA_KEY); if (s) return JSON.parse(s); } catch {}
-    }
-    return {};
-  });
+  const [widgetData, setWidgetData] = useState(savedWidgetData);
 
   useEffect(() => {
     if (DATA_KEY) {
