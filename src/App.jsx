@@ -3019,6 +3019,9 @@ const DashboardPage = ({ view, onNavigate, profilePic, setProfilePic, widgetRequ
   const onDataChange = useCallback((widgetId, newData) => {
     setWidgetData(prev => ({ ...prev, [widgetId]: newData }));
   }, []);
+
+  // Persist widget config (enabled/public/order) whenever it changes
+  useEffect(() => {
     if (STORAGE_KEY && widgets.length > 0) {
       try { localStorage.setItem(STORAGE_KEY, JSON.stringify(widgets)); } catch {}
     }
