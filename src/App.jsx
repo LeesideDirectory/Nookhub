@@ -44,131 +44,32 @@ const getUser = (id) => ALL_USERS.find(u => u.id === id);
 const now = Date.now();
 const mins = (n) => now - n * 60000;
 
-const INITIAL_CONVOS = [
-  {
-    id: "c1", type: "dm", participants: ["me", "u1"],
-    messages: [
-      { id: "m1", from: "u1", text: "Hey! Loved your reading list update 📚", ts: mins(62), read: true },
-      { id: "m2", from: "me", text: "Thank you! I've been on such a good streak lately", ts: mins(60), read: true },
-      { id: "m3", from: "u1", text: "I just finished Piranesi — it was SO good", ts: mins(58), read: true },
-      { id: "m4", from: "me", text: "Right?? It's unlike anything else. Have you added it to your Nook?", ts: mins(55), read: true },
-      { id: "m5", from: "u1", text: "Just did! Also started following your goals widget — the freelance studio one is so inspiring 🌿", ts: mins(10), read: false },
-    ],
-  },
-  {
-    id: "c2", type: "dm", participants: ["me", "u2"],
-    messages: [
-      { id: "m1", from: "u2", text: "Your new dashboard layout looks stunning by the way", ts: mins(130), read: true },
-      { id: "m2", from: "me", text: "Oh that means so much coming from you, your photography Nook is gorgeous", ts: mins(128), read: true },
-      { id: "m3", from: "u2", text: "Want to do a collab? I was thinking a shared mood board thing", ts: mins(125), read: true },
-      { id: "m4", from: "me", text: "Yes absolutely, let's plan it!", ts: mins(120), read: true },
-    ],
-  },
-  {
-    id: "c3", type: "group", name: "Book Club 🌙",
-    participants: ["me", "u1", "u3", "u6"],
-    messages: [
-      { id: "m1", from: "u6", text: "What are we reading this month?", ts: mins(300), read: true },
-      { id: "m2", from: "u1", text: "I vote Brave New World — it's on a few of our Nooks already!", ts: mins(295), read: true },
-      { id: "m3", from: "u3", text: "Seconded 🙋", ts: mins(290), read: true },
-      { id: "m4", from: "me", text: "That works perfectly, I've been meaning to finally read it", ts: mins(280), read: true },
-      { id: "m5", from: "u6", text: "Perfect! Starting next Sunday?", ts: mins(25), read: false },
-    ],
-  },
-  {
-    id: "c4", type: "dm", participants: ["me", "u4"],
-    messages: [
-      { id: "m1", from: "u4", text: "Hey Margot! Huge fan of your Nook. Would love to connect 👋", ts: mins(400), read: true },
-      { id: "m2", from: "me", text: "Hi Felix! Thanks so much, yours is really lovely too 🎵", ts: mins(380), read: true },
-    ],
-  },
-];
-
-const INITIAL_REQUESTS = [
-  { id: "r1", from: "u5", preview: "Hi! I found your Nook through Ada's profile. Your goal-tracking widget is so motivating!", ts: mins(45) },
-  { id: "r2", from: "u3", preview: "Hey Margot — Iris here. Love your aesthetic, we should connect!", ts: mins(720) },
-];
+const INITIAL_CONVOS = [];
+const INITIAL_REQUESTS = [];
 
 const INITIAL_WIDGETS = [
-  { id: "todo",        title: "To-Do List",         icon: "✓",  enabled: true,  isPublic: true,  colorIdx: 0, category: "productivity",
-    data: { items: [{ text: "Redesign portfolio homepage", done: true }, { text: "Read 'The Creative Act'", done: false }, { text: "Call mum on Sunday", done: false }, { text: "Organise Notion workspace", done: true }, { text: "Start morning yoga routine", done: false }]}},
-  { id: "goals",       title: "Goals for the Year",  icon: "★",  enabled: true,  isPublic: true,  colorIdx: 1, category: "productivity",
-    data: { items: [{ text: "Read 24 books", progress: 8, total: 24 }, { text: "Travel to 3 new countries", progress: 1, total: 3 }, { text: "Launch freelance studio", progress: 60, total: 100 }, { text: "Run a 10k", progress: 0, total: 100 }]}},
-  { id: "reading",     title: "Reading List",         icon: "📖", enabled: true,  isPublic: false, colorIdx: 2, category: "culture",
-    data: { items: [{ title: "The Creative Act", author: "Rick Rubin", status: "reading" }, { title: "Piranesi", author: "Susanna Clarke", status: "done" }, { title: "Brave New World", author: "Aldous Huxley", status: "next" }, { title: "Tomorrow, and Tomorrow", author: "Gabrielle Zevin", status: "done" }, { title: "The Midnight Library", author: "Matt Haig", status: "next" }]}},
-  { id: "mood",        title: "Mood Tracker",         icon: "☀",  enabled: true,  isPublic: false, colorIdx: 3, category: "lifestyle",
-    data: { week: [{ day: "Mon", mood: 4 }, { day: "Tue", mood: 3 }, { day: "Wed", mood: 5 }, { day: "Thu", mood: 4 }, { day: "Fri", mood: 5 }, { day: "Sat", mood: 3 }, { day: "Sun", mood: 4 }]}},
-  { id: "links",       title: "Saved Links",           icon: "🔗", enabled: false, isPublic: true,  colorIdx: 4, category: "productivity",
-    data: { items: [{ title: "Figma Community Picks", url: "#" }, { title: "Design inspiration board", url: "#" }, { title: "Notion templates gallery", url: "#" }]}},
-  { id: "gratitude",   title: "Gratitude Journal",     icon: "♡",  enabled: false, isPublic: false, colorIdx: 5, category: "lifestyle",
-    data: { entries: ["A genuinely good cup of coffee this morning", "Finally finishing that tricky project brief", "Long walk with no destination"]}},
-  { id: "sobriety",    title: "Sobriety Streak",       icon: "🌱", enabled: false, isPublic: false, colorIdx: 1, category: "lifestyle",
-    data: { label: "alcohol-free", startDate: "2024-11-01" }},
-  { id: "habitstreak", title: "Habit Tracker",         icon: "🔥", enabled: true,  isPublic: true,  colorIdx: 2, category: "lifestyle",
-    data: { habits: [{ id: "hb1", name: "Morning walk", streak: 12, history: [] }, { id: "hb2", name: "Read 20 mins", streak: 7, history: [] }, { id: "hb3", name: "No phone till 9am", streak: 3, history: [] }]}},
-  { id: "instagram",   title: "Instagram",              icon: "📸", enabled: false, isPublic: true,  colorIdx: 4, category: "social",
-    data: { username: "margot.creates" }},
-  // ── Sports
-  { id: "sports",      title: "Sports Tracker",         icon: "🏃", enabled: false, isPublic: true,  colorIdx: 3, category: "sports",
-    data: { activities: [
-      { id: "s1", type: "Running",  icon: "🏃", unit: "km",  sessions: [{ date: "2025-03-01", value: 5.2, note: "Morning park run" }, { date: "2025-03-05", value: 8, note: "Long run" }, { date: "2025-03-08", value: 6.5, note: "Easy pace" }] },
-      { id: "s2", type: "Cycling",  icon: "🚴", unit: "km",  sessions: [{ date: "2025-03-03", value: 22, note: "Coast road" }, { date: "2025-03-07", value: 35, note: "Hills route" }] },
-      { id: "s3", type: "Surfing",  icon: "🏄", unit: "hrs", sessions: [{ date: "2025-03-02", value: 2, note: "Good swell", location: "Lahinch" }, { date: "2025-03-09", value: 1.5, note: "Choppy but fun", location: "Bundoran" }] },
-    ]}},
-  // ── Hobbies
-  { id: "hobbies",     title: "Hobbies",                icon: "🎨", enabled: false, isPublic: true,  colorIdx: 5, category: "lifestyle",
-    data: { hobbies: [
-      { id: "h1", name: "Watercolour painting", emoji: "🎨", note: "Working on botanical illustrations", level: 3 },
-      { id: "h2", name: "Film photography",     emoji: "📷", note: "Shooting on a Canon AE-1 Program",   level: 4 },
-      { id: "h3", name: "Bread making",         emoji: "🍞", note: "Sourdough starter named Gerald",     level: 2 },
-    ]}},
-  // ── Social Media
-  { id: "linkedin",    title: "LinkedIn",               icon: "💼", enabled: false, isPublic: true,  colorIdx: 0, category: "social",
-    data: { username: "margot-ellison", headline: "Designer & Creative Director", followers: "1.4k", posts: [
-      { text: "Just wrapped up a rebrand project — three months of work finally live!", likes: 84 },
-      { text: "Thinking about the intersection of design systems and brand identity lately.", likes: 61 },
-      { text: "Excited to announce I'm going freelance full-time in April! 🎉", likes: 203 },
-    ]}},
-  { id: "twitter",     title: "Twitter / X",            icon: "✕",  enabled: false, isPublic: true,  colorIdx: 3, category: "social",
-    data: { username: "margotellison", followers: "2.1k", tweets: [
-      { text: "the way a good font can completely change how you feel about a brief 🌿", likes: 148, rts: 22 },
-      { text: "going freelance is terrifying and completely right at the same time", likes: 312, rts: 54 },
-      { text: "book recommendation thread for slow, beautiful mornings 🧵👇", likes: 89, rts: 31 },
-    ]}},
-  // ── Entrepreneurship
-  { id: "projects",    title: "Current Projects",       icon: "🚀", enabled: false, isPublic: true,  colorIdx: 1, category: "entrepreneurship",
-    data: { projects: [
-      { id: "p1", name: "Studio Ellison", desc: "Independent design studio launching April 2025. Branding, identity, and digital products.", url: "https://studioellison.co", status: "building", emoji: "🎨" },
-      { id: "p2", name: "Palette",        desc: "A colour theory app for designers. Currently in private beta.", url: "https://palette.app", status: "beta",     emoji: "🌈" },
-    ]}},
-  // ── Podcast
-  { id: "podcast",     title: "Podcast Picks",          icon: "🎙", enabled: false, isPublic: true,  colorIdx: 4, category: "culture",
-    data: { pods: [
-      { id: "pd1", name: "99% Invisible",         host: "Roman Mars",      ep: "The Smell of Rain",            status: "listening", emoji: "🏛" },
-      { id: "pd2", name: "Conan O'Brien Needs a Friend", host: "Conan O'Brien", ep: "Nicole Kidman Returns",   status: "done",      emoji: "😂" },
-      { id: "pd3", name: "How I Built This",      host: "Guy Raz",         ep: "Duolingo",                     status: "next",      emoji: "💡" },
-      { id: "pd4", name: "Huberman Lab",          host: "Andrew Huberman", ep: "Science of Creativity",        status: "done",      emoji: "🧠" },
-    ]}},
-  // ── Travel
-  { id: "travel",      title: "Travel",                 icon: "✈",  enabled: false, isPublic: true,  colorIdx: 2, category: "lifestyle",
-    data: { trips: [
-      { id: "t1", place: "Lisbon, Portugal",  date: "Feb 2025", note: "Pastel de nata every morning 🥐", photo: null, emoji: "🇵🇹" },
-      { id: "t2", place: "Kyoto, Japan",      date: "Nov 2024", note: "Bamboo groves at dawn",            photo: null, emoji: "🇯🇵" },
-      { id: "t3", place: "Oaxaca, Mexico",    date: "Aug 2024", note: "Colours unlike anything I've seen", photo: null, emoji: "🇲🇽" },
-    ]}},
-  // ── Articles
-  { id: "articles",    title: "Articles",               icon: "✍",  enabled: false, isPublic: true,  colorIdx: 5, category: "culture",
-    data: { articles: [
-      { id: "a1", title: "Why good design is mostly about restraint",   url: "#", type: "written",    date: "Mar 2025", note: "Published on Medium" },
-      { id: "a2", title: "The case for slow mornings",                  url: "#", type: "written",    date: "Jan 2025", note: "Personal blog" },
-      { id: "a3", title: "How Figma changed how designers think",       url: "#", type: "reading",   date: "Mar 2025", note: "Wired" },
-      { id: "a4", title: "The quiet revolution in type design",         url: "#", type: "reading",   date: "Feb 2025", note: "It's Nice That" },
-    ]}},
-  { id: "exercise",  title: "Exercise Log",   icon: "🏃", enabled: true,  isPublic: false, colorIdx: 1, category: "sports",       data: { days: [] }},
-  { id: "archive",   title: "Year in Review", icon: "✦",  enabled: true,  isPublic: false, colorIdx: 5, category: "lifestyle",     data: { years: [] }},
-  { id: "gallery",   title: "Gallery",        icon: "🖼",  enabled: true,  isPublic: true,  colorIdx: 4, category: "social",        data: { posts: [] }},
-  { id: "blog",      title: "Blog",           icon: "✍",  enabled: true,  isPublic: true,  colorIdx: 0, category: "culture",       data: { posts: [] }},
-  { id: "bookmarks", title: "Bookmarks",      icon: "🔖", enabled: true,  isPublic: false, colorIdx: 2, category: "productivity",  data: { bookmarks: null }},
+  { id: "todo",        title: "To-Do List",         icon: "✓",  enabled: false, isPublic: false, colorIdx: 0, category: "productivity",     data: { items: [] }},
+  { id: "goals",       title: "Goals for the Year",  icon: "★",  enabled: false, isPublic: false, colorIdx: 1, category: "productivity",     data: { items: [] }},
+  { id: "reading",     title: "Reading List",         icon: "📖", enabled: false, isPublic: false, colorIdx: 2, category: "culture",          data: { items: [] }},
+  { id: "mood",        title: "Mood Tracker",         icon: "☀",  enabled: false, isPublic: false, colorIdx: 3, category: "lifestyle",        data: { week: [] }},
+  { id: "links",       title: "Saved Links",           icon: "🔗", enabled: false, isPublic: false, colorIdx: 4, category: "productivity",     data: { items: [] }},
+  { id: "gratitude",   title: "Gratitude Journal",     icon: "♡",  enabled: false, isPublic: false, colorIdx: 5, category: "lifestyle",        data: { entries: [] }},
+  { id: "sobriety",    title: "Sobriety Streak",       icon: "🌱", enabled: false, isPublic: false, colorIdx: 1, category: "lifestyle",        data: { label: "", startDate: null }},
+  { id: "habitstreak", title: "Habit Tracker",         icon: "🔥", enabled: false, isPublic: false, colorIdx: 2, category: "lifestyle",        data: { habits: [] }},
+  { id: "instagram",   title: "Instagram",              icon: "📸", enabled: false, isPublic: false, colorIdx: 4, category: "social",           data: { username: "" }},
+  { id: "sports",      title: "Sports Tracker",         icon: "🏃", enabled: false, isPublic: false, colorIdx: 3, category: "sports",           data: { activities: [] }},
+  { id: "hobbies",     title: "Hobbies",                icon: "🎨", enabled: false, isPublic: false, colorIdx: 5, category: "lifestyle",        data: { hobbies: [] }},
+  { id: "linkedin",    title: "LinkedIn",               icon: "💼", enabled: false, isPublic: false, colorIdx: 0, category: "social",           data: { username: "", headline: "", followers: "", posts: [] }},
+  { id: "twitter",     title: "Twitter / X",            icon: "✕",  enabled: false, isPublic: false, colorIdx: 3, category: "social",           data: { username: "", followers: "", tweets: [] }},
+  { id: "projects",    title: "Current Projects",       icon: "🚀", enabled: false, isPublic: false, colorIdx: 1, category: "entrepreneurship", data: { projects: [] }},
+  { id: "podcast",     title: "Podcast Picks",          icon: "🎙", enabled: false, isPublic: false, colorIdx: 4, category: "culture",          data: { pods: [] }},
+  { id: "travel",      title: "Travel",                 icon: "✈",  enabled: false, isPublic: false, colorIdx: 2, category: "lifestyle",        data: { trips: [] }},
+  { id: "articles",    title: "Articles",               icon: "✍",  enabled: false, isPublic: false, colorIdx: 5, category: "culture",          data: { articles: [] }},
+  { id: "exercise",    title: "Exercise Log",            icon: "🏃", enabled: false, isPublic: false, colorIdx: 1, category: "sports",           data: { days: [] }},
+  { id: "archive",     title: "Year in Review",          icon: "✦",  enabled: false, isPublic: false, colorIdx: 5, category: "lifestyle",        data: { years: [] }},
+  { id: "gallery",     title: "Gallery",                 icon: "🖼",  enabled: false, isPublic: false, colorIdx: 4, category: "social",           data: { posts: [] }},
+  { id: "blog",        title: "Blog",                    icon: "✍",  enabled: false, isPublic: false, colorIdx: 0, category: "culture",          data: { posts: [] }},
+  { id: "bookmarks",   title: "Bookmarks",               icon: "🔖", enabled: false, isPublic: false, colorIdx: 2, category: "productivity",     data: { bookmarks: null }},
 ];
 
 function fmtTime(ts) {
@@ -2563,7 +2464,9 @@ const ShareWidgetModal = ({ widget, onClose }) => {
   const [justSent, setJustSent] = useState(null); // id of last-sent user (for flash)
   const color                 = WIDGET_COLORS[widget.colorIdx];
 
-  const filtered = USERS.filter(u =>
+  // In future this would be real connections from Supabase
+  const connections = [];
+  const filtered = connections.filter(u =>
     u.name.toLowerCase().includes(search.toLowerCase()) ||
     u.handle.toLowerCase().includes(search.toLowerCase())
   );
@@ -2614,6 +2517,11 @@ const ShareWidgetModal = ({ widget, onClose }) => {
           </div>
 
           <div style={{ maxHeight: 240, overflowY: "auto" }}>
+            {filtered.length === 0 && (
+              <div style={{ padding: "24px", textAlign: "center", color: P.inkFaint, fontFamily: FF_S, fontSize: 13 }}>
+                {search ? "No users found" : "No connections yet — copy the link above to share"}
+              </div>
+            )}
             {filtered.map(u => {
               const alreadySent = sent.includes(u.id);
               const isFlash     = justSent === u.id;
@@ -2709,7 +2617,9 @@ const NewConvoModal = ({ onClose, onStart }) => {
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState([]);
   const [groupName, setGroupName] = useState("");
-  const filtered = USERS.filter(u => u.name.toLowerCase().includes(search.toLowerCase()) || u.handle.toLowerCase().includes(search.toLowerCase()));
+  // In future: real connections from Supabase
+  const connections = [];
+  const filtered = connections.filter(u => u.name.toLowerCase().includes(search.toLowerCase()) || u.handle.toLowerCase().includes(search.toLowerCase()));
   const toggle = (id) => { if (tab === "dm") setSelected([id]); else setSelected(s => s.includes(id) ? s.filter(x => x !== id) : [...s, id]); };
   const canStart = tab === "dm" ? selected.length === 1 : selected.length >= 2 && groupName.trim();
   return (
@@ -2745,6 +2655,11 @@ const NewConvoModal = ({ onClose, onStart }) => {
           )}
         </div>
         <div style={{ overflowY: "auto", flex: 1, padding: "0 12px 12px" }}>
+          {filtered.length === 0 && (
+            <div style={{ padding: "28px", textAlign: "center", color: P.inkFaint, fontFamily: FF_S, fontSize: 13 }}>
+              {search ? "No users found" : "No connections yet — connect with people from the Feed"}
+            </div>
+          )}
           {filtered.map(u => (
             <div key={u.id} onClick={() => toggle(u.id)} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 12px", borderRadius: 14, cursor: "pointer", background: selected.includes(u.id) ? P.lavenderLight : "transparent", transition: "background 0.15s" }}>
               <UserAvatar user={u} size={40} showStatus />
@@ -3054,20 +2969,7 @@ const DashboardPage = ({ view, onNavigate, profilePic, setProfilePic, widgetRequ
   const [goals, setGoals]               = useState(initGoals);
   const [habits, setHabits]             = useState(initHabits);
   const [pods, setPods]                 = useState(initPods);
-  const [exerciseChecked, setExerciseChecked] = useState(() => {
-    // pre-seed realistic exercise days for current year
-    const s = new Set();
-    const today = new Date();
-    const yearStart = new Date(today.getFullYear(), 0, 1);
-    const d = new Date(yearStart);
-    let i = 0;
-    while (d <= today) {
-      if (i % 7 !== 2 && i % 7 !== 5) s.add(d.toISOString().slice(0, 10));
-      d.setDate(d.getDate() + 1);
-      i++;
-    }
-    return s;
-  });
+  const [exerciseChecked, setExerciseChecked] = useState(() => new Set());
   const togglePublic = (id) => setWidgets(w => w.map(x => x.id === id ? { ...x, isPublic: !x.isPublic } : x));
   const toggleEnabled = (id) => {
     setWidgets(w => w.map(x => x.id === id ? { ...x, enabled: !x.enabled } : x));
@@ -3552,54 +3454,17 @@ const WORK_SECTIONS = [
   { id: "meetings",  label: "Meetings",   icon: "📅" },
 ];
 
-const INIT_MASTER_TODOS = [
-  { id: "mt1", text: "Finalise Studio Ellison brand guidelines", done: false, priority: "high" },
-  { id: "mt2", text: "Send invoice to Birdhouse Media", done: false, priority: "high" },
-  { id: "mt3", text: "Review Palette app beta feedback", done: false, priority: "medium" },
-  { id: "mt4", text: "Update portfolio case studies", done: true,  priority: "low" },
-  { id: "mt5", text: "Write April newsletter draft", done: false, priority: "medium" },
-  { id: "mt6", text: "Research conference submissions", done: false, priority: "low" },
-];
-const INIT_DAILY_TODOS = [
-  { id: "dt1", text: "Check emails before 9am", done: true,  priority: "medium" },
-  { id: "dt2", text: "Finish homepage hero section", done: false, priority: "high" },
-  { id: "dt3", text: "15-min design review with Soren", done: false, priority: "medium" },
-  { id: "dt4", text: "Block deep-work time 2–4pm", done: false, priority: "low" },
-];
-const INIT_NOTES = [
-  { id: "n1", title: "Brand Direction Notes", body: "Leaning into earthy tones + high-contrast type. Reference: Kinfolk, Cereal mag. Key words: warmth, restraint, craft.", pinned: true, color: 0, ts: Date.now() - 86400000 },
-  { id: "n2", title: "Client Call — Birdhouse", body: "They want the rebrand live by end of April. Need 3 logo concepts by the 18th. Budget confirmed at £4,200.", pinned: true, color: 2, ts: Date.now() - 3600000 * 3 },
-  { id: "n3", title: "Product ideas", body: "- Font pairing tool\n- Dashboard for freelancers\n- Notion template shop\n- Print-on-demand poster series", pinned: false, color: 4, ts: Date.now() - 86400000 * 2 },
-  { id: "n4", title: "Reading: The Creative Act", body: "Chapter 6 — on constraints: 'Limitations are often the seed of creativity.' Want to apply this to how I brief myself.", pinned: false, color: 1, ts: Date.now() - 86400000 * 5 },
-];
-const INIT_REMINDERS = [
-  { id: "r1", text: "Send invoice to Birdhouse Media",    date: "2025-03-15", time: "09:00", done: false, priority: "high" },
-  { id: "r2", text: "Palette beta closes — collect data", date: "2025-03-20", time: "17:00", done: false, priority: "medium" },
-  { id: "r3", text: "Tax return deadline",                date: "2025-04-05", time: "23:59", done: false, priority: "high" },
-  { id: "r4", text: "Catch up with Cleo re: collab",      date: "2025-03-14", time: "11:00", done: true,  priority: "low" },
-];
+const INIT_MASTER_TODOS = [];
+const INIT_DAILY_TODOS = [];
+const INIT_NOTES = [];
+const INIT_REMINDERS = [];
 const INIT_WORKFLOW_COLS = [
-  { id: "wc1", title: "Backlog",     color: "#EDE8FB", dot: "#9B85D8", cards: [
-    { id: "w1", text: "Research competitor rebrand", tag: "Birdhouse" },
-    { id: "w2", text: "Palette onboarding flow",     tag: "Palette"   },
-  ]},
-  { id: "wc2", title: "In Progress", color: "#E4F8F2", dot: "#5DCAAA", cards: [
-    { id: "w3", text: "Homepage hero design",         tag: "Studio"   },
-    { id: "w4", text: "Logo concepts ×3",             tag: "Birdhouse"},
-  ]},
-  { id: "wc3", title: "Review",      color: "#FEF0EA", dot: "#E8956A", cards: [
-    { id: "w5", text: "Brand colour palette",         tag: "Birdhouse"},
-  ]},
-  { id: "wc4", title: "Done",        color: "#E8F3FC", dot: "#5AAADE", cards: [
-    { id: "w6", text: "Discovery call notes",         tag: "Birdhouse"},
-    { id: "w7", text: "Figma workspace setup",        tag: "Studio"   },
-  ]},
+  { id: "wc1", title: "Backlog",     color: "#EDE8FB", dot: "#9B85D8", cards: [] },
+  { id: "wc2", title: "In Progress", color: "#E4F8F2", dot: "#5DCAAA", cards: [] },
+  { id: "wc3", title: "Review",      color: "#FEF0EA", dot: "#E8956A", cards: [] },
+  { id: "wc4", title: "Done",        color: "#E8F3FC", dot: "#5AAADE", cards: [] },
 ];
-const INIT_MEETINGS = [
-  { id: "me1", title: "Birdhouse check-in",        date: "2025-03-14", time: "11:00", attendees: "Client + Margot", notes: "Share mood board. Confirm timeline.", done: false },
-  { id: "me2", title: "Palette beta team sync",    date: "2025-03-17", time: "15:30", attendees: "Dev team",        notes: "Review feedback, decide on v0.3 scope.", done: false },
-  { id: "me3", title: "Monthly freelance review",  date: "2025-03-31", time: "10:00", attendees: "Just me",         notes: "Review P&L, pipeline, goals for April.", done: false },
-];
+const INIT_MEETINGS = [];
 
 // Reusable work-page input style
 const wi = (extra = {}) => ({
@@ -4360,30 +4225,15 @@ const WIDGET_POPULARITY = [
   { id: "projects",   title: "Projects",         icon: "🚀", count: 2, pct: 29 },
 ];
 
-const FLAGGED_CONTENT = [
-  { id: "fc1", type: "post",    user: "@ada",   title: "My daily routine", reason: "Spam / promotional", ts: Date.now() - 86400000 * 1, status: "open"     },
-  { id: "fc2", type: "profile", user: "@felix", title: "Bio section",      reason: "Inappropriate content", ts: Date.now() - 86400000 * 3, status: "open"  },
-  { id: "fc3", type: "post",    user: "@ada",   title: "Affiliate links",  reason: "Spam / promotional", ts: Date.now() - 86400000 * 5, status: "resolved" },
-];
-
-const FEEDBACK_SEED = [
-  { id: "fb1", user: "@cleo",  type: "bug",       subject: "Drag and drop breaks on mobile",       body: "When I try to reorder widgets on my phone the page scrolls instead of moving the widget.", ts: Date.now() - 86400000 * 1, status: "open"     },
-  { id: "fb2", user: "@soren", type: "feature",   subject: "Dark mode please!",                     body: "Would love a dark mode option for late night Nooking.", ts: Date.now() - 86400000 * 2,     status: "noted"    },
-  { id: "fb3", user: "@iris",  type: "feedback",  subject: "Love the new gallery widget",           body: "The new gallery layout is beautiful. Really impressed with how quickly things are improving!", ts: Date.now() - 86400000 * 3, status: "closed" },
-  { id: "fb4", user: "@ada",   type: "bug",       subject: "Reading widget loses star ratings",     body: "Sometimes when I refresh the page my star ratings reset to zero on the reading list.", ts: Date.now() - 86400000 * 4, status: "open"     },
-  { id: "fb5", user: "@theo",  type: "feature",   subject: "Export my data",                        body: "Would be great to export everything as JSON or CSV for backup purposes.", ts: Date.now() - 86400000 * 6, status: "noted"    },
-];
-
-const ANNOUNCEMENTS_SEED = [
-  { id: "an1", title: "Welcome to Nook beta!", body: "We're thrilled to have you. This is an early build — expect rough edges and rapid improvements. Your feedback shapes everything.", sent: Date.now() - 86400000 * 30, status: "sent" },
-  { id: "an2", title: "Gallery widget now live 🖼", body: "You can now add a photo & video gallery to your Nook. Head to Customise to enable it.", sent: Date.now() - 86400000 * 10, status: "sent" },
-];
+const FLAGGED_CONTENT = [];
+const FEEDBACK_SEED = [];
+const ANNOUNCEMENTS_SEED = [];
 
 const AdminPage = ({ widgetRequests, setWidgetRequests }) => {
   const { user } = useAuth();
   const {
     users: adminUsers, setUsers: setAdminUsers,
-    signupsByDay, loading: adminLoading,
+    signupsByDay, loading: adminLoading, error: adminError,
     totalUsers, activeUsers, weekSignups, todayVisitors, todaySignups,
     suspendUser, deleteUser, refresh,
   } = useAdminData();
@@ -4598,6 +4448,14 @@ const AdminPage = ({ widgetRequests, setWidgetRequests }) => {
           </div>
         </div>
 
+        {adminError && (
+          <div style={{ marginBottom: 16, padding: "12px 16px", background: "#F0B8C833", borderRadius: 12, border: "1px solid #D8708A44", fontFamily: FF_S, fontSize: 13, color: "#D8708A" }}>
+            ⚠ Could not load users: {adminError}. Run this in Supabase SQL editor:<br/>
+            <code style={{ fontSize: 11, background: "#F0B8C822", padding: "4px 8px", borderRadius: 6, display: "inline-block", marginTop: 6 }}>
+              CREATE POLICY "Admin can read all profiles" ON profiles FOR SELECT USING (true);
+            </code>
+          </div>
+        )}
         {adminLoading ? (
           <div style={{ padding: "40px", textAlign: "center", color: P.inkFaint, fontFamily: FF_S, fontSize: 14 }}>Loading users…</div>
         ) : filtered.length === 0 ? (
@@ -4876,20 +4734,7 @@ const AdminPage = ({ widgetRequests, setWidgetRequests }) => {
   );
 };
 
-const FEED_SEED = [
-  { id: "f1",  uid: "u1", type: "blog",     ts: Date.now() - 1000*60*40,       title: "The notebook I've been keeping", preview: "I started carrying a small Leuchtturm everywhere about six months ago. At first just for lists, then for fragments — things I didn't want to lose. It became something else entirely.", category: "Personal", readTime: 3 },
-  { id: "f2",  uid: "u2", type: "photo",    ts: Date.now() - 1000*60*60*2,     caption: "Golden hour off the Howth cliffs. Some mornings you just have to go.", tags: ["photography", "ireland"], color: "#B8D8F0" },
-  { id: "f3",  uid: "u3", type: "reading",  ts: Date.now() - 1000*60*60*5,     book: "Convenience Store Woman", author: "Sayaka Murata", rating: 5, note: "Read it in one sitting — spare, strange, completely unforgettable." },
-  { id: "f4",  uid: "u1", type: "goal",     ts: Date.now() - 1000*60*60*8,     goal: "Finish the illustrated alphabet project", progress: 78, note: "Getting close! Just W, X and Y left to draw." },
-  { id: "f5",  uid: "u2", type: "photo",    ts: Date.now() - 1000*60*60*24,    caption: "The old library at dawn. Worth waking up at 5am for.", tags: ["architecture", "light"], color: "#C9B8F0" },
-  { id: "f6",  uid: "u3", type: "blog",     ts: Date.now() - 1000*60*60*26,    title: "On designing with constraints", preview: "Every brief I've ever loved has had some kind of obstacle built into it. Not despite the constraints, but because of them.", category: "Design", readTime: 4 },
-  { id: "f7",  uid: "u1", type: "reading",  ts: Date.now() - 1000*60*60*30,    book: "The Secret History", author: "Donna Tartt", rating: 4, note: "Absolutely devoured this. The prose is lush and the atmosphere suffocates you in the best way." },
-  { id: "f8",  uid: "u2", type: "goal",     ts: Date.now() - 1000*60*60*36,    goal: "Shoot one roll of film per week", progress: 60, note: "Four weeks in. Starting to see patterns in what I reach for." },
-  { id: "f9",  uid: "u3", type: "mood",     ts: Date.now() - 1000*60*60*48,    mood: "☀", label: "Energised", note: "Great studio day — everything just clicked." },
-  { id: "f10", uid: "u1", type: "blog",     ts: Date.now() - 1000*60*60*50,    title: "Things I learned making zines", preview: "You don't need permission. You don't need a printer that works perfectly. You just need something to say and the audacity to staple it together.", category: "Essay", readTime: 5 },
-  { id: "f11", uid: "u2", type: "reading",  ts: Date.now() - 1000*60*60*72,    book: "Ways of Seeing", author: "John Berger", rating: 5, note: "Required reading. Changed how I look at images — and everything else." },
-  { id: "f12", uid: "u3", type: "photo",    ts: Date.now() - 1000*60*60*80,    caption: "New moodboard for the autumn collection. Texture, texture, texture.", tags: ["moodboard", "design"], color: "#F0B8C8" },
-];
+const FEED_SEED = [];
 
 const MOOD_EMOJIS = { "☀": "Sunny", "🌙": "Reflective", "🌧": "Heavy", "⚡": "Energised", "🌿": "Calm", "🔥": "Motivated", "💫": "Creative", "😴": "Tired" };
 
@@ -4902,23 +4747,7 @@ const timeAgo = (ts) => {
   return new Date(ts).toLocaleDateString("en-IE", { day: "numeric", month: "short" });
 };
 
-const COMMENT_SEED = {
-  f1:  [
-    { id: "c1", uid: "u2", text: "This resonated so much — I've been keeping one for about two years now and it genuinely changed how I think.", ts: Date.now() - 1000*60*20 },
-    { id: "c2", uid: "u3", text: "The part about fragments is exactly it. It's not a journal, it's more like a net for catching things.", ts: Date.now() - 1000*60*12 },
-  ],
-  f2:  [{ id: "c3", uid: "u3", text: "This colour 😭 What time did you have to get up for this?", ts: Date.now() - 1000*60*60 }],
-  f3:  [
-    { id: "c4", uid: "u1", text: "I finished this last month! The ending absolutely floored me.", ts: Date.now() - 1000*60*60*3 },
-    { id: "c5", uid: "u6", text: "Adding this to my list immediately.", ts: Date.now() - 1000*60*60*2 },
-  ],
-  f6:  [{ id: "c6", uid: "u2", text: "The brief for a photography project I loved most was 'make something boring' — nothing else. Still one of my best series.", ts: Date.now() - 1000*60*60*20 }],
-  f10: [
-    { id: "c7", uid: "u3", text: "The audacity to staple it together 😂 This is everything.", ts: Date.now() - 1000*60*60*44 },
-    { id: "c8", uid: "u2", text: "Saving this. I've been putting off starting mine for months.", ts: Date.now() - 1000*60*60*43 },
-    { id: "c9", uid: "u5", text: "Would love to see one of yours someday!", ts: Date.now() - 1000*60*60*42 },
-  ],
-};
+const COMMENT_SEED = {};
 
 const FeedCard = ({ item, user, following, toggleFollow, onViewUser }) => {
   const [liked, setLiked] = useState(false);
@@ -4928,7 +4757,7 @@ const FeedCard = ({ item, user, following, toggleFollow, onViewUser }) => {
   const [commentText, setCommentText] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const inputRef = useRef();
-  const color = WIDGET_COLORS[USERS.findIndex(u => u.id === user.id) % WIDGET_COLORS.length];
+  const color = WIDGET_COLORS[Math.abs(user.id?.split('').reduce((a,c) => a + c.charCodeAt(0), 0) || 0) % WIDGET_COLORS.length];
 
   const typeConfig = {
     blog:    { icon: "✍", label: "wrote a post",    accent: P.lavenderLight,  dot: "#9B85D8" },
@@ -5288,15 +5117,7 @@ const FeedPage = ({ onNavigate, onViewUser }) => {
   );
 };
 
-const NOTIF_SEED = [
-  { id: "n1", type: "follow",  uid: "u4", ts: Date.now() - 1000*60*8,        read: false, text: "Felix Oduya started following you" },
-  { id: "n2", type: "follow",  uid: "u5", ts: Date.now() - 1000*60*35,       read: false, text: "Ada Kowalski started following you" },
-  { id: "n3", type: "like",    uid: "u1", ts: Date.now() - 1000*60*60*2,     read: false, text: "Cleo Hartwell liked your blog post" },
-  { id: "n4", type: "comment", uid: "u2", ts: Date.now() - 1000*60*60*4,     read: true,  text: "Soren Vale commented on your goals widget" },
-  { id: "n5", type: "follow",  uid: "u6", ts: Date.now() - 1000*60*60*6,     read: true,  text: "Theo Marsh started following you" },
-  { id: "n6", type: "like",    uid: "u3", ts: Date.now() - 1000*60*60*10,    read: true,  text: "Iris Nakamura liked your reading list" },
-  { id: "n7", type: "mention", uid: "u1", ts: Date.now() - 1000*60*60*24,    read: true,  text: "Cleo Hartwell mentioned you in Book Club 🌙" },
-];
+const NOTIF_SEED = [];
 
 const NOTIF_ICONS = { follow: "👤", like: "♥", comment: "💬", mention: "✦" };
 const NOTIF_COLORS = { follow: P.lavender, like: "#F0B8C8", comment: P.sky, mention: P.butter };
@@ -5779,17 +5600,21 @@ const HomePageNew = ({ onNavigate, profilePic }) => {
       {/* Community strip */}
       <div style={{ maxWidth: 880, margin: "0 auto", padding: "72px 32px" }}>
         <div style={{ textAlign: "center", marginBottom: 36 }}>
-          <h2 style={{ fontFamily: FF_D, fontSize: 32, color: P.ink, margin: "0 0 10px", fontWeight: 400 }}>Join the community</h2>
-          <p style={{ fontFamily: FF_S, fontSize: 15, color: P.inkLight, margin: 0 }}>Real people using Nook to track, share, and connect.</p>
+          <h2 style={{ fontFamily: FF_D, fontSize: 32, color: P.ink, margin: "0 0 10px", fontWeight: 400 }}>Your space, your way</h2>
+          <p style={{ fontFamily: FF_S, fontSize: 15, color: P.inkLight, margin: 0 }}>Everything in one calm, personal dashboard.</p>
         </div>
         <div style={{ display: "flex", gap: 16, justifyContent: "center", flexWrap: "wrap", marginBottom: 36 }}>
-          {USERS.map(u => (
-            <div key={u.id} style={{ background: P.white, borderRadius: 18, padding: "18px 20px", width: 180, border: `1.5px solid ${P.lavender}33`, boxShadow: "0 2px 12px rgba(201,184,240,0.1)" }}>
-              <UserAvatar user={u} size={44} showStatus />
-              <div style={{ marginTop: 10 }}>
-                <div style={{ fontFamily: FF_D, fontSize: 15, color: P.ink }}>{u.name.split(" ")[0]}</div>
-                <div style={{ fontFamily: FF_S, fontSize: 12, color: P.inkFaint, marginTop: 2 }}>{u.bio}</div>
-              </div>
+          {[
+            { initials: "A", color: P.lavender, name: "Reading & Goals" },
+            { initials: "B", color: P.mint,     name: "Travel & Hobbies" },
+            { initials: "C", color: P.peach,    name: "Mood & Habits" },
+            { initials: "D", color: P.sky,      name: "Projects & Blog" },
+            { initials: "E", color: P.rose,     name: "Feed & Messages" },
+            { initials: "F", color: P.butter,   name: "Work & Notes" },
+          ].map(u => (
+            <div key={u.initials} style={{ background: P.white, borderRadius: 18, padding: "18px 20px", width: 160, border: `1.5px solid ${P.lavender}33`, boxShadow: "0 2px 12px rgba(201,184,240,0.1)", textAlign: "center" }}>
+              <div style={{ width: 44, height: 44, borderRadius: "50%", background: u.color, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: FF_D, fontSize: 16, color: P.ink, margin: "0 auto 10px" }}>{u.initials}</div>
+              <div style={{ fontFamily: FF_S, fontSize: 13, color: P.inkLight }}>{u.name}</div>
             </div>
           ))}
         </div>
@@ -5797,17 +5622,17 @@ const HomePageNew = ({ onNavigate, profilePic }) => {
         {/* Testimonials */}
         <div className="nook-home-testimonials" style={{ marginBottom: 48 }}>
           {[
-            { user: USERS[0], quote: "Nook replaced about five different apps for me. It's the first personal dashboard I've actually kept up with." },
-            { user: USERS[1], quote: "I love how I can share my reading list and travel widget publicly without exposing everything. The control is just right." },
-            { user: USERS[2], quote: "The blog widget finally gave me a place to write that doesn't feel like shouting into a void. It's calm and mine." },
-          ].map(({ user, quote }) => (
-            <div key={user.id} style={{ background: P.white, borderRadius: 18, padding: "22px", border: `1px solid ${P.lavender}33` }}>
+            { initials: "S", color: P.lavender, name: "Sarah M.",    handle: "@sarah",  quote: "Nook replaced about five different apps for me. It's the first personal dashboard I've actually kept up with." },
+            { initials: "J", color: P.mint,     name: "James K.",    handle: "@james",  quote: "I love how I can share my reading list and travel widget publicly without exposing everything. The control is just right." },
+            { initials: "L", color: P.peach,    name: "Laura P.",    handle: "@laura",  quote: "The blog widget finally gave me a place to write that doesn't feel like shouting into a void. It's calm and mine." },
+          ].map(({ initials, color, name, handle, quote }) => (
+            <div key={handle} style={{ background: P.white, borderRadius: 18, padding: "22px", border: `1px solid ${P.lavender}33` }}>
               <p style={{ fontFamily: FF_D, fontSize: 14, color: P.ink, margin: "0 0 16px", lineHeight: 1.7, fontStyle: "italic" }}>"{quote}"</p>
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                <UserAvatar user={user} size={32} />
+                <div style={{ width: 32, height: 32, borderRadius: "50%", background: color, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: FF_D, fontSize: 12, color: P.ink, flexShrink: 0 }}>{initials}</div>
                 <div>
-                  <div style={{ fontFamily: FF_S, fontSize: 13, fontWeight: 600, color: P.ink }}>{user.name}</div>
-                  <div style={{ fontFamily: FF_S, fontSize: 11, color: P.inkFaint }}>{user.handle}</div>
+                  <div style={{ fontFamily: FF_S, fontSize: 13, fontWeight: 600, color: P.ink }}>{name}</div>
+                  <div style={{ fontFamily: FF_S, fontSize: 11, color: P.inkFaint }}>{handle}</div>
                 </div>
               </div>
             </div>
