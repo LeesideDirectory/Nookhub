@@ -6163,8 +6163,11 @@ export default function App() {
         </div>
       )}
 
-      {["dashboard","customize"].includes(page) && user && (
-        <DashboardPage view={page} onNavigate={navigate} profilePic={profilePic} setProfilePic={setProfilePic} widgetRequests={widgetRequests} setWidgetRequests={setWidgetRequests} following={following} toggleFollow={toggleFollow} onViewUser={openUserProfile} initialWidgets={initialWidgets} />
+      {/* DashboardPage stays mounted while logged in — hidden via CSS to preserve widget state */}
+      {user && (
+        <div style={{ display: ["dashboard","customize"].includes(page) ? "block" : "none" }}>
+          <DashboardPage view={page} onNavigate={navigate} profilePic={profilePic} setProfilePic={setProfilePic} widgetRequests={widgetRequests} setWidgetRequests={setWidgetRequests} following={following} toggleFollow={toggleFollow} onViewUser={openUserProfile} initialWidgets={initialWidgets} />
+        </div>
       )}
       {page === "messages" && user && <MessagesPage requests={requests} setRequests={setRequests} />}
       {page === "feed"     && user && <FeedPage onNavigate={navigate} onViewUser={openUserProfile} />}
