@@ -3021,14 +3021,18 @@ const DashboardPage = ({ user: userProp, view, onNavigate, profilePic, setProfil
   useEffect(() => {
     if (!user?.id) return;
     const load = async () => {
+      console.log('[Nook] Loading widgets for user:', user.id);
       try {
-        const { data } = await supabase
+        const { data, error } = await supabase
           .from('widget_configs')
           .select('widget_id, enabled, public, color_idx, sort_order')
           .eq('user_id', user.id)
           .order('sort_order', { ascending: true });
 
+        console.log('[Nook] widget_configs result:', { data, error });
+
         if (data && data.length > 0) {
+          console.log('[Nook] Found', data.length, 'widgets in Supabase, enabled:', data.filter(r=>r.enabled).map(r=>r.widget_id));
           // Build config from Supabase
           const configMap = Object.fromEntries(data.map(r => [r.widget_id, r]));
           const merged = INITIAL_WIDGETS.map(w => ({
@@ -3043,19 +3047,21 @@ const DashboardPage = ({ user: userProp, view, onNavigate, profilePic, setProfil
             const bi = data.findIndex(r => r.widget_id === b.id);
             return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
           });
+          console.log('[Nook] Setting widgets, enabled:', ordered.filter(w=>w.enabled).map(w=>w.id));
           setWidgets(ordered);
           setWidgetOrder(ordered.map(w => w.id));
         } else {
+          console.log('[Nook] No Supabase data, trying localStorage. STORAGE_KEY:', STORAGE_KEY);
+          const lsData = STORAGE_KEY ? localStorage.getItem(STORAGE_KEY) : null;
+          console.log('[Nook] localStorage data exists:', !!lsData);
           // No Supabase data — try localStorage
-          if (STORAGE_KEY) {
+          if (STORAGE_KEY && lsData) {
             try {
-              const saved = localStorage.getItem(STORAGE_KEY);
-              if (saved) {
-                const ws = JSON.parse(saved);
-                const merged = ws.map(w => savedWidgetData[w.id] ? { ...w, data: { ...w.data, ...savedWidgetData[w.id] } } : w);
-                setWidgets(merged);
-              }
-            } catch {}
+              const ws = JSON.parse(lsData);
+              console.log('[Nook] localStorage widgets, enabled:', ws.filter(w=>w.enabled).map(w=>w.id));
+              const merged = ws.map(w => savedWidgetData[w.id] ? { ...w, data: { ...w.data, ...savedWidgetData[w.id] } } : w);
+              setWidgets(merged);
+            } catch(e) { console.log('[Nook] localStorage parse error:', e); }
           }
           if (ORDER_KEY) {
             try {
@@ -3064,7 +3070,8 @@ const DashboardPage = ({ user: userProp, view, onNavigate, profilePic, setProfil
             } catch {}
           }
         }
-      } catch {
+      } catch(e) {
+        console.log('[Nook] Load error:', e);
         // Supabase failed — fall back to localStorage
         if (STORAGE_KEY) {
           try {
@@ -3115,6 +3122,7 @@ const DashboardPage = ({ user: userProp, view, onNavigate, profilePic, setProfil
   const saveWidgetConfig = useCallback(async (updatedWidgets, updatedOrder) => {
     const ws = updatedWidgets || widgets;
     const ord = updatedOrder || widgetOrder;
+    console.log('[Nook] saveWidgetConfig called, enabled:', ws.filter(w=>w.enabled).map(w=>w.id));
     // Save to localStorage immediately
     if (STORAGE_KEY) {
       try { localStorage.setItem(STORAGE_KEY, JSON.stringify(ws)); } catch {}
@@ -3133,8 +3141,9 @@ const DashboardPage = ({ user: userProp, view, onNavigate, profilePic, setProfil
         color_idx: w.colorIdx ?? 0,
         sort_order: ord.indexOf(w.id) >= 0 ? ord.indexOf(w.id) : i,
       }));
-      await supabase.from('widget_configs').upsert(rows, { onConflict: 'user_id,widget_id' });
-    } catch {}
+      const { error } = await supabase.from('widget_configs').upsert(rows, { onConflict: 'user_id,widget_id' });
+      console.log('[Nook] Supabase upsert result:', error || 'OK');
+    } catch(e) { console.log('[Nook] Save error:', e); }
   }, [widgets, widgetOrder, STORAGE_KEY, ORDER_KEY, user?.id]);
 
   // widgetOrder is saved explicitly via saveWidgetConfig on user actions
