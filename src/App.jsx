@@ -3891,7 +3891,118 @@ const WorkflowKanban = ({ cols: init }) => {
   );
 };
 
-const WorkKanban = () => <WorkflowKanban cols={INIT_WORKFLOW_COLS} />;
+const WorkKanban = () => {
+  const COLS_INIT = [
+    { id: "wc1", title: "Backlog",     color: "#EDE8FB", dot: "#9B85D8", cards: [] },
+    { id: "wc2", title: "In Progress", color: "#E4F8F2", dot: "#5DCAAA", cards: [] },
+    { id: "wc3", title: "Review",      color: "#FEF0EA", dot: "#E8956A", cards: [] },
+    { id: "wc4", title: "Done",        color: "#E8F3FC", dot: "#5AAADE", cards: [] },
+  ];
+  const [cols, setCols] = useState(COLS_INIT);
+  const [dragCard, setDragCard] = useState(null);
+  const [dragCol, setDragCol] = useState(null);
+  const [addingIn, setAddingIn] = useState(null);
+  const [newCard, setNewCard] = useState({ text: "", tag: "" });
+  const [addingCol, setAddingCol] = useState(false);
+  const [newColTitle, setNewColTitle] = useState("");
+  const [editColId, setEditColId] = useState(null);
+
+  const onColDragOver = (e, colId) => { e.preventDefault(); setDragCol(colId); };
+  const onColDrop = (e, toColId) => {
+    e.preventDefault();
+    if (!dragCard) return;
+    const { cardId, fromCol } = dragCard;
+    if (fromCol === toColId) { setDragCard(null); setDragCol(null); return; }
+    setCols(cs => {
+      const card = cs.find(c => c.id === fromCol)?.cards.find(c => c.id === cardId);
+      if (!card) return cs;
+      return cs.map(c => {
+        if (c.id === fromCol) return { ...c, cards: c.cards.filter(x => x.id !== cardId) };
+        if (c.id === toColId) return { ...c, cards: [...c.cards, card] };
+        return c;
+      });
+    });
+    setDragCard(null); setDragCol(null);
+  };
+  const addCardTo = (colId) => {
+    if (!newCard.text.trim()) return;
+    setCols(cs => cs.map(c => c.id === colId ? { ...c, cards: [...c.cards, { id: `w${Date.now()}`, text: newCard.text.trim(), tag: newCard.tag.trim() }] } : c));
+    setNewCard({ text: "", tag: "" }); setAddingIn(null);
+  };
+  const removeCard = (colId, cardId) => setCols(cs => cs.map(c => c.id === colId ? { ...c, cards: c.cards.filter(x => x.id !== cardId) } : c));
+  const addCol = () => {
+    if (!newColTitle.trim()) return;
+    const DOTS = ["#9B85D8","#5DCAAA","#E8956A","#5AAADE","#C8A830","#D8708A"];
+    const BGS  = ["#EDE8FB","#E4F8F2","#FEF0EA","#E8F3FC","#FDFAE8","#FDE8EF"];
+    const i = cols.length % DOTS.length;
+    setCols(cs => [...cs, { id: `wc${Date.now()}`, title: newColTitle.trim(), color: BGS[i], dot: DOTS[i], cards: [] }]);
+    setNewColTitle(""); setAddingCol(false);
+  };
+  const removeCol = (id) => setCols(cs => cs.filter(c => c.id !== id));
+  const renameCol = (id, title) => setCols(cs => cs.map(c => c.id === id ? { ...c, title } : c));
+
+  return (
+    <div>
+      <div style={{ display: "flex", gap: 14, overflowX: "auto", paddingBottom: 12, alignItems: "flex-start" }}>
+        {cols.map(col => (
+          <div key={col.id} onDragOver={e => onColDragOver(e, col.id)} onDrop={e => onColDrop(e, col.id)}
+            style={{ width: 220, flexShrink: 0, background: col.color, borderRadius: 18, padding: "14px 14px 10px", border: `1.5px solid ${col.dot}44`, minHeight: 140 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+              <div style={{ width: 8, height: 8, borderRadius: "50%", background: col.dot, flexShrink: 0 }} />
+              {editColId === col.id
+                ? <input autoFocus defaultValue={col.title} onBlur={e => { renameCol(col.id, e.target.value); setEditColId(null); }} onKeyDown={e => e.key === "Enter" && (renameCol(col.id, e.target.value), setEditColId(null))} style={{ flex: 1, background: "none", border: `1px solid ${col.dot}`, borderRadius: 6, padding: "2px 6px", fontFamily: FF_S, fontSize: 13, fontWeight: 600, color: P.ink, outline: "none" }} />
+                : <span onDoubleClick={() => setEditColId(col.id)} style={{ flex: 1, fontFamily: FF_S, fontSize: 13, fontWeight: 600, color: P.ink }}>{col.title}</span>
+              }
+              <span style={{ fontFamily: FF_S, fontSize: 10, background: col.dot + "22", color: col.dot, borderRadius: 20, padding: "1px 7px", fontWeight: 700 }}>{col.cards.length}</span>
+              <button onClick={() => removeCol(col.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "#aaa", fontSize: 13, padding: 0 }}>×</button>
+            </div>
+            {col.cards.map(card => (
+              <div key={card.id} draggable onDragStart={() => setDragCard({ cardId: card.id, fromCol: col.id })}
+                style={{ background: "#fff", borderRadius: 12, padding: "10px 12px", marginBottom: 8, border: `1px solid ${col.dot}33`, cursor: "grab", boxShadow: "0 2px 8px rgba(61,53,80,0.07)" }}>
+                <div style={{ fontFamily: FF_S, fontSize: 13, color: P.ink }}>{card.text}</div>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 6 }}>
+                  {card.tag && <span style={{ background: col.dot + "22", color: col.dot, borderRadius: 20, padding: "2px 8px", fontFamily: FF_S, fontSize: 10, fontWeight: 600 }}>{card.tag}</span>}
+                  <button onClick={() => removeCard(col.id, card.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "#aaa", fontSize: 13, padding: 0, marginLeft: "auto" }}>×</button>
+                </div>
+              </div>
+            ))}
+            {addingIn === col.id ? (
+              <div>
+                <input autoFocus value={newCard.text} onChange={e => setNewCard(d => ({ ...d, text: e.target.value }))} onKeyDown={e => e.key === "Enter" && addCardTo(col.id)} placeholder="Card title…"
+                  style={{ width: "100%", border: `1.5px solid ${col.dot}66`, borderRadius: 9, padding: "7px 10px", fontFamily: FF_S, fontSize: 12, background: "#fff", color: P.ink, outline: "none", boxSizing: "border-box", marginBottom: 5 }} />
+                <input value={newCard.tag} onChange={e => setNewCard(d => ({ ...d, tag: e.target.value }))} placeholder="Tag (optional)"
+                  style={{ width: "100%", border: `1.5px solid ${col.dot}44`, borderRadius: 9, padding: "5px 10px", fontFamily: FF_S, fontSize: 11, background: "#fff", color: P.ink, outline: "none", boxSizing: "border-box", marginBottom: 7 }} />
+                <div style={{ display: "flex", gap: 5 }}>
+                  <button onClick={() => addCardTo(col.id)} style={{ flex: 1, background: col.dot, color: "#fff", border: "none", borderRadius: 8, padding: "6px", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>Add</button>
+                  <button onClick={() => { setAddingIn(null); setNewCard({ text: "", tag: "" }); }} style={{ background: "#EDE8FB", border: "none", borderRadius: 8, padding: "6px 10px", cursor: "pointer", fontSize: 12, color: P.ink }}>✕</button>
+                </div>
+              </div>
+            ) : (
+              <button onClick={() => setAddingIn(col.id)} style={{ width: "100%", background: "none", border: `1.5px dashed ${col.dot}55`, borderRadius: 9, padding: "7px", cursor: "pointer", fontFamily: FF_S, fontSize: 12, color: "#999" }}>+ Add card</button>
+            )}
+          </div>
+        ))}
+        <div style={{ width: 200, flexShrink: 0 }}>
+          {addingCol ? (
+            <div style={{ background: "#EDE8FB", borderRadius: 18, padding: "14px", border: "1.5px dashed #C9B8F0" }}>
+              <input autoFocus value={newColTitle} onChange={e => setNewColTitle(e.target.value)} onKeyDown={e => e.key === "Enter" && addCol()} placeholder="Column name…"
+                style={{ width: "100%", border: "1.5px solid #C9B8F055", borderRadius: 10, padding: "8px 12px", fontFamily: FF_S, fontSize: 13, background: "#EDE8FB", color: P.ink, outline: "none", boxSizing: "border-box", marginBottom: 8 }} />
+              <div style={{ display: "flex", gap: 5 }}>
+                <button onClick={addCol} style={{ flex: 1, background: "#C9B8F0", color: P.ink, border: "none", borderRadius: 8, padding: "6px", cursor: "pointer", fontSize: 13, fontWeight: 600 }}>Add</button>
+                <button onClick={() => setAddingCol(false)} style={{ background: "none", border: "none", cursor: "pointer", color: "#aaa", fontSize: 15 }}>✕</button>
+              </div>
+            </div>
+          ) : (
+            <button onClick={() => setAddingCol(true)} style={{ width: "100%", height: 80, background: "#EDE8FB", border: "1.5px dashed #C9B8F0", borderRadius: 18, cursor: "pointer", fontFamily: FF_S, fontSize: 13, color: "#aaa", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
+              + Add column
+            </button>
+          )}
+        </div>
+      </div>
+      <p style={{ fontFamily: FF_S, fontSize: 11, color: P.inkFaint, margin: "8px 0 0", textAlign: "center" }}>Drag cards between columns · Double-click a column name to rename</p>
+    </div>
+  );
+};
 
 const FocusTimer = () => {
   const PRESETS = [{ label: "25 min", secs: 1500 }, { label: "50 min", secs: 3000 }, { label: "15 min", secs: 900 }, { label: "5 min break", secs: 300 }];
