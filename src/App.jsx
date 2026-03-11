@@ -3766,8 +3766,6 @@ const WorkTodos = ({ masterTodos, setMasterTodos, dailyTodos, setDailyTodos }) =
   </div>
 );
 
-const WorkKanban = () => <WorkflowKanban cols={INIT_WORKFLOW_COLS} />;
-
 const WorkFocus = () => (
   <div style={{ background: P.white, borderRadius: 20, padding: "32px 36px", border: `1.5px solid ${P.lavender}44`, maxWidth: 560, boxShadow: "0 4px 20px rgba(201,184,240,0.08)" }}>
     <p style={{ fontFamily: FF_S, fontSize: 13, color: P.inkFaint, margin: "0 0 24px" }}>Pomodoro-style timer to protect your deep work</p>
@@ -3892,6 +3890,8 @@ const WorkflowKanban = ({ cols: init }) => {
     </div>
   );
 };
+
+const WorkKanban = () => <WorkflowKanban cols={INIT_WORKFLOW_COLS} />;
 
 const FocusTimer = () => {
   const PRESETS = [{ label: "25 min", secs: 1500 }, { label: "50 min", secs: 3000 }, { label: "15 min", secs: 900 }, { label: "5 min break", secs: 300 }];
