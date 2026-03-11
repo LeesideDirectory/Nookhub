@@ -3111,35 +3111,33 @@ const DashboardPage = ({ user: userProp, view, onNavigate, profilePic, setProfil
     setWidgetData(prev => ({ ...prev, [widgetId]: newData }));
   }, []);
 
-  // Persist widget config whenever it changes (only after initial load)
-  useEffect(() => {
-    if (!loadedRef.current) return;
-    if (STORAGE_KEY && widgets.length > 0) {
-      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(widgets)); } catch {}
+  // Save widget config explicitly (called after user actions, not reactively)
+  const saveWidgetConfig = useCallback(async (updatedWidgets, updatedOrder) => {
+    const ws = updatedWidgets || widgets;
+    const ord = updatedOrder || widgetOrder;
+    // Save to localStorage immediately
+    if (STORAGE_KEY) {
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(ws)); } catch {}
     }
-    if (!user?.id || !widgets.length) return;
-    const save = async () => {
-      try {
-        const rows = widgets.map((w, i) => ({
-          user_id: user.id,
-          widget_id: w.id,
-          enabled: !!w.enabled,
-          public: !!w.isPublic,
-          color_idx: w.colorIdx ?? 0,
-          sort_order: widgetOrder.indexOf(w.id) >= 0 ? widgetOrder.indexOf(w.id) : i,
-        }));
-        await supabase.from('widget_configs').upsert(rows, { onConflict: 'user_id,widget_id' });
-      } catch {}
-    };
-    const t = setTimeout(save, 1500);
-    return () => clearTimeout(t);
-  }, [widgets, STORAGE_KEY, user?.id, widgetOrder]);
+    if (ORDER_KEY) {
+      try { localStorage.setItem(ORDER_KEY, JSON.stringify(ord)); } catch {}
+    }
+    // Save to Supabase
+    if (!user?.id) return;
+    try {
+      const rows = ws.map((w, i) => ({
+        user_id: user.id,
+        widget_id: w.id,
+        enabled: !!w.enabled,
+        public: !!w.isPublic,
+        color_idx: w.colorIdx ?? 0,
+        sort_order: ord.indexOf(w.id) >= 0 ? ord.indexOf(w.id) : i,
+      }));
+      await supabase.from('widget_configs').upsert(rows, { onConflict: 'user_id,widget_id' });
+    } catch {}
+  }, [widgets, widgetOrder, STORAGE_KEY, ORDER_KEY, user?.id]);
 
-  useEffect(() => {
-    if (ORDER_KEY && widgetOrder.length > 0) {
-      try { localStorage.setItem(ORDER_KEY, JSON.stringify(widgetOrder)); } catch {}
-    }
-  }, [widgetOrder, ORDER_KEY]);
+  // widgetOrder is saved explicitly via saveWidgetConfig on user actions
 
   // ── Lifted widget data (shared with ArchiveWidget) ────────────────────────
   // These restore from savedWidgetData (localStorage) or fall back to INITIAL_WIDGETS defaults
@@ -3161,14 +3159,20 @@ const DashboardPage = ({ user: userProp, view, onNavigate, profilePic, setProfil
   useEffect(() => { setWidgetData(prev => ({ ...prev, habitstreak: { habits } })); }, [habits]);
   useEffect(() => { setWidgetData(prev => ({ ...prev, podcast:     { pods } })); }, [pods]);
   useEffect(() => { setWidgetData(prev => ({ ...prev, exercise:    { checked: [...exerciseChecked] } })); }, [exerciseChecked]);
-  const togglePublic = (id) => setWidgets(w => w.map(x => x.id === id ? { ...x, isPublic: !x.isPublic } : x));
+  const togglePublic = (id) => {
+    const updated = widgets.map(x => x.id === id ? { ...x, isPublic: !x.isPublic } : x);
+    setWidgets(updated);
+    saveWidgetConfig(updated, widgetOrder);
+  };
   const toggleEnabled = (id) => {
-    setWidgets(w => w.map(x => x.id === id ? { ...x, enabled: !x.enabled } : x));
-    setWidgetOrder(order => {
-      const w = widgets.find(x => x.id === id);
-      if (w && !w.enabled) return order.includes(id) ? order : [...order, id];
-      return order;
-    });
+    const updated = widgets.map(x => x.id === id ? { ...x, enabled: !x.enabled } : x);
+    const w = widgets.find(x => x.id === id);
+    const updatedOrder = (w && !w.enabled)
+      ? (widgetOrder.includes(id) ? widgetOrder : [...widgetOrder, id])
+      : widgetOrder;
+    setWidgets(updated);
+    setWidgetOrder(updatedOrder);
+    saveWidgetConfig(updated, updatedOrder);
   };
 
   // Drag and drop
@@ -3177,13 +3181,13 @@ const DashboardPage = ({ user: userProp, view, onNavigate, profilePic, setProfil
   const onDrop = (e, targetId) => {
     e.preventDefault();
     if (!dragId || dragId === targetId) { setDragId(null); setDragOverId(null); return; }
-    setWidgetOrder(order => {
-      const arr = [...order];
-      const from = arr.indexOf(dragId), to = arr.indexOf(targetId);
-      if (from === -1 || to === -1) return arr;
+    const arr = [...widgetOrder];
+    const from = arr.indexOf(dragId), to = arr.indexOf(targetId);
+    if (from !== -1 && to !== -1) {
       arr.splice(from, 1); arr.splice(to, 0, dragId);
-      return arr;
-    });
+      setWidgetOrder(arr);
+      saveWidgetConfig(widgets, arr);
+    }
     setDragId(null); setDragOverId(null);
   };
   const onDragEnd = () => { setDragId(null); setDragOverId(null); };
