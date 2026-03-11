@@ -2943,8 +2943,9 @@ const WidgetToggleCard = ({ w, onToggle }) => {
   );
 };
 
-const DashboardPage = ({ view, onNavigate, profilePic, setProfilePic, widgetRequests, setWidgetRequests, following, toggleFollow, initialWidgets }) => {
-  const { user, profile } = useAuth();
+const DashboardPage = ({ user: userProp, view, onNavigate, profilePic, setProfilePic, widgetRequests, setWidgetRequests, following, toggleFollow, initialWidgets }) => {
+  const { user: authUser, profile } = useAuth();
+  const user = userProp || authUser;
 
   const displayName = profile?.name || user?.email?.split('@')[0] || 'Your Nook';
   const displayHandle = profile?.handle || '@you';
@@ -6171,7 +6172,7 @@ export default function App() {
       {/* DashboardPage stays mounted while logged in — hidden via CSS to preserve widget state */}
       {user && (
         <div style={{ display: ["dashboard","customize"].includes(page) ? "block" : "none" }}>
-          <DashboardPage view={page} onNavigate={navigate} profilePic={profilePic} setProfilePic={setProfilePic} widgetRequests={widgetRequests} setWidgetRequests={setWidgetRequests} following={following} toggleFollow={toggleFollow} onViewUser={openUserProfile} initialWidgets={initialWidgets} />
+          <DashboardPage user={user} view={page} onNavigate={navigate} profilePic={profilePic} setProfilePic={setProfilePic} widgetRequests={widgetRequests} setWidgetRequests={setWidgetRequests} following={following} toggleFollow={toggleFollow} onViewUser={openUserProfile} initialWidgets={initialWidgets} />
         </div>
       )}
       {page === "messages" && user && <MessagesPage requests={requests} setRequests={setRequests} />}
