@@ -3036,20 +3036,22 @@ const DashboardPage = ({ user: userProp, view, onNavigate, profilePic, setProfil
     return startingWidgets.map(w => w.id);
   });
 
-  // When Supabase-loaded config arrives (new device / first login), apply it
+  // When Supabase-loaded config arrives, apply it and mark load complete
   useEffect(() => {
     if (!initialWidgets) return;
-    setWidgets(prev => {
-      // Only override if Supabase has actual enabled widgets (not all disabled)
-      const hasEnabled = initialWidgets.some(w => w.enabled);
-      if (!hasEnabled) return prev;
-      // Preserve any live widget data already in state
-      return initialWidgets.map(iw => {
-        const existing = prev.find(p => p.id === iw.id);
-        return existing ? { ...iw, data: existing.data } : iw;
-      });
-    });
+    if (initialWidgets === "LOADED_EMPTY") {
+      // No Supabase data — keep whatever localStorage/defaults gave us, just unlock saving
+      supabaseLoadedRef.current = true;
+      return;
+    }
+    // Preserve any live widget data already in state
+    setWidgets(prev => initialWidgets.map(iw => {
+      const existing = prev.find(p => p.id === iw.id);
+      return existing ? { ...iw, data: existing.data } : iw;
+    }));
     setWidgetOrder(initialWidgets.map(w => w.id));
+    // Now safe to save — we've loaded from Supabase
+    supabaseLoadedRef.current = true;
   }, [initialWidgets]);
   const [editBio, setEditBio] = useState(false);
   const [bio, setBio] = useState(profile?.bio || "");
@@ -3079,16 +3081,19 @@ const DashboardPage = ({ user: userProp, view, onNavigate, profilePic, setProfil
     setWidgetData(prev => ({ ...prev, [widgetId]: newData }));
   }, []);
 
+  // Track whether we've finished the initial load from Supabase (don't save until then)
+  const supabaseLoadedRef = useRef(false);
+
   // Persist widget config (enabled/public/order) whenever it changes
   useEffect(() => {
     if (STORAGE_KEY && widgets.length > 0) {
       try { localStorage.setItem(STORAGE_KEY, JSON.stringify(widgets)); } catch {}
     }
-    // Also save to Supabase for cross-device sync
-    if (!user?.id || !widgets.length) return;
+    // Don't write back to Supabase until after initial load completes
+    if (!user?.id || !widgets.length || !supabaseLoadedRef.current) return;
     const save = async () => {
       try {
-                const rows = widgets.map((w, i) => ({
+        const rows = widgets.map((w, i) => ({
           user_id: user.id,
           widget_id: w.id,
           enabled: !!w.enabled,
@@ -3099,7 +3104,7 @@ const DashboardPage = ({ user: userProp, view, onNavigate, profilePic, setProfil
         await supabase.from('widget_configs').upsert(rows, { onConflict: 'user_id,widget_id' });
       } catch {}
     };
-    const t = setTimeout(save, 1500); // debounce — don't hammer on every keystroke
+    const t = setTimeout(save, 1500);
     return () => clearTimeout(t);
   }, [widgets, STORAGE_KEY, user?.id, widgetOrder]);
 
@@ -6215,13 +6220,12 @@ export default function App() {
     if (!user?.id) { setInitialWidgets(null); return; }
     const load = async () => {
       try {
-                const { data } = await supabase
+        const { data } = await supabase
           .from('widget_configs')
           .select('widget_id, enabled, public, color_idx, sort_order')
           .eq('user_id', user.id)
           .order('sort_order', { ascending: true });
         if (data && data.length > 0) {
-          // Merge Supabase config onto INITIAL_WIDGETS (preserves default data/icon etc.)
           const configMap = Object.fromEntries(data.map(r => [r.widget_id, r]));
           const merged = INITIAL_WIDGETS.map(w => ({
             ...w,
@@ -6229,19 +6233,23 @@ export default function App() {
             isPublic: configMap[w.id]?.public ?? false,
             colorIdx: configMap[w.id]?.color_idx ?? w.colorIdx ?? 0,
           }));
-          // Sort by saved sort_order
           const ordered = [...merged].sort((a, b) => {
             const ai = data.findIndex(r => r.widget_id === a.id);
             const bi = data.findIndex(r => r.widget_id === b.id);
             return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
           });
           setInitialWidgets(ordered);
-          // Also update localStorage so it's in sync
           try { localStorage.setItem(`nook_widgets_${user.id}`, JSON.stringify(ordered)); } catch {}
           try { localStorage.setItem(`nook_widget_order_${user.id}`, JSON.stringify(ordered.map(w => w.id))); } catch {}
+        } else {
+          // No Supabase data yet — signal DashboardPage to use localStorage and unlock saving
+          setInitialWidgets(null);
+          // Directly set the ref via a special sentinel so DashboardPage unlocks saving
+          setInitialWidgets("LOADED_EMPTY");
         }
-        // If no Supabase data, DashboardPage will fall back to localStorage automatically
-      } catch {}
+      } catch {
+        setInitialWidgets("LOADED_EMPTY");
+      }
     };
     load();
   }, [user?.id]);
