@@ -4465,19 +4465,14 @@ const AdminPage = ({ widgetRequests, setWidgetRequests }) => {
           </div>
         </div>
 
-        {(adminError || (!adminLoading && adminUsers.length === 0)) && (
+        {adminError && (
           <div style={{ marginBottom: 16, padding: "16px 18px", background: "#F0B8C822", borderRadius: 14, border: "1.5px solid #D8708A44", fontFamily: FF_S, fontSize: 13, color: P.ink, lineHeight: 1.6 }}>
             <div style={{ fontWeight: 700, color: "#D8708A", marginBottom: 6 }}>⚠ {adminError ? `Query error: ${adminError}` : "No users returned — likely a Supabase RLS policy issue."}</div>
-            Run these two statements in <strong>Supabase → SQL Editor</strong>:
-            <pre style={{ fontSize: 11, background: "#F5F2FC", padding: "10px 12px", borderRadius: 8, marginTop: 8, overflowX: "auto", color: "#3D3550", lineHeight: 1.6 }}>{`-- 1. Allow authenticated users to read all profiles
-CREATE POLICY "Read all profiles"
+            Run this in <strong>Supabase → SQL Editor</strong>:
+            <pre style={{ fontSize: 11, background: "#F5F2FC", padding: "10px 12px", borderRadius: 8, marginTop: 8, overflowX: "auto", color: "#3D3550", lineHeight: 1.6 }}>{`CREATE POLICY "Read all profiles"
   ON profiles FOR SELECT
   TO authenticated
-  USING (true);
-
--- 2. Add suspended column if missing
-ALTER TABLE profiles
-  ADD COLUMN IF NOT EXISTS suspended boolean DEFAULT false;`}</pre>
+  USING (true);`}</pre>
           </div>
         )}
         {adminLoading ? (
@@ -4486,13 +4481,13 @@ ALTER TABLE profiles
           <div style={{ padding: "40px", textAlign: "center", color: P.inkFaint, fontFamily: FF_S, fontSize: 14 }}>No users found</div>
         ) : card(
           <div>
-            <div style={{ display: "grid", gridTemplateColumns: "2fr 1.5fr 1fr 100px", gap: 10, padding: "0 4px 10px", borderBottom: `1px solid ${P.lavender}33`, marginBottom: 12 }}>
-              {["User","Email","Joined","Actions"].map(h => (
+            <div style={{ display: "grid", gridTemplateColumns: "2fr 2fr 120px", gap: 10, padding: "0 4px 10px", borderBottom: `1px solid ${P.lavender}33`, marginBottom: 12 }}>
+              {["User","Email","Actions"].map(h => (
                 <span key={h} style={{ fontFamily: FF_S, fontSize: 11, fontWeight: 700, color: P.inkFaint, textTransform: "uppercase", letterSpacing: 0.5 }}>{h}</span>
               ))}
             </div>
             {filtered.map(u => (
-              <div key={u.id} style={{ display: "grid", gridTemplateColumns: "2fr 1.5fr 1fr 100px", gap: 10, padding: "10px 4px", borderBottom: `1px solid ${P.lavender}11`, alignItems: "center" }}>
+              <div key={u.id} style={{ display: "grid", gridTemplateColumns: "2fr 2fr 120px", gap: 10, padding: "10px 4px", borderBottom: `1px solid ${P.lavender}11`, alignItems: "center" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                   <UserAvatar user={{ ...u, color: u.avatar_color }} size={32} />
                   <div>
@@ -4504,7 +4499,6 @@ ALTER TABLE profiles
                   </div>
                 </div>
                 <span style={{ fontFamily: FF_S, fontSize: 12, color: P.inkLight, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{u.email || '—'}</span>
-                <span style={{ fontFamily: FF_S, fontSize: 12, color: P.inkLight }}>{u.created_at ? new Date(u.created_at).toLocaleDateString() : '—'}</span>
                 <div style={{ display: "flex", gap: 5 }}>
                   <button onClick={() => suspendUser(u.id, !u.suspended)} style={{ background: u.suspended ? "#F0B8C888" : P.lavenderLight, border: "none", borderRadius: 8, padding: "4px 8px", cursor: "pointer", fontFamily: FF_S, fontSize: 10, color: u.suspended ? "#D8708A" : P.inkFaint, fontWeight: 600 }} title={u.suspended ? "Unsuspend" : "Suspend"}>{u.suspended ? "↩ Restore" : "⊘ Suspend"}</button>
                 </div>
@@ -5769,7 +5763,9 @@ export default function App() {
     setHasOnboarded(false);
   };
 
-  const [pendingEmail, setPendingEmail] = useState(null); // set after signup, shows verify screen
+  const [pendingEmail, setPendingEmail] = useState(() => {
+    try { return sessionStorage.getItem("nook_pending_email") || null; } catch { return null; }
+  });
 
   const handleLogin = async ({ email, password }) => {
     const { error } = await signIn({ email, password });
@@ -5780,7 +5776,7 @@ export default function App() {
   const handleSignup = async ({ email, password, name }) => {
     const { error } = await signUp({ email, password, name });
     if (!error) {
-      // Show "check your email" screen — don't block the account, just inform
+      try { sessionStorage.setItem("nook_pending_email", email); } catch {}
       setPendingEmail(email);
     }
     return { error };
@@ -5816,23 +5812,25 @@ export default function App() {
     if (showOnboarding) return;
     if (!user && protectedPages.includes(page)) { setPage("login"); return; }
     if (user && pendingEmail) {
+      // Brand new signup that just confirmed email
       setPendingEmail(null);
+      try { sessionStorage.removeItem("nook_pending_email"); } catch {}
       const alreadyOnboarded = (() => { try { return !!localStorage.getItem(`nook_onboarded_${user.id}`); } catch { return false; } })();
-      if (!alreadyOnboarded) { setShowOnboarding(true); return; }
-    }
-    if (user && ["login","signup","home"].includes(page)) {
-      const alreadyOnboarded = (() => { try { return !!localStorage.getItem(`nook_onboarded_${user.id}`); } catch { return false; } })();
-      // Migration: check profile name OR user metadata name (works even if RLS blocks profile fetch)
-      const hasName = profile?.name || user?.user_metadata?.name;
-      if (!alreadyOnboarded && hasName) {
-        try { localStorage.setItem(`nook_onboarded_${user.id}`, "1"); } catch {}
-        setPage("dashboard"); return;
-      }
       if (!alreadyOnboarded) { setShowOnboarding(true); return; }
       setPage("dashboard"); return;
     }
+    if (user && ["login","signup","home"].includes(page)) {
+      // Set the flag for any existing user who has navigated here
+      // Only show onboarding if this is a fresh signup (flag not set AND no pending email means returning user)
+      const alreadyOnboarded = (() => { try { return !!localStorage.getItem(`nook_onboarded_${user.id}`); } catch { return false; } })();
+      if (!alreadyOnboarded) {
+        // Set the flag now — treat any login to home/login page as already onboarded
+        try { localStorage.setItem(`nook_onboarded_${user.id}`, "1"); } catch {}
+      }
+      setPage("dashboard"); return;
+    }
     if (page === "admin" && !isAdmin) { setPage("dashboard"); }
-  }, [user, authLoading, profileLoading, profile, page, showOnboarding, isAdmin, pendingEmail]);
+  }, [user, authLoading, profile, page, showOnboarding, isAdmin, pendingEmail]);
 
   // Show nothing while Supabase checks session — prevents flash of login page
   if (authLoading) return (

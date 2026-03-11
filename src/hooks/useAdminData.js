@@ -10,11 +10,11 @@ export function useAdminData() {
   const fetchUsers = useCallback(async () => {
     const { data, error } = await supabase
       .from('profiles')
-      .select('id, name, handle, email, created_at, suspended, deleted, avatar_color, bio')
-      .order('created_at', { ascending: false })
+      .select('*')
+      .order('id', { ascending: false })
     if (error) {
       console.error('useAdminData fetchUsers error:', error)
-      setError(error.message)
+      setError(`${error.message} (code: ${error.code})`)
     } else {
       setUsers(data || [])
     }
@@ -22,6 +22,7 @@ export function useAdminData() {
   }, [])
 
   const fetchSignupsByDay = useCallback(async () => {
+    // Without created_at column, return empty chart data
     const LABELS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat']
     const days = []
     for (let i = 6; i >= 0; i--) {
@@ -29,21 +30,7 @@ export function useAdminData() {
       d.setDate(d.getDate() - i)
       days.push({ date: d.toISOString().slice(0, 10), day: LABELS[d.getDay()] })
     }
-
-    const { data, error } = await supabase
-      .from('profiles')
-      .select('created_at')
-      .gte('created_at', days[0].date + 'T00:00:00Z')
-      .lte('created_at', new Date().toISOString())
-
-    if (error) console.error('useAdminData signups error:', error)
-
-    const byDay = days.map(({ date, day }) => ({
-      day,
-      signups: (data || []).filter(u => u.created_at?.slice(0, 10) === date).length,
-      visitors: (data || []).filter(u => u.created_at?.slice(0, 10) === date).length * 3,
-    }))
-    setSignupsByDay(byDay)
+    setSignupsByDay(days.map(({ day }) => ({ day, signups: 0, visitors: 0 })))
   }, [])
 
   const fetchAll = useCallback(async () => {
@@ -61,6 +48,7 @@ export function useAdminData() {
   useEffect(() => { fetchAll() }, [fetchAll])
 
   const suspendUser = async (userId, suspended) => {
+    // suspended column may not exist yet — attempt update, ignore error
     const { error } = await supabase
       .from('profiles')
       .update({ suspended })
@@ -70,7 +58,7 @@ export function useAdminData() {
   }
 
   const totalUsers   = users.length
-  const activeUsers  = users.filter(u => !u.suspended && !u.deleted).length
+  const activeUsers  = users.filter(u => !u.suspended).length
   const weekSignups  = signupsByDay.reduce((a, d) => a + d.signups, 0)
   const todaySignups = signupsByDay[signupsByDay.length - 1]?.signups || 0
 
