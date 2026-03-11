@@ -4271,7 +4271,7 @@ const WorkPage = () => {
           {section === "todos"     && <WorkTodos masterTodos={masterTodos} setMasterTodos={setMasterTodos} dailyTodos={dailyTodos} setDailyTodos={setDailyTodos} />}
           {section === "notes"     && <WorkNotes notes={notes} setNotes={setNotes} />}
           {section === "reminders" && <WorkReminders reminders={reminders} setReminders={setReminders} />}
-          {section === "kanban"    && <WorkKanban />}
+          {section === "kanban" || section === "workflow" ? <WorkKanban /> : null}
           {section === "focus"     && <WorkFocus />}
           {section === "meetings"  && <WorkMeetings meetings={meetings} />}
         </div>
