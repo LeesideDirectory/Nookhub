@@ -2940,6 +2940,7 @@ const DashboardPage = ({ view, onNavigate, profilePic, setProfilePic, widgetRequ
   const displayHandle = profile?.handle || '@you';
 
   const STORAGE_KEY = user ? `nook_widgets_${user.id}` : null;
+  const ORDER_KEY   = user ? `nook_widget_order_${user.id}` : null;
 
   const startingWidgets = (() => {
     if (STORAGE_KEY) {
@@ -2952,7 +2953,15 @@ const DashboardPage = ({ view, onNavigate, profilePic, setProfilePic, widgetRequ
   })();
 
   const [widgets, setWidgets] = useState(startingWidgets);
-  const [widgetOrder, setWidgetOrder] = useState(() => startingWidgets.map(w => w.id));
+  const [widgetOrder, setWidgetOrder] = useState(() => {
+    if (ORDER_KEY) {
+      try {
+        const saved = localStorage.getItem(ORDER_KEY);
+        if (saved) return JSON.parse(saved);
+      } catch {}
+    }
+    return startingWidgets.map(w => w.id);
+  });
   const [editBio, setEditBio] = useState(false);
   const [bio, setBio] = useState(profile?.bio || "");
   const [bioLinks, setBioLinks] = useState([]);
@@ -2975,6 +2984,12 @@ const DashboardPage = ({ view, onNavigate, profilePic, setProfilePic, widgetRequ
       try { localStorage.setItem(STORAGE_KEY, JSON.stringify(widgets)); } catch {}
     }
   }, [widgets, STORAGE_KEY]);
+
+  useEffect(() => {
+    if (ORDER_KEY && widgetOrder.length > 0) {
+      try { localStorage.setItem(ORDER_KEY, JSON.stringify(widgetOrder)); } catch {}
+    }
+  }, [widgetOrder, ORDER_KEY]);
 
   // ── Lifted widget data (shared with ArchiveWidget) ────────────────────────
   const initReading = INITIAL_WIDGETS.find(w => w.id === "reading").data.items;
@@ -5864,10 +5879,6 @@ export default function App() {
   };
 
   const logout = async () => {
-    if (user) {
-      try { localStorage.removeItem(`nook_widgets_${user.id}`); } catch {}
-      // Note: intentionally keep nook_onboarded_${user.id} so they don't re-onboard on next login
-    }
     await signOut();
     try { sessionStorage.removeItem("nook_page"); } catch {}
     setPage("home");
