@@ -2623,16 +2623,55 @@ const WidgetCard = ({ widget, onTogglePublic, isOwnDashboard, dragHandleProps, o
   );
 };
 
-const NewConvoModal = ({ onClose, onStart }) => {
+const NewConvoModal = ({ onClose, onStart, currentUserId }) => {
   const [tab, setTab] = useState("dm");
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState([]);
+  const [selectedProfiles, setSelectedProfiles] = useState([]);
   const [groupName, setGroupName] = useState("");
-  // In future: real connections from Supabase
-  const connections = [];
-  const filtered = connections.filter(u => u.name.toLowerCase().includes(search.toLowerCase()) || u.handle.toLowerCase().includes(search.toLowerCase()));
-  const toggle = (id) => { if (tab === "dm") setSelected([id]); else setSelected(s => s.includes(id) ? s.filter(x => x !== id) : [...s, id]); };
+  const [results, setResults] = useState([]);
+  const [searching, setSearching] = useState(false);
+
+  // Debounced real search against profiles table
+  useEffect(() => {
+    if (!search.trim()) { setResults([]); return; }
+    const timer = setTimeout(async () => {
+      setSearching(true);
+      try {
+        const { supabase } = await import('./lib/supabase');
+        const q = search.trim().replace(/^@/, "");
+        const { data } = await supabase
+          .from('profiles')
+          .select('id, name, handle, avatar_color, bio')
+          .neq('id', currentUserId || '')
+          .or(`name.ilike.%${q}%,handle.ilike.%${q}%`)
+          .limit(10);
+        setResults(data || []);
+      } catch { setResults([]); }
+      setSearching(false);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [search, currentUserId]);
+
+  const norm = (u) => ({ ...u, color: u.avatar_color || P.lavender, initials: (u.name || u.handle || "?").slice(0, 2).toUpperCase() });
+
+  const toggle = (u) => {
+    if (tab === "dm") {
+      setSelected([u.id]);
+      setSelectedProfiles([u]);
+    } else {
+      if (selected.includes(u.id)) {
+        setSelected(s => s.filter(x => x !== u.id));
+        setSelectedProfiles(ps => ps.filter(p => p.id !== u.id));
+      } else {
+        setSelected(s => [...s, u.id]);
+        setSelectedProfiles(ps => [...ps, u]);
+      }
+    }
+  };
+
   const canStart = tab === "dm" ? selected.length === 1 : selected.length >= 2 && groupName.trim();
+
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(61,53,80,0.35)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 200, backdropFilter: "blur(4px)" }} onClick={onClose}>
       <div onClick={e => e.stopPropagation()} style={{ background: P.white, borderRadius: 24, width: 420, maxHeight: "80vh", boxShadow: "0 20px 60px rgba(61,53,80,0.2)", border: `1.5px solid ${P.lavender}55`, display: "flex", flexDirection: "column", overflow: "hidden", animation: "popIn 0.2s ease" }}>
@@ -2643,7 +2682,7 @@ const NewConvoModal = ({ onClose, onStart }) => {
           </div>
           <div style={{ display: "flex", gap: 6, marginBottom: 16 }}>
             {[["dm","Direct message"],["group","Group chat"]].map(([t, label]) => (
-              <button key={t} onClick={() => { setTab(t); setSelected([]); }} style={{ background: tab === t ? P.lavender : P.lavenderLight, border: "none", borderRadius: 10, padding: "7px 16px", fontFamily: FF_S, fontSize: 13, fontWeight: tab === t ? 600 : 400, color: P.ink, cursor: "pointer" }}>{label}</button>
+              <button key={t} onClick={() => { setTab(t); setSelected([]); setSelectedProfiles([]); }} style={{ background: tab === t ? P.lavender : P.lavenderLight, border: "none", borderRadius: 10, padding: "7px 16px", fontFamily: FF_S, fontSize: 13, fontWeight: tab === t ? 600 : 400, color: P.ink, cursor: "pointer" }}>{label}</button>
             ))}
           </div>
           {tab === "group" && (
@@ -2652,35 +2691,40 @@ const NewConvoModal = ({ onClose, onStart }) => {
           )}
           <div style={{ position: "relative", marginBottom: 12 }}>
             <span style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", fontSize: 13, color: P.inkFaint }}>🔍</span>
-            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search by name or @handle…"
+            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search by name or @handle…" autoFocus
               style={{ width: "100%", border: `1.5px solid ${P.lavender}`, borderRadius: 12, padding: "9px 14px 9px 34px", fontFamily: FF_S, fontSize: 14, background: P.lavenderLight, color: P.ink, outline: "none", boxSizing: "border-box" }} />
           </div>
-          {tab === "group" && selected.length > 0 && (
+          {tab === "group" && selectedProfiles.length > 0 && (
             <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10 }}>
-              {selected.map(id => { const u = getUser(id); return (
-                <span key={id} style={{ background: P.lavender, borderRadius: 20, padding: "3px 10px 3px 8px", fontFamily: FF_S, fontSize: 12, color: P.ink, display: "flex", alignItems: "center", gap: 5 }}>
-                  {u.name.split(" ")[0]} <span onClick={() => toggle(id)} style={{ cursor: "pointer", opacity: 0.6 }}>×</span>
+              {selectedProfiles.map(u => (
+                <span key={u.id} style={{ background: P.lavender, borderRadius: 20, padding: "3px 10px 3px 8px", fontFamily: FF_S, fontSize: 12, color: P.ink, display: "flex", alignItems: "center", gap: 5 }}>
+                  {(u.name || u.handle || "").split(" ")[0]}
+                  <span onClick={() => toggle(u)} style={{ cursor: "pointer", opacity: 0.6 }}>×</span>
                 </span>
-              );})}
+              ))}
             </div>
           )}
         </div>
         <div style={{ overflowY: "auto", flex: 1, padding: "0 12px 12px" }}>
-          {filtered.length === 0 && (
-            <div style={{ padding: "28px", textAlign: "center", color: P.inkFaint, fontFamily: FF_S, fontSize: 13 }}>
-              {search ? "No users found" : "No connections yet — connect with people from the Feed"}
-            </div>
-          )}
-          {filtered.map(u => (
-            <div key={u.id} onClick={() => toggle(u.id)} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 12px", borderRadius: 14, cursor: "pointer", background: selected.includes(u.id) ? P.lavenderLight : "transparent", transition: "background 0.15s" }}>
-              <UserAvatar user={u} size={40} showStatus />
-              <div style={{ flex: 1 }}>
-                <div style={{ fontFamily: FF_S, fontSize: 14, fontWeight: 500, color: P.ink }}>{u.name}</div>
-                <div style={{ fontFamily: FF_S, fontSize: 12, color: P.inkFaint }}>{u.handle}</div>
+          {searching ? (
+            <div style={{ padding: "28px", textAlign: "center", color: P.inkFaint, fontFamily: FF_S, fontSize: 13 }}>Searching…</div>
+          ) : search.trim() && results.length === 0 ? (
+            <div style={{ padding: "28px", textAlign: "center", color: P.inkFaint, fontFamily: FF_S, fontSize: 13 }}>No users found for "{search}"</div>
+          ) : !search.trim() ? (
+            <div style={{ padding: "28px", textAlign: "center", color: P.inkFaint, fontFamily: FF_S, fontSize: 13 }}>Start typing to find someone</div>
+          ) : results.map(u => {
+            const nu = norm(u);
+            return (
+              <div key={u.id} onClick={() => toggle(nu)} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 12px", borderRadius: 14, cursor: "pointer", background: selected.includes(u.id) ? P.lavenderLight : "transparent", transition: "background 0.15s" }}>
+                <UserAvatar user={nu} size={40} />
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontFamily: FF_S, fontSize: 14, fontWeight: 500, color: P.ink }}>{u.name || u.handle}</div>
+                  <div style={{ fontFamily: FF_S, fontSize: 12, color: P.inkFaint }}>{u.handle}</div>
+                </div>
+                {selected.includes(u.id) && <div style={{ width: 20, height: 20, borderRadius: "50%", background: P.lavender, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, color: P.ink, fontWeight: 700 }}>✓</div>}
               </div>
-              {selected.includes(u.id) && <div style={{ width: 20, height: 20, borderRadius: "50%", background: P.lavender, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, color: P.ink, fontWeight: 700 }}>✓</div>}
-            </div>
-          ))}
+            );
+          })}
         </div>
         <div style={{ padding: "12px 24px 22px", borderTop: `1px solid ${P.lavenderLight}` }}>
           <button onClick={() => canStart && onStart({ tab, selected, groupName })} style={{ width: "100%", background: canStart ? P.lavender : P.lavenderLight, border: "none", borderRadius: 14, padding: "12px", fontFamily: FF_S, fontSize: 14, fontWeight: 600, color: canStart ? P.ink : P.inkFaint, cursor: canStart ? "pointer" : "default", transition: "all 0.2s" }}>
@@ -3522,7 +3566,7 @@ const MessagesPage = ({ requests, setRequests }) => {
         }
       </div>
 
-      {showNew && <NewConvoModal onClose={() => setShowNew(false)} onStart={startConvo} />}
+      {showNew && <NewConvoModal onClose={() => setShowNew(false)} onStart={startConvo} currentUserId={user?.id} />}
     </div>
   );
 };
