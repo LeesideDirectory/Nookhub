@@ -5761,6 +5761,7 @@ export default function App() {
   const logout = async () => {
     if (user) {
       try { localStorage.removeItem(`nook_widgets_${user.id}`); } catch {}
+      // Note: intentionally keep nook_onboarded_${user.id} so they don't re-onboard on next login
     }
     await signOut();
     try { sessionStorage.removeItem("nook_page"); } catch {}
@@ -5787,14 +5788,14 @@ export default function App() {
   const [initialWidgets, setInitialWidgets] = useState(null);
 
   const completeOnboarding = async (name, bio, chosenIds) => {
-    // Update profile in Supabase with name/bio from onboarding
     try {
       const { supabase } = await import('./lib/supabase');
       if (user && (name || bio)) {
         await supabase.from('profiles').update({ name, bio }).eq('id', user.id);
       }
     } catch {}
-    // Build widget state with chosen ones enabled
+    // Mark this specific user as onboarded in localStorage
+    try { localStorage.setItem(`nook_onboarded_${user?.id}`, "1"); } catch {}
     const widgets = INITIAL_WIDGETS.map(w => ({
       ...w,
       enabled: chosenIds.includes(w.id),
@@ -5811,22 +5812,30 @@ export default function App() {
   // Redirect unauthenticated users away from protected pages
   const protectedPages = ["dashboard","customize","messages","feed","work","admin","settings"];
   useEffect(() => {
-    if (authLoading || profileLoading) return; // wait for both auth AND profile to resolve
+    if (authLoading) return;
     if (showOnboarding) return;
     if (!user && protectedPages.includes(page)) { setPage("login"); return; }
     if (user && pendingEmail) {
       setPendingEmail(null);
-      if (!profile?.name) { setShowOnboarding(true); return; }
+      const alreadyOnboarded = (() => { try { return !!localStorage.getItem(`nook_onboarded_${user.id}`); } catch { return false; } })();
+      if (!alreadyOnboarded) { setShowOnboarding(true); return; }
     }
     if (user && ["login","signup","home"].includes(page)) {
-      if (!profile?.name) { setShowOnboarding(true); return; }
+      const alreadyOnboarded = (() => { try { return !!localStorage.getItem(`nook_onboarded_${user.id}`); } catch { return false; } })();
+      // Migration: check profile name OR user metadata name (works even if RLS blocks profile fetch)
+      const hasName = profile?.name || user?.user_metadata?.name;
+      if (!alreadyOnboarded && hasName) {
+        try { localStorage.setItem(`nook_onboarded_${user.id}`, "1"); } catch {}
+        setPage("dashboard"); return;
+      }
+      if (!alreadyOnboarded) { setShowOnboarding(true); return; }
       setPage("dashboard"); return;
     }
     if (page === "admin" && !isAdmin) { setPage("dashboard"); }
   }, [user, authLoading, profileLoading, profile, page, showOnboarding, isAdmin, pendingEmail]);
 
   // Show nothing while Supabase checks session — prevents flash of login page
-  if (authLoading || profileLoading) return (
+  if (authLoading) return (
     <div style={{ minHeight: "100vh", background: "#F5F2FC", display: "flex", alignItems: "center", justifyContent: "center" }}>
       <div style={{ fontFamily: "'DM Serif Display', serif", fontSize: 28, color: "#C9B8F0" }}>✦ Nook</div>
     </div>
