@@ -4158,7 +4158,7 @@ const WorkPage = () => {
           {section === "overview"  && <WorkOverview masterTodos={masterTodos} dailyTodos={dailyTodos} reminders={reminders} meetings={meetings} onGoTo={goTo} />}
           {section === "todos"     && <WorkTodos masterTodos={masterTodos} setMasterTodos={setMasterTodos} dailyTodos={dailyTodos} setDailyTodos={setDailyTodos} />}
           {section === "notes"     && <WorkNotes notes={notes} setNotes={setNotes} />}
-          {section === "reminders" && <WorkReminders reminders={reminders} setReminders={setReminders} />}}
+          {section === "reminders" && <WorkReminders reminders={reminders} setReminders={setReminders} />}
           {section === "kanban"    && <WorkKanban />}
           {section === "focus"     && <WorkFocus />}
           {section === "meetings"  && <WorkMeetings meetings={meetings} />}
@@ -4384,9 +4384,9 @@ const AdminPage = ({ widgetRequests, setWidgetRequests }) => {
       {sectionHead("Analytics", "Traffic, growth, and engagement metrics")}
 
       <div className="nook-admin-grid4" style={{ marginBottom: 24 }}>
-        <StatCard value="4.2"  label="Avg widgets/user" sub="Across all accounts"       color="#5DCAAA" icon="⊞" />
-        <StatCard value="8m"   label="Avg session"      sub="Minutes per visit"         color="#5AAADE" icon="⏱" />
-        <StatCard value="34%"  label="Public profiles"  sub="Of all user dashboards"    color="#E8956A" icon="👁" />
+        <StatCard value={totalUsers}  label="Total accounts"   sub="All registered users"     color="#5DCAAA" icon="⊞" />
+        <StatCard value={weekSignups} label="Signups this week" sub="Last 7 days"              color="#5AAADE" icon="↗" />
+        <StatCard value={activeUsers} label="Active accounts"  sub="Not suspended"             color="#E8956A" icon="👁" />
       </div>
 
       <div className="nook-admin-grid2" style={{ marginBottom: 20 }}>
@@ -4465,12 +4465,19 @@ const AdminPage = ({ widgetRequests, setWidgetRequests }) => {
           </div>
         </div>
 
-        {adminError && (
-          <div style={{ marginBottom: 16, padding: "12px 16px", background: "#F0B8C833", borderRadius: 12, border: "1px solid #D8708A44", fontFamily: FF_S, fontSize: 13, color: "#D8708A" }}>
-            ⚠ Could not load users: {adminError}. Run this in Supabase SQL editor:<br/>
-            <code style={{ fontSize: 11, background: "#F0B8C822", padding: "4px 8px", borderRadius: 6, display: "inline-block", marginTop: 6 }}>
-              CREATE POLICY "Admin can read all profiles" ON profiles FOR SELECT USING (true);
-            </code>
+        {(adminError || (!adminLoading && adminUsers.length === 0)) && (
+          <div style={{ marginBottom: 16, padding: "16px 18px", background: "#F0B8C822", borderRadius: 14, border: "1.5px solid #D8708A44", fontFamily: FF_S, fontSize: 13, color: P.ink, lineHeight: 1.6 }}>
+            <div style={{ fontWeight: 700, color: "#D8708A", marginBottom: 6 }}>⚠ {adminError ? `Query error: ${adminError}` : "No users returned — likely a Supabase RLS policy issue."}</div>
+            Run these two statements in <strong>Supabase → SQL Editor</strong>:
+            <pre style={{ fontSize: 11, background: "#F5F2FC", padding: "10px 12px", borderRadius: 8, marginTop: 8, overflowX: "auto", color: "#3D3550", lineHeight: 1.6 }}>{`-- 1. Allow authenticated users to read all profiles
+CREATE POLICY "Read all profiles"
+  ON profiles FOR SELECT
+  TO authenticated
+  USING (true);
+
+-- 2. Add suspended column if missing
+ALTER TABLE profiles
+  ADD COLUMN IF NOT EXISTS suspended boolean DEFAULT false;`}</pre>
           </div>
         )}
         {adminLoading ? (
@@ -5804,20 +5811,20 @@ export default function App() {
   // Redirect unauthenticated users away from protected pages
   const protectedPages = ["dashboard","customize","messages","feed","work","admin","settings"];
   useEffect(() => {
-    if (authLoading) return;
+    if (authLoading) return; // covers both auth + profile fetch
     if (showOnboarding) return;
     if (!user && protectedPages.includes(page)) { setPage("login"); return; }
     if (user && pendingEmail) {
-      // User just confirmed email and session restored — go to onboarding
       setPendingEmail(null);
-      if (!hasOnboarded) { setShowOnboarding(true); return; }
+      if (!profile?.name) { setShowOnboarding(true); return; }
     }
     if (user && ["login","signup","home"].includes(page)) {
-      if (!hasOnboarded) { setShowOnboarding(true); return; }
+      // Only onboard if profile has no name yet (genuinely new user)
+      if (!profile?.name) { setShowOnboarding(true); return; }
       setPage("dashboard"); return;
     }
     if (page === "admin" && !isAdmin) { setPage("dashboard"); }
-  }, [user, authLoading, page, showOnboarding, isAdmin, pendingEmail, hasOnboarded]);
+  }, [user, authLoading, profile, page, showOnboarding, isAdmin, pendingEmail]);
 
   // Show nothing while Supabase checks session — prevents flash of login page
   if (authLoading) return (
