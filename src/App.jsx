@@ -5681,7 +5681,7 @@ const HomePageNew = ({ onNavigate, profilePic }) => {
 };
 
 export default function App() {
-  const { user, profile, loading: authLoading, signIn, signUp, signOut } = useAuth();
+  const { user, profile, loading: authLoading, profileLoading, signIn, signUp, signOut } = useAuth();
   const [page, setPage] = useState(() => {
     try { return sessionStorage.getItem("nook_page") || "home"; } catch { return "home"; }
   });
@@ -5811,7 +5811,7 @@ export default function App() {
   // Redirect unauthenticated users away from protected pages
   const protectedPages = ["dashboard","customize","messages","feed","work","admin","settings"];
   useEffect(() => {
-    if (authLoading) return; // covers both auth + profile fetch
+    if (authLoading || profileLoading) return; // wait for both auth AND profile to resolve
     if (showOnboarding) return;
     if (!user && protectedPages.includes(page)) { setPage("login"); return; }
     if (user && pendingEmail) {
@@ -5819,15 +5819,14 @@ export default function App() {
       if (!profile?.name) { setShowOnboarding(true); return; }
     }
     if (user && ["login","signup","home"].includes(page)) {
-      // Only onboard if profile has no name yet (genuinely new user)
       if (!profile?.name) { setShowOnboarding(true); return; }
       setPage("dashboard"); return;
     }
     if (page === "admin" && !isAdmin) { setPage("dashboard"); }
-  }, [user, authLoading, profile, page, showOnboarding, isAdmin, pendingEmail]);
+  }, [user, authLoading, profileLoading, profile, page, showOnboarding, isAdmin, pendingEmail]);
 
   // Show nothing while Supabase checks session — prevents flash of login page
-  if (authLoading) return (
+  if (authLoading || profileLoading) return (
     <div style={{ minHeight: "100vh", background: "#F5F2FC", display: "flex", alignItems: "center", justifyContent: "center" }}>
       <div style={{ fontFamily: "'DM Serif Display', serif", fontSize: 28, color: "#C9B8F0" }}>✦ Nook</div>
     </div>

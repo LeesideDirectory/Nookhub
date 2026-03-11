@@ -5,20 +5,25 @@ export function useAuth() {
   const [user, setUser] = useState(null)
   const [profile, setProfile] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [profileLoading, setProfileLoading] = useState(true)
 
   useEffect(() => {
-    // Get initial session
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null)
       if (session?.user) fetchProfile(session.user.id)
-      else setLoading(false)
+      else { setLoading(false); setProfileLoading(false) }
     })
 
-    // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user ?? null)
-      if (session?.user) fetchProfile(session.user.id)
-      else { setProfile(null); setLoading(false) }
+      if (session?.user) {
+        setProfileLoading(true)
+        fetchProfile(session.user.id)
+      } else {
+        setProfile(null)
+        setLoading(false)
+        setProfileLoading(false)
+      }
     })
 
     return () => subscription.unsubscribe()
@@ -32,6 +37,7 @@ export function useAuth() {
       .single()
     setProfile(data)
     setLoading(false)
+    setProfileLoading(false)
   }
 
   async function signUp({ email, password, name, handle }) {
@@ -43,7 +49,6 @@ export function useAuth() {
       })
       if (error) return { error: error.message }
 
-      // Create profile row
       if (data.user) {
         await supabase.from('profiles').upsert({
           id: data.user.id,
@@ -85,5 +90,5 @@ export function useAuth() {
     setProfile(prev => ({ ...prev, ...updates }))
   }
 
-  return { user, profile, loading, signUp, signIn, signOut, updateProfile }
+  return { user, profile, loading, profileLoading, signUp, signIn, signOut, updateProfile }
 }
