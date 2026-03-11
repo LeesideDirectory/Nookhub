@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useAuth } from './hooks/useAuth'
 import { useFeed } from './hooks/useFeed'
 import { useMessages } from './hooks/useMessages'
+import { useAdminData } from './hooks/useAdminData'
 
 
 const P = {
@@ -241,7 +242,7 @@ const Toggle = ({ on, onChange, small }) => {
   );
 };
 
-const Nav = ({ page, onNavigate, onLogout, unreadCount, isLoggedIn, me, profilePic, following, unreadNotifs, showNotifs, setShowNotifs, notifications, onMarkRead, onMarkAllRead }) => {
+const Nav = ({ page, onNavigate, onLogout, unreadCount, isLoggedIn, isAdmin, me, profilePic, following, unreadNotifs, showNotifs, setShowNotifs, notifications, onMarkRead, onMarkAllRead }) => {
   const [menuOpen, setMenuOpen] = useState(false);
   const close = () => setMenuOpen(false);
 
@@ -276,7 +277,7 @@ const Nav = ({ page, onNavigate, onLogout, unreadCount, isLoggedIn, me, profileP
               </div>
               <UserAvatar user={me} size={32} showStatus photoPic={profilePic} />
               <button onClick={() => onNavigate("settings")} title="Settings" style={{ background: page === "settings" ? P.lavender : "transparent", border: `1.5px solid ${page === "settings" ? P.lavender : P.lavender + "44"}`, borderRadius: 10, padding: "6px 10px", cursor: "pointer", fontSize: 14, color: P.inkLight, lineHeight: 1, transition: "all 0.2s" }}>⚙</button>
-              <button onClick={() => onNavigate("admin")} title="Admin panel" style={{ background: page === "admin" ? P.lavender : "transparent", border: `1.5px solid ${page === "admin" ? P.lavender : P.lavender + "44"}`, borderRadius: 10, padding: "6px 8px", cursor: "pointer", fontSize: 11, color: P.inkFaint, lineHeight: 1, transition: "all 0.2s", fontFamily: FF_S, fontWeight: 600 }}>ADMIN</button>
+              {isAdmin && <button onClick={() => onNavigate("admin")} title="Admin panel" style={{ background: page === "admin" ? P.lavender : "transparent", border: `1.5px solid ${page === "admin" ? P.lavender : P.lavender + "44"}`, borderRadius: 10, padding: "6px 8px", cursor: "pointer", fontSize: 11, color: P.inkFaint, lineHeight: 1, transition: "all 0.2s", fontFamily: FF_S, fontWeight: 600 }}>ADMIN</button>}
               <button onClick={onLogout} style={{ background: "transparent", border: `1.5px solid ${P.rose}55`, borderRadius: 10, padding: "7px 14px", cursor: "pointer", fontFamily: FF_S, fontSize: 13, color: P.inkLight }}>Log out</button>
             </>
           ) : (
@@ -312,7 +313,7 @@ const Nav = ({ page, onNavigate, onLogout, unreadCount, isLoggedIn, me, profileP
         <div style={{ borderTop: `1px solid ${P.lavender}33`, background: P.white, padding: "12px 16px 20px" }}>
           {isLoggedIn ? (
             <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-              {[["dashboard","🏠 My Dashboard"],["feed","✦ Feed"],["messages","✉ Messages"],["work","🔒 Work"],["customize","⊞ Customise"],["settings","⚙ Settings"],["admin","◈ Admin"]].map(([v, label]) => (
+              {[["dashboard","🏠 My Dashboard"],["feed","✦ Feed"],["messages","✉ Messages"],["work","🔒 Work"],["customize","⊞ Customise"],["settings","⚙ Settings"],...(isAdmin ? [["admin","◈ Admin"]] : [])].map(([v, label]) => (
                 <button key={v} onClick={() => { onNavigate(v); close(); }} style={{ background: page === v ? P.lavenderLight : "transparent", border: `1px solid ${page === v ? P.lavender : "transparent"}`, borderRadius: 12, padding: "12px 16px", cursor: "pointer", fontFamily: FF_S, fontSize: 14, color: P.ink, fontWeight: page === v ? 600 : 400, textAlign: "left", display: "flex", alignItems: "center", gap: 8, justifyContent: "space-between" }}>
                   <span>{label}</span>
                   {v === "messages" && unreadCount > 0 && <span style={{ background: P.rose, borderRadius: 20, padding: "1px 8px", fontSize: 11, fontWeight: 700, color: P.ink }}>{unreadCount}</span>}
@@ -3018,12 +3019,18 @@ const WidgetToggleCard = ({ w, onToggle }) => {
   );
 };
 
-const DashboardPage = ({ view, onNavigate, profilePic, setProfilePic, widgetRequests, setWidgetRequests, following, toggleFollow }) => {
-  const [widgets, setWidgets] = useState(INITIAL_WIDGETS);
-  const [widgetOrder, setWidgetOrder] = useState(() => INITIAL_WIDGETS.map(w => w.id));
+const DashboardPage = ({ view, onNavigate, profilePic, setProfilePic, widgetRequests, setWidgetRequests, following, toggleFollow, initialWidgets }) => {
+  const { user, profile } = useAuth();
+
+  const displayName = profile?.name || user?.email?.split('@')[0] || 'Your Nook';
+  const displayHandle = profile?.handle || '@you';
+
+  const startingWidgets = initialWidgets || INITIAL_WIDGETS.map(w => ({ ...w, enabled: false, isPublic: false }));
+  const [widgets, setWidgets] = useState(startingWidgets);
+  const [widgetOrder, setWidgetOrder] = useState(() => startingWidgets.map(w => w.id));
   const [editBio, setEditBio] = useState(false);
-  const [bio, setBio] = useState("Designer & dreamer 🌿 Collecting good books, quiet mornings, and ambitious to-do lists that may or may not get done.");
-  const [bioLinks, setBioLinks] = useState([{ label: "Studio Ellison", url: "https://studioellison.co" }]);
+  const [bio, setBio] = useState(profile?.bio || "");
+  const [bioLinks, setBioLinks] = useState([]);
   const [bioEmail, setBioEmail] = useState("");
   const [editBioLink, setEditBioLink] = useState(false);
   const [draftBioLinks, setDraftBioLinks] = useState(bioLinks);
@@ -3155,7 +3162,7 @@ const DashboardPage = ({ view, onNavigate, profilePic, setProfilePic, widgetRequ
         <div style={{ background: P.white, borderRadius: 24, padding: "28px 32px", border: `1.5px solid ${P.lavender}55`, boxShadow: "0 4px 24px rgba(201,184,240,0.15)", marginBottom: 32, display: "flex", alignItems: "flex-start", gap: 20, flexWrap: "wrap" }}>
           {/* Clickable avatar with upload overlay */}
           <div style={{ position: "relative", flexShrink: 0, cursor: showPublic ? "default" : "pointer" }} onClick={() => !showPublic && fileInputRef.current?.click()}>
-            <UserAvatar user={ME_BASE} size={80} photoPic={profilePic} />
+            <UserAvatar user={{ ...profile, color: profile?.avatar_color }} size={80} photoPic={profilePic} />
             {!showPublic && <div style={{
               position: "absolute", inset: 0, borderRadius: "50%",
               background: "rgba(61,53,80,0.45)", display: "flex", alignItems: "center",
@@ -3170,8 +3177,8 @@ const DashboardPage = ({ view, onNavigate, profilePic, setProfilePic, widgetRequ
           </div>
           <div style={{ flex: 1, minWidth: 200 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 4 }}>
-              <h2 style={{ fontFamily: FF_D, fontSize: 26, margin: 0, color: P.ink, fontWeight: 400 }}>{ME_BASE.name}</h2>
-              <span style={{ fontFamily: FF_S, fontSize: 12, color: P.inkLight, background: P.lavenderLight, borderRadius: 20, padding: "2px 10px" }}>{ME_BASE.handle}</span>
+              <h2 style={{ fontFamily: FF_D, fontSize: 26, margin: 0, color: P.ink, fontWeight: 400 }}>{displayName}</h2>
+              <span style={{ fontFamily: FF_S, fontSize: 12, color: P.inkLight, background: P.lavenderLight, borderRadius: 20, padding: "2px 10px" }}>{displayHandle}</span>
             </div>
             {editBio ? (
               <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
@@ -4373,13 +4380,20 @@ const ANNOUNCEMENTS_SEED = [
 ];
 
 const AdminPage = ({ widgetRequests, setWidgetRequests }) => {
+  const { user } = useAuth();
+  const {
+    users: adminUsers, setUsers: setAdminUsers,
+    signupsByDay, loading: adminLoading,
+    totalUsers, activeUsers, weekSignups, todayVisitors, todaySignups,
+    suspendUser, deleteUser, refresh,
+  } = useAdminData();
+
   const [section, setSection] = useState("overview");
   const [userSearch, setUserSearch] = useState("");
   const [userFilter, setUserFilter] = useState("all");
   const [selectedUser, setSelectedUser] = useState(null);
-  const [adminUsers, setAdminUsers] = useState(ADMIN_USERS);
-  const [flagged, setFlagged] = useState(FLAGGED_CONTENT);
-  const [feedback, setFeedback] = useState(FEEDBACK_SEED);
+  const [flagged, setFlagged] = useState([]);
+  const [feedback, setFeedback] = useState([]);
   const [announcements, setAnnouncements] = useState(ANNOUNCEMENTS_SEED);
   const [newAnn, setNewAnn] = useState({ title: "", body: "" });
   const [annSent, setAnnSent] = useState(false);
@@ -4392,10 +4406,6 @@ const AdminPage = ({ widgetRequests, setWidgetRequests }) => {
     declined:   { label: "Declined",  bg: "#F0B8C833",     text: "#D8708A", dot: "#D8708A" },
   };
 
-  const totalUsers   = adminUsers.length;
-  const activeUsers  = adminUsers.filter(u => u.status === "active").length;
-  const todayVisitors = DAU_DATA[DAU_DATA.length - 1].visitors;
-  const weekSignups  = DAU_DATA.reduce((a, d) => a + d.signups, 0);
   const openFlags    = flagged.filter(f => f.status === "open").length;
   const openFeedback = feedback.filter(f => f.status === "open").length;
 
@@ -4457,51 +4467,45 @@ const AdminPage = ({ widgetRequests, setWidgetRequests }) => {
     <div>
       {sectionHead("Overview", "Platform health at a glance")}
       <div className="nook-admin-grid3" style={{ marginBottom: 24 }}>
-        <StatCard value={totalUsers}    label="Total users"         sub={`${activeUsers} active today`}          color="#9B85D8" icon="⊙" />
-        <StatCard value={todayVisitors} label="Visitors today"      sub="↑ 18% from yesterday"                  color="#5DCAAA" icon="↗" />
-        <StatCard value={weekSignups}   label="Signups this week"   sub="↑ 12% from last week"                  color="#5AAADE" icon="✦" />
-        <StatCard value={activeUsers}   label="Active users (DAU)"  sub={`${Math.round(activeUsers/totalUsers*100)}% of total`} color="#E8956A" icon="◈" />
-        <StatCard value={openFlags}     label="Open flags"          sub="Needs moderation review"               color="#D8708A" icon="⚑" />
-        <StatCard value={openFeedback}  label="Open feedback"       sub={`${feedback.length} total submissions`} color="#C8A830" icon="✉" />
+        <StatCard value={totalUsers}    label="Total users"         sub={`${activeUsers} not suspended`}          color="#9B85D8" icon="⊙" />
+        <StatCard value={todaySignups}  label="Signups today"       sub="New accounts today"                      color="#5DCAAA" icon="↗" />
+        <StatCard value={weekSignups}   label="Signups this week"   sub="Last 7 days"                             color="#5AAADE" icon="✦" />
+        <StatCard value={activeUsers}   label="Active users"        sub={totalUsers > 0 ? `${Math.round(activeUsers/totalUsers*100)}% of total` : "—"} color="#E8956A" icon="◈" />
+        <StatCard value={openFlags}     label="Open flags"          sub="Needs moderation review"                 color="#D8708A" icon="⚑" />
+        <StatCard value={openFeedback}  label="Open feedback"       sub={`${feedback.length} total submissions`}  color="#C8A830" icon="✉" />
       </div>
 
       <div className="nook-admin-grid2">
         {card(
           <>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-              <span style={{ fontFamily: FF_D, fontSize: 16, color: P.ink }}>Daily visitors (7d)</span>
-              <span style={{ fontFamily: FF_S, fontSize: 11, color: P.inkFaint }}>This week</span>
-            </div>
-            <MiniBar data={DAU_DATA} valueKey="visitors" labelKey="day" color="#9B85D8" height={90} />
-          </>
-        )}
-        {card(
-          <>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
               <span style={{ fontFamily: FF_D, fontSize: 16, color: P.ink }}>New signups (7d)</span>
               <span style={{ fontFamily: FF_S, fontSize: 11, color: P.inkFaint }}>{weekSignups} total</span>
             </div>
-            <MiniBar data={DAU_DATA} valueKey="signups" labelKey="day" color="#5DCAAA" height={90} />
+            <MiniBar data={signupsByDay} valueKey="signups" labelKey="day" color="#9B85D8" height={90} />
           </>
         )}
-      </div>
-
-      <div style={{ marginTop: 20 }}>
         {card(
           <>
             <div style={{ fontFamily: FF_D, fontSize: 16, color: P.ink, marginBottom: 14 }}>Recent signups</div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-              {[...adminUsers].sort((a,b) => new Date(b.joined) - new Date(a.joined)).slice(0, 4).map(u => (
-                <div key={u.id} style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                  <UserAvatar user={u} size={34} />
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontFamily: FF_S, fontSize: 13, fontWeight: 600, color: P.ink }}>{u.name} <span style={{ color: P.inkFaint, fontWeight: 400 }}>{u.handle}</span></div>
-                    <div style={{ fontFamily: FF_S, fontSize: 11, color: P.inkFaint }}>Joined {u.joined}</div>
+            {adminLoading ? (
+              <p style={{ fontFamily: FF_S, fontSize: 13, color: P.inkFaint }}>Loading…</p>
+            ) : adminUsers.length === 0 ? (
+              <p style={{ fontFamily: FF_S, fontSize: 13, color: P.inkFaint }}>No users yet.</p>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                {[...adminUsers].sort((a,b) => new Date(b.created_at) - new Date(a.created_at)).slice(0, 5).map(u => (
+                  <div key={u.id} style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                    <UserAvatar user={{ ...u, color: u.avatar_color }} size={34} />
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontFamily: FF_S, fontSize: 13, fontWeight: 600, color: P.ink }}>{u.name || u.email?.split('@')[0]} <span style={{ color: P.inkFaint, fontWeight: 400 }}>{u.handle}</span></div>
+                      <div style={{ fontFamily: FF_S, fontSize: 11, color: P.inkFaint }}>Joined {u.created_at ? new Date(u.created_at).toLocaleDateString() : '—'}</div>
+                    </div>
+                    <span style={{ background: u.suspended ? "#F0B8C833" : P.lavenderLight, color: u.suspended ? "#D8708A" : "#3BAA80", borderRadius: 20, padding: "2px 10px", fontFamily: FF_S, fontSize: 11, fontWeight: 600 }}>{u.suspended ? "suspended" : "active"}</span>
                   </div>
-                  <span style={{ background: u.status === "active" ? P.mintLight : P.lavenderLight, color: u.status === "active" ? "#3BAA80" : P.inkFaint, borderRadius: 20, padding: "2px 10px", fontFamily: FF_S, fontSize: 11, fontWeight: 600 }}>{u.status}</span>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </>
         )}
       </div>
@@ -4521,23 +4525,30 @@ const AdminPage = ({ widgetRequests, setWidgetRequests }) => {
       <div className="nook-admin-grid2" style={{ marginBottom: 20 }}>
         {card(
           <>
-            <div style={{ fontFamily: FF_D, fontSize: 16, color: P.ink, marginBottom: 4 }}>Visitors this week</div>
-            <div style={{ fontFamily: FF_S, fontSize: 12, color: P.inkFaint, marginBottom: 16 }}>Unique daily visitors</div>
-            <MiniBar data={DAU_DATA} valueKey="visitors" labelKey="day" color="#9B85D8" height={100} />
+            <div style={{ fontFamily: FF_D, fontSize: 16, color: P.ink, marginBottom: 4 }}>Signups this week</div>
+            <div style={{ fontFamily: FF_S, fontSize: 12, color: P.inkFaint, marginBottom: 16 }}>New accounts created per day</div>
+            <MiniBar data={signupsByDay} valueKey="signups" labelKey="day" color="#9B85D8" height={100} />
             <div style={{ display: "flex", justifyContent: "space-between", marginTop: 12 }}>
-              <span style={{ fontFamily: FF_S, fontSize: 12, color: P.inkFaint }}>Peak: {Math.max(...DAU_DATA.map(d=>d.visitors))} on {DAU_DATA.find(d => d.visitors === Math.max(...DAU_DATA.map(d=>d.visitors))).day}</span>
-              <span style={{ fontFamily: FF_S, fontSize: 12, color: P.inkFaint }}>Total: {DAU_DATA.reduce((a,d)=>a+d.visitors,0)}</span>
+              <span style={{ fontFamily: FF_S, fontSize: 12, color: P.inkFaint }}>Peak: {signupsByDay.length ? Math.max(...signupsByDay.map(d=>d.signups)) : 0} signups in a day</span>
+              <span style={{ fontFamily: FF_S, fontSize: 12, color: P.inkFaint }}>Total: {weekSignups} this week</span>
             </div>
           </>
         )}
         {card(
           <>
-            <div style={{ fontFamily: FF_D, fontSize: 16, color: P.ink, marginBottom: 4 }}>Signups this week</div>
-            <div style={{ fontFamily: FF_S, fontSize: 12, color: P.inkFaint, marginBottom: 16 }}>New accounts created per day</div>
-            <MiniBar data={DAU_DATA} valueKey="signups" labelKey="day" color="#5DCAAA" height={100} />
-            <div style={{ display: "flex", justifyContent: "space-between", marginTop: 12 }}>
-              <span style={{ fontFamily: FF_S, fontSize: 12, color: P.inkFaint }}>Conversion: {(weekSignups / DAU_DATA.reduce((a,d)=>a+d.visitors,0) * 100).toFixed(1)}%</span>
-              <span style={{ fontFamily: FF_S, fontSize: 12, color: P.inkFaint }}>Total: {weekSignups}</span>
+            <div style={{ fontFamily: FF_D, fontSize: 16, color: P.ink, marginBottom: 4 }}>Total users</div>
+            <div style={{ fontFamily: FF_S, fontSize: 12, color: P.inkFaint, marginBottom: 16 }}>All registered accounts</div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 14, paddingTop: 8 }}>
+              {[
+                { label: "Total accounts", value: totalUsers, color: "#9B85D8" },
+                { label: "Active (not suspended)", value: activeUsers, color: "#5DCAAA" },
+                { label: "Suspended", value: adminUsers.filter(u=>u.suspended).length, color: "#D8708A" },
+              ].map(s => (
+                <div key={s.label} style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <span style={{ fontFamily: FF_S, fontSize: 13, color: P.inkLight }}>{s.label}</span>
+                  <span style={{ fontFamily: FF_D, fontSize: 20, color: s.color }}>{s.value}</span>
+                </div>
+              ))}
             </div>
           </>
         )}
@@ -4548,9 +4559,8 @@ const AdminPage = ({ widgetRequests, setWidgetRequests }) => {
           <div style={{ fontFamily: FF_D, fontSize: 16, color: P.ink, marginBottom: 16 }}>User status breakdown</div>
           <div className="nook-admin-grid3">
             {[
-              { label: "Active (7d)",   value: activeUsers,                   color: "#5DCAAA", sub: "Logged in this week" },
-              { label: "Inactive",      value: totalUsers - activeUsers,       color: "#F5C26B", sub: "No activity in 7d" },
-              { label: "Flagged",       value: adminUsers.filter(u=>u.flagged).length, color: "#D8708A", sub: "Under review" },
+              { label: "Active",         value: activeUsers,              color: "#5DCAAA", sub: "Not suspended" },
+              { label: "Suspended",      value: adminUsers.filter(u=>u.suspended).length, color: "#D8708A", sub: "Access restricted" },
             ].map(item => (
               <div key={item.label} style={{ background: item.color + "15", borderRadius: 14, padding: "16px 18px", border: `1.5px solid ${item.color}33` }}>
                 <div style={{ fontFamily: FF_D, fontSize: 28, color: item.color, lineHeight: 1, marginBottom: 4 }}>{item.value}</div>
@@ -4566,8 +4576,11 @@ const AdminPage = ({ widgetRequests, setWidgetRequests }) => {
 
   const UsersSection = () => {
     const filtered = adminUsers
-      .filter(u => userFilter === "all" || u.status === userFilter || (userFilter === "flagged" && u.flagged))
-      .filter(u => !userSearch || u.name.toLowerCase().includes(userSearch.toLowerCase()) || u.handle.toLowerCase().includes(userSearch.toLowerCase()));
+      .filter(u => {
+        if (userFilter === "suspended") return u.suspended;
+        return true;
+      })
+      .filter(u => !userSearch || u.name?.toLowerCase().includes(userSearch.toLowerCase()) || u.handle?.toLowerCase().includes(userSearch.toLowerCase()) || u.email?.toLowerCase().includes(userSearch.toLowerCase()));
 
     return (
       <div>
@@ -4575,7 +4588,7 @@ const AdminPage = ({ widgetRequests, setWidgetRequests }) => {
 
         <div style={{ display: "flex", gap: 10, marginBottom: 20, alignItems: "center", flexWrap: "wrap" }}>
           <div style={{ display: "flex", gap: 6 }}>
-            {[["all","All"],["active","Active"],["inactive","Inactive"],["flagged","Flagged ⚑"]].map(([v,l]) => (
+            {[["all","All"],["suspended","Suspended ⊘"]].map(([v,l]) => (
               <button key={v} onClick={() => setUserFilter(v)} style={{ background: userFilter === v ? P.lavender : P.white, border: `1.5px solid ${userFilter === v ? P.lavender : P.lavender + "55"}`, borderRadius: 20, padding: "6px 14px", cursor: "pointer", fontFamily: FF_S, fontSize: 12, color: P.ink, fontWeight: userFilter === v ? 600 : 400, transition: "all 0.15s" }}>{l}</button>
             ))}
           </div>
@@ -4585,33 +4598,33 @@ const AdminPage = ({ widgetRequests, setWidgetRequests }) => {
           </div>
         </div>
 
-        {card(
+        {adminLoading ? (
+          <div style={{ padding: "40px", textAlign: "center", color: P.inkFaint, fontFamily: FF_S, fontSize: 14 }}>Loading users…</div>
+        ) : filtered.length === 0 ? (
+          <div style={{ padding: "40px", textAlign: "center", color: P.inkFaint, fontFamily: FF_S, fontSize: 14 }}>No users found</div>
+        ) : card(
           <div>
-            <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr 1fr 1fr 120px", gap: 10, padding: "0 4px 10px", borderBottom: `1px solid ${P.lavender}33`, marginBottom: 12 }}>
-              {["User","Joined","Last seen","Widgets","Posts","Actions"].map(h => (
+            <div style={{ display: "grid", gridTemplateColumns: "2fr 1.5fr 1fr 100px", gap: 10, padding: "0 4px 10px", borderBottom: `1px solid ${P.lavender}33`, marginBottom: 12 }}>
+              {["User","Email","Joined","Actions"].map(h => (
                 <span key={h} style={{ fontFamily: FF_S, fontSize: 11, fontWeight: 700, color: P.inkFaint, textTransform: "uppercase", letterSpacing: 0.5 }}>{h}</span>
               ))}
             </div>
             {filtered.map(u => (
-              <div key={u.id} style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr 1fr 1fr 120px", gap: 10, padding: "10px 4px", borderBottom: `1px solid ${P.lavender}11`, alignItems: "center" }}>
+              <div key={u.id} style={{ display: "grid", gridTemplateColumns: "2fr 1.5fr 1fr 100px", gap: 10, padding: "10px 4px", borderBottom: `1px solid ${P.lavender}11`, alignItems: "center" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                  <UserAvatar user={u} size={32} />
+                  <UserAvatar user={{ ...u, color: u.avatar_color }} size={32} />
                   <div>
                     <div style={{ fontFamily: FF_S, fontSize: 13, fontWeight: 600, color: P.ink, display: "flex", alignItems: "center", gap: 6 }}>
-                      {u.name}
-                      {u.flagged && <span style={{ background: "#F0B8C844", color: "#D8708A", borderRadius: 20, padding: "1px 7px", fontSize: 10, fontWeight: 600 }}>⚑ flagged</span>}
+                      {u.name || u.email?.split('@')[0] || 'Unknown'}
                       {u.suspended && <span style={{ background: "#F0B8C888", color: "#D8708A", borderRadius: 20, padding: "1px 7px", fontSize: 10, fontWeight: 600 }}>suspended</span>}
                     </div>
-                    <div style={{ fontFamily: FF_S, fontSize: 11, color: P.inkFaint }}>{u.handle}</div>
+                    <div style={{ fontFamily: FF_S, fontSize: 11, color: P.inkFaint }}>{u.handle || ''}</div>
                   </div>
                 </div>
-                <span style={{ fontFamily: FF_S, fontSize: 12, color: P.inkLight }}>{u.joined}</span>
-                <span style={{ fontFamily: FF_S, fontSize: 12, color: u.lastSeen === "today" || u.lastSeen === "now" ? "#3BAA80" : P.inkLight }}>{u.lastSeen}</span>
-                <span style={{ fontFamily: FF_S, fontSize: 12, color: P.inkLight }}>{u.widgets}</span>
-                <span style={{ fontFamily: FF_S, fontSize: 12, color: P.inkLight }}>{u.posts}</span>
+                <span style={{ fontFamily: FF_S, fontSize: 12, color: P.inkLight, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{u.email || '—'}</span>
+                <span style={{ fontFamily: FF_S, fontSize: 12, color: P.inkLight }}>{u.created_at ? new Date(u.created_at).toLocaleDateString() : '—'}</span>
                 <div style={{ display: "flex", gap: 5 }}>
-                  <button onClick={() => setAdminUsers(us => us.map(x => x.id === u.id ? { ...x, flagged: !x.flagged } : x))} style={{ background: u.flagged ? "#F0B8C844" : P.lavenderLight, border: "none", borderRadius: 8, padding: "4px 8px", cursor: "pointer", fontFamily: FF_S, fontSize: 10, color: u.flagged ? "#D8708A" : P.inkFaint, fontWeight: 600 }} title={u.flagged ? "Unflag" : "Flag"}>⚑</button>
-                  <button onClick={() => setAdminUsers(us => us.map(x => x.id === u.id ? { ...x, suspended: !x.suspended } : x))} style={{ background: u.suspended ? "#F0B8C888" : P.lavenderLight, border: "none", borderRadius: 8, padding: "4px 8px", cursor: "pointer", fontFamily: FF_S, fontSize: 10, color: u.suspended ? "#D8708A" : P.inkFaint, fontWeight: 600 }} title={u.suspended ? "Unsuspend" : "Suspend"}>{u.suspended ? "↩" : "⊘"}</button>
+                  <button onClick={() => suspendUser(u.id, !u.suspended)} style={{ background: u.suspended ? "#F0B8C888" : P.lavenderLight, border: "none", borderRadius: 8, padding: "4px 8px", cursor: "pointer", fontFamily: FF_S, fontSize: 10, color: u.suspended ? "#D8708A" : P.inkFaint, fontWeight: 600 }} title={u.suspended ? "Unsuspend" : "Suspend"}>{u.suspended ? "↩ Restore" : "⊘ Suspend"}</button>
                 </div>
               </div>
             ))}
@@ -4627,20 +4640,23 @@ const AdminPage = ({ widgetRequests, setWidgetRequests }) => {
       {card(
         <div>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
-            <span style={{ fontFamily: FF_S, fontSize: 13, color: P.inkFaint }}>{totalUsers} users · {WIDGET_POPULARITY.reduce((a,w)=>a+w.count,0)} total widget installs</span>
+            <span style={{ fontFamily: FF_S, fontSize: 13, color: P.inkFaint }}>{totalUsers} registered users</span>
           </div>
+          <p style={{ fontFamily: FF_S, fontSize: 13, color: P.inkFaint, margin: "0 0 20px", padding: "12px 16px", background: P.lavenderLight, borderRadius: 12 }}>
+            Widget usage analytics will populate as users enable widgets on their dashboards.
+          </p>
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-            {WIDGET_POPULARITY.map((w, i) => (
+            {INITIAL_WIDGETS.slice(0, 10).map((w, i) => (
               <div key={w.id} style={{ display: "flex", alignItems: "center", gap: 14 }}>
                 <div style={{ width: 22, fontFamily: FF_S, fontSize: 12, color: P.inkFaint, textAlign: "right", flexShrink: 0 }}>#{i+1}</div>
                 <div style={{ width: 28, height: 28, borderRadius: 8, background: WIDGET_COLORS[i % WIDGET_COLORS.length].bg, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, flexShrink: 0 }}>{w.icon}</div>
                 <div style={{ flex: 1 }}>
                   <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}>
                     <span style={{ fontFamily: FF_S, fontSize: 13, fontWeight: 600, color: P.ink }}>{w.title}</span>
-                    <span style={{ fontFamily: FF_S, fontSize: 12, color: P.inkFaint }}>{w.count} / {totalUsers} users · {w.pct}%</span>
+                    <span style={{ fontFamily: FF_S, fontSize: 12, color: P.inkFaint }}>—</span>
                   </div>
                   <div style={{ background: P.lavenderLight, borderRadius: 20, height: 7, overflow: "hidden" }}>
-                    <div style={{ width: `${w.pct}%`, height: "100%", background: `linear-gradient(90deg, ${WIDGET_COLORS[i % WIDGET_COLORS.length].dot}, ${WIDGET_COLORS[i % WIDGET_COLORS.length].accent})`, borderRadius: 20, transition: "width 0.6s ease" }} />
+                    <div style={{ width: `0%`, height: "100%", background: WIDGET_COLORS[i % WIDGET_COLORS.length].dot, borderRadius: 20 }} />
                   </div>
                 </div>
               </div>
@@ -5410,10 +5426,11 @@ const UserProfileModal = ({ user, following, toggleFollow, onClose, onMessage })
 };
 
 const SettingsPage = ({ profilePic, setProfilePic, onLogout }) => {
+  const { user, profile, updateProfile } = useAuth();
   const [section, setSection] = useState("account");
-  const [name, setName]       = useState("Margot Ellison");
-  const [email, setEmail]     = useState("margot@studioellison.co");
-  const [handle, setHandle]   = useState("@margot");
+  const [name, setName]       = useState(profile?.name || "");
+  const [email, setEmail]     = useState(user?.email || "");
+  const [handle, setHandle]   = useState(profile?.handle || "");
   const [saved, setSaved]     = useState(false);
   const [accent, setAccent]   = useState("#C9B8F0");
   const [notifPrefs, setNotifPrefs] = useState({ follows: true, likes: true, comments: true, mentions: true, announcements: false });
@@ -5421,7 +5438,10 @@ const SettingsPage = ({ profilePic, setProfilePic, onLogout }) => {
   const [deleteConfirm, setDeleteConfirm] = useState("");
   const fileRef = useRef();
 
-  const save = () => { setSaved(true); setTimeout(() => setSaved(false), 2500); };
+  const save = async () => {
+    try { await updateProfile({ name, handle }); } catch {}
+    setSaved(true); setTimeout(() => setSaved(false), 2500);
+  };
 
   const ACCENTS = ["#C9B8F0","#B4E8D8","#F8CEBA","#B8D8F0","#F0B8C8","#F5E8B0","#A8D8A8","#F0D0A8"];
 
@@ -5872,6 +5892,8 @@ export default function App() {
   const unreadNotifs = notifications.filter(n => !n.read).length;
   const totalUnread = convos.reduce((a, c) => a + c.messages.filter(m => m.from !== "me" && !m.read).length, 0);
   const isLoggedIn = !!user;
+  const ADMIN_ID = import.meta.env.VITE_ADMIN_USER_ID;
+  const isAdmin = !!user && !!ADMIN_ID && user.id === ADMIN_ID;
 
   const navigate = (p) => {
     // Guard: redirect to login if not authenticated and trying to access protected pages
@@ -5896,7 +5918,23 @@ export default function App() {
     }
     return { error };
   };
-  const completeOnboarding = () => {
+  const [initialWidgets, setInitialWidgets] = useState(null);
+
+  const completeOnboarding = async (name, bio, chosenIds) => {
+    // Update profile in Supabase with name/bio from onboarding
+    try {
+      const { supabase } = await import('./lib/supabase');
+      if (user && (name || bio)) {
+        await supabase.from('profiles').update({ name, bio }).eq('id', user.id);
+      }
+    } catch {}
+    // Build widget state with chosen ones enabled
+    const widgets = INITIAL_WIDGETS.map(w => ({
+      ...w,
+      enabled: chosenIds.includes(w.id),
+      isPublic: chosenIds.includes(w.id),
+    }));
+    setInitialWidgets(widgets);
     setHasOnboarded(true);
     setShowOnboarding(false);
     setPage("dashboard");
@@ -5908,14 +5946,11 @@ export default function App() {
   const protectedPages = ["dashboard","customize","messages","feed","work","admin","settings"];
   useEffect(() => {
     if (authLoading) return;
-    if (showOnboarding) return; // never redirect mid-onboarding
-    if (!user && protectedPages.includes(page)) {
-      setPage("login");
-    }
-    if (user && ["login","signup"].includes(page)) {
-      setPage("dashboard");
-    }
-  }, [user, authLoading, page, showOnboarding]);
+    if (showOnboarding) return;
+    if (!user && protectedPages.includes(page)) { setPage("login"); return; }
+    if (user && ["login","signup"].includes(page)) { setPage("dashboard"); return; }
+    if (page === "admin" && !isAdmin) { setPage("dashboard"); }
+  }, [user, authLoading, page, showOnboarding, isAdmin]);
 
   // Show nothing while Supabase checks session — prevents flash of login page
   if (authLoading) return (
@@ -6061,7 +6096,7 @@ export default function App() {
         }
       `}</style>
 
-      <Nav page={page} onNavigate={navigate} onLogout={logout} unreadCount={totalUnread} isLoggedIn={isLoggedIn} me={ME_BASE} profilePic={profilePic} following={following}
+      <Nav page={page} onNavigate={navigate} onLogout={logout} unreadCount={totalUnread} isLoggedIn={isLoggedIn} isAdmin={isAdmin} me={profile || ME_BASE} profilePic={profilePic} following={following}
         unreadNotifs={unreadNotifs} showNotifs={showNotifs} setShowNotifs={setShowNotifs}
         notifications={notifications}
         onMarkRead={(id) => setNotifications(ns => ns.map(n => n.id === id ? { ...n, read: true } : n))}
@@ -6073,12 +6108,12 @@ export default function App() {
       {page === "signup"  && !user && <AuthPage mode="signup" onSwitch={() => navigate("login")}  onEnter={handleSignup} />}
 
       {["dashboard","customize"].includes(page) && user && (
-        <DashboardPage view={page} onNavigate={navigate} profilePic={profilePic} setProfilePic={setProfilePic} widgetRequests={widgetRequests} setWidgetRequests={setWidgetRequests} following={following} toggleFollow={toggleFollow} onViewUser={openUserProfile} />
+        <DashboardPage view={page} onNavigate={navigate} profilePic={profilePic} setProfilePic={setProfilePic} widgetRequests={widgetRequests} setWidgetRequests={setWidgetRequests} following={following} toggleFollow={toggleFollow} onViewUser={openUserProfile} initialWidgets={initialWidgets} />
       )}
       {page === "messages" && user && <MessagesPage requests={requests} setRequests={setRequests} />}
       {page === "feed"     && user && <FeedPage onNavigate={navigate} onViewUser={openUserProfile} />}
       {page === "work"     && user && <WorkPage />}
-      {page === "admin"    && user && <AdminPage widgetRequests={widgetRequests} setWidgetRequests={setWidgetRequests} />}
+      {page === "admin"    && isAdmin && <AdminPage widgetRequests={widgetRequests} setWidgetRequests={setWidgetRequests} />}
       {page === "settings" && user && <SettingsPage profilePic={profilePic} setProfilePic={setProfilePic} onLogout={logout} />}
 
       {/* User profile modal */}
