@@ -1,9 +1,4 @@
-import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
-import { useAuth } from './hooks/useAuth'
-import { useFeed } from './hooks/useFeed'
-import { useMessages } from './hooks/useMessages'
-import { useAdminData } from './hooks/useAdminData'
-
+import { useState, useEffect, useRef } from "react";
 
 const P = {
   lavender: "#C9B8F0", lavenderLight: "#EDE8FB", lavenderMid: "#D8CCFA",
@@ -44,32 +39,131 @@ const getUser = (id) => ALL_USERS.find(u => u.id === id);
 const now = Date.now();
 const mins = (n) => now - n * 60000;
 
-const INITIAL_CONVOS = [];
-const INITIAL_REQUESTS = [];
+const INITIAL_CONVOS = [
+  {
+    id: "c1", type: "dm", participants: ["me", "u1"],
+    messages: [
+      { id: "m1", from: "u1", text: "Hey! Loved your reading list update 📚", ts: mins(62), read: true },
+      { id: "m2", from: "me", text: "Thank you! I've been on such a good streak lately", ts: mins(60), read: true },
+      { id: "m3", from: "u1", text: "I just finished Piranesi — it was SO good", ts: mins(58), read: true },
+      { id: "m4", from: "me", text: "Right?? It's unlike anything else. Have you added it to your Nook?", ts: mins(55), read: true },
+      { id: "m5", from: "u1", text: "Just did! Also started following your goals widget — the freelance studio one is so inspiring 🌿", ts: mins(10), read: false },
+    ],
+  },
+  {
+    id: "c2", type: "dm", participants: ["me", "u2"],
+    messages: [
+      { id: "m1", from: "u2", text: "Your new dashboard layout looks stunning by the way", ts: mins(130), read: true },
+      { id: "m2", from: "me", text: "Oh that means so much coming from you, your photography Nook is gorgeous", ts: mins(128), read: true },
+      { id: "m3", from: "u2", text: "Want to do a collab? I was thinking a shared mood board thing", ts: mins(125), read: true },
+      { id: "m4", from: "me", text: "Yes absolutely, let's plan it!", ts: mins(120), read: true },
+    ],
+  },
+  {
+    id: "c3", type: "group", name: "Book Club 🌙",
+    participants: ["me", "u1", "u3", "u6"],
+    messages: [
+      { id: "m1", from: "u6", text: "What are we reading this month?", ts: mins(300), read: true },
+      { id: "m2", from: "u1", text: "I vote Brave New World — it's on a few of our Nooks already!", ts: mins(295), read: true },
+      { id: "m3", from: "u3", text: "Seconded 🙋", ts: mins(290), read: true },
+      { id: "m4", from: "me", text: "That works perfectly, I've been meaning to finally read it", ts: mins(280), read: true },
+      { id: "m5", from: "u6", text: "Perfect! Starting next Sunday?", ts: mins(25), read: false },
+    ],
+  },
+  {
+    id: "c4", type: "dm", participants: ["me", "u4"],
+    messages: [
+      { id: "m1", from: "u4", text: "Hey Margot! Huge fan of your Nook. Would love to connect 👋", ts: mins(400), read: true },
+      { id: "m2", from: "me", text: "Hi Felix! Thanks so much, yours is really lovely too 🎵", ts: mins(380), read: true },
+    ],
+  },
+];
+
+const INITIAL_REQUESTS = [
+  { id: "r1", from: "u5", preview: "Hi! I found your Nook through Ada's profile. Your goal-tracking widget is so motivating!", ts: mins(45) },
+  { id: "r2", from: "u3", preview: "Hey Margot — Iris here. Love your aesthetic, we should connect!", ts: mins(720) },
+];
 
 const INITIAL_WIDGETS = [
-  { id: "todo",        title: "To-Do List",         icon: "✓",  enabled: false, isPublic: false, colorIdx: 0, category: "productivity",     data: { items: [] }},
-  { id: "goals",       title: "Goals for the Year",  icon: "★",  enabled: false, isPublic: false, colorIdx: 1, category: "productivity",     data: { items: [] }},
-  { id: "reading",     title: "Reading List",         icon: "📖", enabled: false, isPublic: false, colorIdx: 2, category: "culture",          data: { items: [] }},
-  { id: "mood",        title: "Mood Tracker",         icon: "☀",  enabled: false, isPublic: false, colorIdx: 3, category: "lifestyle",        data: { week: [] }},
-  { id: "links",       title: "Saved Links",           icon: "🔗", enabled: false, isPublic: false, colorIdx: 4, category: "productivity",     data: { items: [] }},
-  { id: "gratitude",   title: "Gratitude Journal",     icon: "♡",  enabled: false, isPublic: false, colorIdx: 5, category: "lifestyle",        data: { entries: [] }},
-  { id: "sobriety",    title: "Sobriety Streak",       icon: "🌱", enabled: false, isPublic: false, colorIdx: 1, category: "lifestyle",        data: { label: "", startDate: null }},
-  { id: "habitstreak", title: "Habit Tracker",         icon: "🔥", enabled: false, isPublic: false, colorIdx: 2, category: "lifestyle",        data: { habits: [] }},
-  { id: "instagram",   title: "Instagram",              icon: "📸", enabled: false, isPublic: false, colorIdx: 4, category: "social",           data: { username: "" }},
-  { id: "sports",      title: "Sports Tracker",         icon: "🏃", enabled: false, isPublic: false, colorIdx: 3, category: "sports",           data: { activities: [] }},
-  { id: "hobbies",     title: "Hobbies",                icon: "🎨", enabled: false, isPublic: false, colorIdx: 5, category: "lifestyle",        data: { hobbies: [] }},
-  { id: "linkedin",    title: "LinkedIn",               icon: "💼", enabled: false, isPublic: false, colorIdx: 0, category: "social",           data: { username: "", headline: "", followers: "", posts: [] }},
-  { id: "twitter",     title: "Twitter / X",            icon: "✕",  enabled: false, isPublic: false, colorIdx: 3, category: "social",           data: { username: "", followers: "", tweets: [] }},
-  { id: "projects",    title: "Current Projects",       icon: "🚀", enabled: false, isPublic: false, colorIdx: 1, category: "entrepreneurship", data: { projects: [] }},
-  { id: "podcast",     title: "Podcast Picks",          icon: "🎙", enabled: false, isPublic: false, colorIdx: 4, category: "culture",          data: { pods: [] }},
-  { id: "travel",      title: "Travel",                 icon: "✈",  enabled: false, isPublic: false, colorIdx: 2, category: "lifestyle",        data: { trips: [] }},
-  { id: "articles",    title: "Articles",               icon: "✍",  enabled: false, isPublic: false, colorIdx: 5, category: "culture",          data: { articles: [] }},
-  { id: "exercise",    title: "Exercise Log",            icon: "🏃", enabled: false, isPublic: false, colorIdx: 1, category: "sports",           data: { days: [] }},
-  { id: "archive",     title: "Year in Review",          icon: "✦",  enabled: false, isPublic: false, colorIdx: 5, category: "lifestyle",        data: { years: [] }},
-  { id: "gallery",     title: "Gallery",                 icon: "🖼",  enabled: false, isPublic: false, colorIdx: 4, category: "social",           data: { posts: [] }},
-  { id: "blog",        title: "Blog",                    icon: "✍",  enabled: false, isPublic: false, colorIdx: 0, category: "culture",          data: { posts: [] }},
-  { id: "bookmarks",   title: "Bookmarks",               icon: "🔖", enabled: false, isPublic: false, colorIdx: 2, category: "productivity",     data: { bookmarks: null }},
+  { id: "todo",        title: "To-Do List",         icon: "✓",  enabled: true,  isPublic: true,  colorIdx: 0, category: "productivity",
+    data: { items: [{ text: "Redesign portfolio homepage", done: true }, { text: "Read 'The Creative Act'", done: false }, { text: "Call mum on Sunday", done: false }, { text: "Organise Notion workspace", done: true }, { text: "Start morning yoga routine", done: false }]}},
+  { id: "goals",       title: "Goals for the Year",  icon: "★",  enabled: true,  isPublic: true,  colorIdx: 1, category: "productivity",
+    data: { items: [{ text: "Read 24 books", progress: 8, total: 24 }, { text: "Travel to 3 new countries", progress: 1, total: 3 }, { text: "Launch freelance studio", progress: 60, total: 100 }, { text: "Run a 10k", progress: 0, total: 100 }]}},
+  { id: "reading",     title: "Reading List",         icon: "📖", enabled: true,  isPublic: false, colorIdx: 2, category: "culture",
+    data: { items: [{ title: "The Creative Act", author: "Rick Rubin", status: "reading" }, { title: "Piranesi", author: "Susanna Clarke", status: "done" }, { title: "Brave New World", author: "Aldous Huxley", status: "next" }, { title: "Tomorrow, and Tomorrow", author: "Gabrielle Zevin", status: "done" }, { title: "The Midnight Library", author: "Matt Haig", status: "next" }]}},
+  { id: "mood",        title: "Mood Tracker",         icon: "☀",  enabled: true,  isPublic: false, colorIdx: 3, category: "lifestyle",
+    data: { week: [{ day: "Mon", mood: 4 }, { day: "Tue", mood: 3 }, { day: "Wed", mood: 5 }, { day: "Thu", mood: 4 }, { day: "Fri", mood: 5 }, { day: "Sat", mood: 3 }, { day: "Sun", mood: 4 }]}},
+  { id: "links",       title: "Saved Links",           icon: "🔗", enabled: false, isPublic: true,  colorIdx: 4, category: "productivity",
+    data: { items: [{ title: "Figma Community Picks", url: "#" }, { title: "Design inspiration board", url: "#" }, { title: "Notion templates gallery", url: "#" }]}},
+  { id: "gratitude",   title: "Gratitude Journal",     icon: "♡",  enabled: false, isPublic: false, colorIdx: 5, category: "lifestyle",
+    data: { entries: ["A genuinely good cup of coffee this morning", "Finally finishing that tricky project brief", "Long walk with no destination"]}},
+  { id: "sobriety",    title: "Sobriety Streak",       icon: "🌱", enabled: false, isPublic: false, colorIdx: 1, category: "lifestyle",
+    data: { label: "alcohol-free", startDate: "2024-11-01" }},
+  { id: "habitstreak", title: "Habit Tracker",         icon: "🔥", enabled: true,  isPublic: true,  colorIdx: 2, category: "lifestyle",
+    data: { habits: [{ id: "hb1", name: "Morning walk", streak: 12, history: [] }, { id: "hb2", name: "Read 20 mins", streak: 7, history: [] }, { id: "hb3", name: "No phone till 9am", streak: 3, history: [] }]}},
+  { id: "instagram",   title: "Instagram",              icon: "📸", enabled: false, isPublic: true,  colorIdx: 4, category: "social",
+    data: { username: "margot.creates" }},
+  // ── Sports
+  { id: "sports",      title: "Sports Tracker",         icon: "🏃", enabled: false, isPublic: true,  colorIdx: 3, category: "sports",
+    data: { activities: [
+      { id: "s1", type: "Running",  icon: "🏃", unit: "km",  sessions: [{ date: "2025-03-01", value: 5.2, note: "Morning park run" }, { date: "2025-03-05", value: 8, note: "Long run" }, { date: "2025-03-08", value: 6.5, note: "Easy pace" }] },
+      { id: "s2", type: "Cycling",  icon: "🚴", unit: "km",  sessions: [{ date: "2025-03-03", value: 22, note: "Coast road" }, { date: "2025-03-07", value: 35, note: "Hills route" }] },
+      { id: "s3", type: "Surfing",  icon: "🏄", unit: "hrs", sessions: [{ date: "2025-03-02", value: 2, note: "Good swell", location: "Lahinch" }, { date: "2025-03-09", value: 1.5, note: "Choppy but fun", location: "Bundoran" }] },
+    ]}},
+  // ── Hobbies
+  { id: "hobbies",     title: "Hobbies",                icon: "🎨", enabled: false, isPublic: true,  colorIdx: 5, category: "lifestyle",
+    data: { hobbies: [
+      { id: "h1", name: "Watercolour painting", emoji: "🎨", note: "Working on botanical illustrations", level: 3 },
+      { id: "h2", name: "Film photography",     emoji: "📷", note: "Shooting on a Canon AE-1 Program",   level: 4 },
+      { id: "h3", name: "Bread making",         emoji: "🍞", note: "Sourdough starter named Gerald",     level: 2 },
+    ]}},
+  // ── Social Media
+  { id: "linkedin",    title: "LinkedIn",               icon: "💼", enabled: false, isPublic: true,  colorIdx: 0, category: "social",
+    data: { username: "margot-ellison", headline: "Designer & Creative Director", followers: "1.4k", posts: [
+      { text: "Just wrapped up a rebrand project — three months of work finally live!", likes: 84 },
+      { text: "Thinking about the intersection of design systems and brand identity lately.", likes: 61 },
+      { text: "Excited to announce I'm going freelance full-time in April! 🎉", likes: 203 },
+    ]}},
+  { id: "twitter",     title: "Twitter / X",            icon: "✕",  enabled: false, isPublic: true,  colorIdx: 3, category: "social",
+    data: { username: "margotellison", followers: "2.1k", tweets: [
+      { text: "the way a good font can completely change how you feel about a brief 🌿", likes: 148, rts: 22 },
+      { text: "going freelance is terrifying and completely right at the same time", likes: 312, rts: 54 },
+      { text: "book recommendation thread for slow, beautiful mornings 🧵👇", likes: 89, rts: 31 },
+    ]}},
+  // ── Entrepreneurship
+  { id: "projects",    title: "Current Projects",       icon: "🚀", enabled: false, isPublic: true,  colorIdx: 1, category: "entrepreneurship",
+    data: { projects: [
+      { id: "p1", name: "Studio Ellison", desc: "Independent design studio launching April 2025. Branding, identity, and digital products.", url: "https://studioellison.co", status: "building", emoji: "🎨" },
+      { id: "p2", name: "Palette",        desc: "A colour theory app for designers. Currently in private beta.", url: "https://palette.app", status: "beta",     emoji: "🌈" },
+    ]}},
+  // ── Podcast
+  { id: "podcast",     title: "Podcast Picks",          icon: "🎙", enabled: false, isPublic: true,  colorIdx: 4, category: "culture",
+    data: { pods: [
+      { id: "pd1", name: "99% Invisible",         host: "Roman Mars",      ep: "The Smell of Rain",            status: "listening", emoji: "🏛" },
+      { id: "pd2", name: "Conan O'Brien Needs a Friend", host: "Conan O'Brien", ep: "Nicole Kidman Returns",   status: "done",      emoji: "😂" },
+      { id: "pd3", name: "How I Built This",      host: "Guy Raz",         ep: "Duolingo",                     status: "next",      emoji: "💡" },
+      { id: "pd4", name: "Huberman Lab",          host: "Andrew Huberman", ep: "Science of Creativity",        status: "done",      emoji: "🧠" },
+    ]}},
+  // ── Travel
+  { id: "travel",      title: "Travel",                 icon: "✈",  enabled: false, isPublic: true,  colorIdx: 2, category: "lifestyle",
+    data: { trips: [
+      { id: "t1", place: "Lisbon, Portugal",  date: "Feb 2025", note: "Pastel de nata every morning 🥐", photo: null, emoji: "🇵🇹" },
+      { id: "t2", place: "Kyoto, Japan",      date: "Nov 2024", note: "Bamboo groves at dawn",            photo: null, emoji: "🇯🇵" },
+      { id: "t3", place: "Oaxaca, Mexico",    date: "Aug 2024", note: "Colours unlike anything I've seen", photo: null, emoji: "🇲🇽" },
+    ]}},
+  // ── Articles
+  { id: "articles",    title: "Articles",               icon: "✍",  enabled: false, isPublic: true,  colorIdx: 5, category: "culture",
+    data: { articles: [
+      { id: "a1", title: "Why good design is mostly about restraint",   url: "#", type: "written",    date: "Mar 2025", note: "Published on Medium" },
+      { id: "a2", title: "The case for slow mornings",                  url: "#", type: "written",    date: "Jan 2025", note: "Personal blog" },
+      { id: "a3", title: "How Figma changed how designers think",       url: "#", type: "reading",   date: "Mar 2025", note: "Wired" },
+      { id: "a4", title: "The quiet revolution in type design",         url: "#", type: "reading",   date: "Feb 2025", note: "It's Nice That" },
+    ]}},
+  { id: "exercise",  title: "Exercise Log",   icon: "🏃", enabled: true,  isPublic: false, colorIdx: 1, category: "sports",       data: { days: [] }},
+  { id: "archive",   title: "Year in Review", icon: "✦",  enabled: true,  isPublic: false, colorIdx: 5, category: "lifestyle",     data: { years: [] }},
+  { id: "gallery",   title: "Gallery",        icon: "🖼",  enabled: true,  isPublic: true,  colorIdx: 4, category: "social",        data: { posts: [] }},
+  { id: "blog",      title: "Blog",           icon: "✍",  enabled: true,  isPublic: true,  colorIdx: 0, category: "culture",       data: { posts: [] }},
+  { id: "bookmarks", title: "Bookmarks",      icon: "🔖", enabled: true,  isPublic: false, colorIdx: 2, category: "productivity",  data: { bookmarks: null }},
 ];
 
 function fmtTime(ts) {
@@ -143,7 +237,7 @@ const Toggle = ({ on, onChange, small }) => {
   );
 };
 
-const Nav = ({ page, onNavigate, onLogout, unreadCount, isLoggedIn, isAdmin, me, profilePic, following, unreadNotifs, showNotifs, setShowNotifs, notifications, onMarkRead, onMarkAllRead }) => {
+const Nav = ({ page, onNavigate, onLogout, unreadCount, isLoggedIn, me, profilePic, following, unreadNotifs, showNotifs, setShowNotifs, notifications, onMarkRead, onMarkAllRead }) => {
   const [menuOpen, setMenuOpen] = useState(false);
   const close = () => setMenuOpen(false);
 
@@ -165,6 +259,7 @@ const Nav = ({ page, onNavigate, onLogout, unreadCount, isLoggedIn, isAdmin, me,
                 <button key={v} onClick={() => onNavigate(v)} style={{ background: page === v ? P.lavender : "transparent", border: `1.5px solid ${page === v ? P.lavender : P.lavender + "66"}`, borderRadius: 10, padding: "7px 15px", cursor: "pointer", fontFamily: FF_S, fontSize: 13, color: P.ink, fontWeight: page === v ? 600 : 400, transition: "all 0.2s", display: "flex", alignItems: "center", gap: 6 }}>
                   {label}
                   {v === "messages" && unreadCount > 0 && <span style={{ background: P.rose, borderRadius: 20, padding: "1px 7px", fontSize: 10, fontWeight: 700, color: P.ink }}>{unreadCount}</span>}
+                  {v === "feed" && following?.length > 0 && <span style={{ background: page === "feed" ? P.ink + "22" : P.lavender, borderRadius: 20, padding: "1px 7px", fontSize: 10, fontWeight: 700, color: P.ink }}>{following.length}</span>}
                 </button>
               ))}
               <div style={{ width: 1, height: 22, background: P.lavender + "55", margin: "0 4px" }} />
@@ -177,7 +272,7 @@ const Nav = ({ page, onNavigate, onLogout, unreadCount, isLoggedIn, isAdmin, me,
               </div>
               <UserAvatar user={me} size={32} showStatus photoPic={profilePic} />
               <button onClick={() => onNavigate("settings")} title="Settings" style={{ background: page === "settings" ? P.lavender : "transparent", border: `1.5px solid ${page === "settings" ? P.lavender : P.lavender + "44"}`, borderRadius: 10, padding: "6px 10px", cursor: "pointer", fontSize: 14, color: P.inkLight, lineHeight: 1, transition: "all 0.2s" }}>⚙</button>
-              {isAdmin && <button onClick={() => onNavigate("admin")} title="Admin panel" style={{ background: page === "admin" ? P.lavender : "transparent", border: `1.5px solid ${page === "admin" ? P.lavender : P.lavender + "44"}`, borderRadius: 10, padding: "6px 8px", cursor: "pointer", fontSize: 11, color: P.inkFaint, lineHeight: 1, transition: "all 0.2s", fontFamily: FF_S, fontWeight: 600 }}>ADMIN</button>}
+              <button onClick={() => onNavigate("admin")} title="Admin panel" style={{ background: page === "admin" ? P.lavender : "transparent", border: `1.5px solid ${page === "admin" ? P.lavender : P.lavender + "44"}`, borderRadius: 10, padding: "6px 8px", cursor: "pointer", fontSize: 11, color: P.inkFaint, lineHeight: 1, transition: "all 0.2s", fontFamily: FF_S, fontWeight: 600 }}>ADMIN</button>
               <button onClick={onLogout} style={{ background: "transparent", border: `1.5px solid ${P.rose}55`, borderRadius: 10, padding: "7px 14px", cursor: "pointer", fontFamily: FF_S, fontSize: 13, color: P.inkLight }}>Log out</button>
             </>
           ) : (
@@ -213,10 +308,11 @@ const Nav = ({ page, onNavigate, onLogout, unreadCount, isLoggedIn, isAdmin, me,
         <div style={{ borderTop: `1px solid ${P.lavender}33`, background: P.white, padding: "12px 16px 20px" }}>
           {isLoggedIn ? (
             <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-              {[["dashboard","🏠 My Dashboard"],["feed","✦ Feed"],["messages","✉ Messages"],["work","🔒 Work"],["customize","⊞ Customise"],["settings","⚙ Settings"],...(isAdmin ? [["admin","◈ Admin"]] : [])].map(([v, label]) => (
+              {[["dashboard","🏠 My Dashboard"],["feed","✦ Feed"],["messages","✉ Messages"],["work","🔒 Work"],["customize","⊞ Customise"],["settings","⚙ Settings"],["admin","◈ Admin"]].map(([v, label]) => (
                 <button key={v} onClick={() => { onNavigate(v); close(); }} style={{ background: page === v ? P.lavenderLight : "transparent", border: `1px solid ${page === v ? P.lavender : "transparent"}`, borderRadius: 12, padding: "12px 16px", cursor: "pointer", fontFamily: FF_S, fontSize: 14, color: P.ink, fontWeight: page === v ? 600 : 400, textAlign: "left", display: "flex", alignItems: "center", gap: 8, justifyContent: "space-between" }}>
                   <span>{label}</span>
                   {v === "messages" && unreadCount > 0 && <span style={{ background: P.rose, borderRadius: 20, padding: "1px 8px", fontSize: 11, fontWeight: 700, color: P.ink }}>{unreadCount}</span>}
+                  {v === "feed" && following?.length > 0 && <span style={{ background: P.lavender, borderRadius: 20, padding: "1px 8px", fontSize: 11, fontWeight: 700, color: P.ink }}>{following.length}</span>}
                 </button>
               ))}
               <div style={{ height: 1, background: P.lavender + "33", margin: "8px 0" }} />
@@ -2462,9 +2558,7 @@ const ShareWidgetModal = ({ widget, onClose }) => {
   const [justSent, setJustSent] = useState(null); // id of last-sent user (for flash)
   const color                 = WIDGET_COLORS[widget.colorIdx];
 
-  // In future this would be real connections from Supabase
-  const connections = [];
-  const filtered = connections.filter(u =>
+  const filtered = USERS.filter(u =>
     u.name.toLowerCase().includes(search.toLowerCase()) ||
     u.handle.toLowerCase().includes(search.toLowerCase())
   );
@@ -2515,11 +2609,6 @@ const ShareWidgetModal = ({ widget, onClose }) => {
           </div>
 
           <div style={{ maxHeight: 240, overflowY: "auto" }}>
-            {filtered.length === 0 && (
-              <div style={{ padding: "24px", textAlign: "center", color: P.inkFaint, fontFamily: FF_S, fontSize: 13 }}>
-                {search ? "No users found" : "No connections yet — copy the link above to share"}
-              </div>
-            )}
             {filtered.map(u => {
               const alreadySent = sent.includes(u.id);
               const isFlash     = justSent === u.id;
@@ -2615,9 +2704,7 @@ const NewConvoModal = ({ onClose, onStart }) => {
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState([]);
   const [groupName, setGroupName] = useState("");
-  // In future: real connections from Supabase
-  const connections = [];
-  const filtered = connections.filter(u => u.name.toLowerCase().includes(search.toLowerCase()) || u.handle.toLowerCase().includes(search.toLowerCase()));
+  const filtered = USERS.filter(u => u.name.toLowerCase().includes(search.toLowerCase()) || u.handle.toLowerCase().includes(search.toLowerCase()));
   const toggle = (id) => { if (tab === "dm") setSelected([id]); else setSelected(s => s.includes(id) ? s.filter(x => x !== id) : [...s, id]); };
   const canStart = tab === "dm" ? selected.length === 1 : selected.length >= 2 && groupName.trim();
   return (
@@ -2653,11 +2740,6 @@ const NewConvoModal = ({ onClose, onStart }) => {
           )}
         </div>
         <div style={{ overflowY: "auto", flex: 1, padding: "0 12px 12px" }}>
-          {filtered.length === 0 && (
-            <div style={{ padding: "28px", textAlign: "center", color: P.inkFaint, fontFamily: FF_S, fontSize: 13 }}>
-              {search ? "No users found" : "No connections yet — connect with people from the Feed"}
-            </div>
-          )}
           {filtered.map(u => (
             <div key={u.id} onClick={() => toggle(u.id)} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 12px", borderRadius: 14, cursor: "pointer", background: selected.includes(u.id) ? P.lavenderLight : "transparent", transition: "background 0.15s" }}>
               <UserAvatar user={u} size={40} showStatus />
@@ -2704,28 +2786,26 @@ const RequestCard = ({ req, onAccept, onDecline }) => {
   );
 };
 
-const ConvoItem = ({ convo, isActive, onClick, currentUserId }) => {
-  const isGroup = convo.isGroup;
-  const lastMsg = convo.lastMessage;
-  const unread = convo.unreadCount || 0;
-  const displayUser = convo.displayAvatar;
+const ConvoItem = ({ convo, isActive, onClick }) => {
+  const isGroup = convo.type === "group";
+  const others = convo.participants.filter(id => id !== "me").map(getUser);
+  const lastMsg = convo.messages[convo.messages.length - 1];
+  const unread = convo.messages.filter(m => m.from !== "me" && !m.read).length;
+  if (!lastMsg) return null;
+  const lastSender = getUser(lastMsg.from);
   return (
     <div onClick={onClick} style={{ display: "flex", alignItems: "center", gap: 12, padding: "11px 14px", borderRadius: 16, cursor: "pointer", background: isActive ? P.lavenderLight : "transparent", border: `1.5px solid ${isActive ? P.lavender : "transparent"}`, transition: "all 0.15s", marginBottom: 3 }}>
-      {isGroup
-        ? <div style={{ width: 44, height: 44, borderRadius: "50%", background: P.lavender, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, flexShrink: 0 }}>👥</div>
-        : <UserAvatar user={displayUser} size={44} showStatus />}
+      {isGroup ? <GroupAvatar participants={convo.participants} size={44} /> : <UserAvatar user={others[0]} size={44} showStatus />}
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 3 }}>
           <span style={{ fontFamily: FF_S, fontSize: 14, fontWeight: unread > 0 ? 700 : 500, color: P.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-            {convo.displayName}
+            {isGroup ? convo.name : others[0]?.name}
           </span>
-          {lastMsg && <span style={{ fontFamily: FF_S, fontSize: 11, color: P.inkFaint, flexShrink: 0, marginLeft: 8 }}>{fmtTime(new Date(lastMsg.created_at).getTime())}</span>}
+          <span style={{ fontFamily: FF_S, fontSize: 11, color: P.inkFaint, flexShrink: 0, marginLeft: 8 }}>{fmtTime(lastMsg.ts)}</span>
         </div>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <span style={{ fontFamily: FF_S, fontSize: 12.5, color: unread > 0 ? P.ink : P.inkFaint, fontWeight: unread > 0 ? 500 : 400, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>
-            {lastMsg
-              ? `${lastMsg.sender_id === currentUserId ? "You: " : isGroup ? `${lastMsg.profiles?.name?.split(" ")[0]}: ` : ""}${lastMsg.content}`
-              : "No messages yet"}
+            {lastMsg.from === "me" ? "You: " : isGroup ? `${lastSender?.name.split(" ")[0]}: ` : ""}{lastMsg.text}
           </span>
           {unread > 0 && <div style={{ width: 18, height: 18, borderRadius: "50%", background: P.lavender, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: FF_S, fontSize: 10, fontWeight: 700, color: P.ink, flexShrink: 0, marginLeft: 8 }}>{unread}</div>}
         </div>
@@ -2734,81 +2814,81 @@ const ConvoItem = ({ convo, isActive, onClick, currentUserId }) => {
   );
 };
 
-const ConversationView = ({ convo, messages, messagesLoading, sendMessage, setTyping, typingUsers, currentUserId }) => {
+const ConversationView = ({ convo }) => {
+  const [messages, setMessages] = useState(convo.messages);
   const [input, setInput] = useState("");
+  const [typingUser, setTypingUser] = useState(null);
   const bottomRef = useRef(null);
-  const isGroup = convo.isGroup;
-  const other = convo.displayAvatar;
+  const others = convo.participants.filter(id => id !== "me").map(getUser);
+  const isGroup = convo.type === "group";
 
-  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages, typingUsers]);
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    setMessages(msgs => msgs.map(m => ({ ...m, read: true })));
+  }, [convo.id]);
 
-  const send = async () => {
+  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages, typingUser]);
+
+  const send = () => {
     if (!input.trim()) return;
-    const text = input.trim();
+    setMessages(prev => [...prev, { id: `m${Date.now()}`, from: "me", text: input.trim(), ts: Date.now(), read: false }]);
     setInput("");
-    setTyping(false);
-    await sendMessage(text);
-  };
-
-  const handleInputChange = (e) => {
-    setInput(e.target.value);
-    setTyping(e.target.value.length > 0);
+    const responder = others[Math.floor(Math.random() * others.length)];
+    setTimeout(() => {
+      setTypingUser(responder);
+      setTimeout(() => {
+        setTypingUser(null);
+        const replies = ["Haha yes exactly! 😄", "That's such a good point", "I was just thinking the same thing!", "Love that for you ✨", "Okay wait tell me more", "I need to add that to my Nook too"];
+        setMessages(prev => [...prev, { id: `m${Date.now()}`, from: responder.id, text: replies[Math.floor(Math.random() * replies.length)], ts: Date.now(), read: true }]);
+      }, 1800);
+    }, 500);
   };
 
   const grouped = messages.reduce((acc, msg, i) => {
     const prev = messages[i - 1];
-    const ts = new Date(msg.created_at).getTime();
-    const prevTs = prev ? new Date(prev.created_at).getTime() : 0;
-    acc.push({ ...msg, isFirst: !prev || prev.sender_id !== msg.sender_id || (ts - prevTs) > 300000 });
+    acc.push({ ...msg, isFirst: !prev || prev.from !== msg.from || (msg.ts - prev.ts) > 300000 });
     return acc;
   }, []);
 
+  const other = others[0];
+  const subColor = other?.status === "online" ? P.online : other?.status === "away" ? P.away : P.inkFaint;
+
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
-      {/* Header */}
       <div style={{ background: P.white, borderBottom: `1px solid ${P.lavender}44`, padding: "14px 24px", display: "flex", alignItems: "center", gap: 14, flexShrink: 0 }}>
-        {isGroup
-          ? <div style={{ width: 40, height: 40, borderRadius: "50%", background: P.lavender, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18 }}>👥</div>
-          : <UserAvatar user={other} size={40} showStatus />}
+        {isGroup ? <GroupAvatar participants={convo.participants} size={40} /> : <UserAvatar user={other} size={40} showStatus />}
         <div style={{ flex: 1 }}>
-          <div style={{ fontFamily: FF_D, fontSize: 17, color: P.ink }}>{convo.displayName}</div>
-          <div style={{ fontFamily: FF_S, fontSize: 12, color: P.inkFaint, marginTop: 1 }}>
-            {isGroup ? `${convo.conversation_members?.length || 0} members` : other?.handle || ""}
+          <div style={{ fontFamily: FF_D, fontSize: 17, color: P.ink }}>{isGroup ? convo.name : other?.name}</div>
+          <div style={{ fontFamily: FF_S, fontSize: 12, color: isGroup ? P.inkFaint : subColor, marginTop: 1 }}>
+            {isGroup ? `${convo.participants.length} members` : `${other?.handle} · ${other?.status === "online" ? "● Online" : other?.status === "away" ? "◐ Away" : "○ Offline"}`}
           </div>
         </div>
       </div>
 
-      {/* Messages */}
       <div style={{ flex: 1, overflowY: "auto", padding: "20px 24px", display: "flex", flexDirection: "column", gap: 2, background: P.bg }}>
-        {messagesLoading && (
-          <div style={{ textAlign: "center", padding: "40px 0", color: P.inkFaint, fontFamily: FF_S, fontSize: 13 }}>Loading messages…</div>
-        )}
-        {!messagesLoading && messages.length === 0 && (
-          <div style={{ textAlign: "center", padding: "60px 0", color: P.inkFaint }}>
-            <div style={{ fontSize: 32, marginBottom: 10 }}>👋</div>
-            <p style={{ fontFamily: FF_S, fontSize: 14, margin: 0 }}>Say hello! Start the conversation.</p>
-          </div>
-        )}
         {grouped.map((msg, i) => {
-          const isMe = msg.sender_id === currentUserId;
-          const sender = msg.profiles;
-          const isLast = !grouped[i + 1] || grouped[i + 1].sender_id !== msg.sender_id;
+          const isMe = msg.from === "me";
+          const sender = getUser(msg.from);
+          const isLast = !grouped[i + 1] || grouped[i + 1].from !== msg.from;
           return (
             <div key={msg.id} style={{ display: "flex", flexDirection: isMe ? "row-reverse" : "row", alignItems: "flex-end", gap: 8, marginTop: msg.isFirst ? 14 : 2, animation: "fadeUp 0.2s ease both" }}>
               {!isMe && <div style={{ width: 28, flexShrink: 0 }}>{isLast && <UserAvatar user={sender} size={28} />}</div>}
               <div style={{ maxWidth: "68%", display: "flex", flexDirection: "column", alignItems: isMe ? "flex-end" : "flex-start" }}>
-                {msg.isFirst && !isMe && isGroup && <span style={{ fontFamily: FF_S, fontSize: 11, color: P.inkFaint, marginBottom: 3, marginLeft: 4 }}>{sender?.name?.split(" ")[0]}</span>}
-                <div style={{ background: isMe ? P.lavender : P.white, border: isMe ? "none" : `1.5px solid ${P.lavender}44`, borderRadius: isMe ? "16px 4px 16px 16px" : "4px 16px 16px 16px", padding: "9px 14px", fontFamily: FF_S, fontSize: 14, color: P.ink, lineHeight: 1.5, boxShadow: isMe ? `0 2px 12px ${P.lavender}50` : "0 1px 4px rgba(61,53,80,0.06)" }}>{msg.content}</div>
-                {isLast && <span style={{ fontFamily: FF_S, fontSize: 10, color: P.inkFaint, marginTop: 3 }}>{fmtTime(new Date(msg.created_at).getTime())}</span>}
+                {msg.isFirst && !isMe && isGroup && <span style={{ fontFamily: FF_S, fontSize: 11, color: P.inkFaint, marginBottom: 3, marginLeft: 4 }}>{sender?.name.split(" ")[0]}</span>}
+                <div style={{ background: isMe ? P.lavender : P.white, border: isMe ? "none" : `1.5px solid ${P.lavender}44`, borderRadius: isMe ? "16px 4px 16px 16px" : "4px 16px 16px 16px", padding: "9px 14px", fontFamily: FF_S, fontSize: 14, color: P.ink, lineHeight: 1.5, boxShadow: isMe ? `0 2px 12px ${P.lavender}50` : "0 1px 4px rgba(61,53,80,0.06)" }}>{msg.text}</div>
+                {isLast && (
+                  <div style={{ display: "flex", alignItems: "center", gap: 4, marginTop: 3 }}>
+                    <span style={{ fontFamily: FF_S, fontSize: 10, color: P.inkFaint }}>{fmtTime(msg.ts)}</span>
+                    {isMe && <span style={{ fontSize: 10, color: msg.read ? P.online : P.inkFaint }}>{msg.read ? "✓✓" : "✓"}</span>}
+                  </div>
+                )}
               </div>
             </div>
           );
         })}
-        {typingUsers.length > 0 && (
+        {typingUser && (
           <div style={{ display: "flex", alignItems: "flex-end", gap: 8, marginTop: 14, animation: "fadeUp 0.2s ease" }}>
-            <div style={{ width: 28, height: 28, borderRadius: "50%", background: P.lavenderLight, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12 }}>
-              {typingUsers[0]?.name?.[0] || "?"}
-            </div>
+            <UserAvatar user={typingUser} size={28} />
             <div style={{ background: P.white, border: `1.5px solid ${P.lavender}44`, borderRadius: "4px 16px 16px 16px", padding: "10px 16px", display: "flex", gap: 4, alignItems: "center" }}>
               {[0,1,2].map(i => <div key={i} style={{ width: 6, height: 6, borderRadius: "50%", background: P.lavender, animation: "bounce 1.2s ease infinite", animationDelay: `${i * 0.2}s` }} />)}
             </div>
@@ -2817,9 +2897,8 @@ const ConversationView = ({ convo, messages, messagesLoading, sendMessage, setTy
         <div ref={bottomRef} />
       </div>
 
-      {/* Input */}
       <div style={{ padding: "14px 20px", background: P.white, borderTop: `1px solid ${P.lavender}44`, display: "flex", gap: 10, alignItems: "flex-end", flexShrink: 0 }}>
-        <textarea value={input} onChange={handleInputChange} onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }} placeholder="Write a message… (Enter to send)" rows={1}
+        <textarea value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }} placeholder="Write a message… (Enter to send)" rows={1}
           style={{ flex: 1, border: `1.5px solid ${P.lavender}`, borderRadius: 14, padding: "10px 14px", fontFamily: FF_S, fontSize: 14, background: P.lavenderLight, color: P.ink, outline: "none", resize: "none", lineHeight: 1.5 }} />
         <button onClick={send} style={{ background: input.trim() ? P.lavender : P.lavenderLight, border: "none", borderRadius: 12, width: 42, height: 42, cursor: input.trim() ? "pointer" : "default", fontSize: 18, transition: "all 0.2s", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>↑</button>
       </div>
@@ -2864,20 +2943,29 @@ const HomePage = ({ onNavigate, profilePic }) => {
   );
 };
 
-const AuthPage = ({ mode, onSwitch, onEnter }) => {
-  const [form, setForm] = useState({ name: "", email: "", password: "" });
-  const [err, setErr] = useState("");
-  const [submitting, setSubmitting] = useState(false);
+const AuthPage = ({ mode, onAuth, onNavigate }) => {
+  const [form, setForm] = useState({ name: "", handle: "", email: "", password: "" });
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
   const isLogin = mode === "login";
 
-  const handleSubmit = async () => {
-    setErr("");
-    if (!form.email || !form.password) { setErr("Please fill in all fields."); return; }
-    setSubmitting(true);
-    const result = await onEnter({ email: form.email, password: form.password, name: form.name });
-    if (result?.error) setErr(result.error);
-    setSubmitting(false);
+  const submit = async () => {
+    setError("");
+    if (!form.email || !form.password) { setError("Please fill in all fields."); return; }
+    setLoading(true);
+    try {
+      await onAuth(isLogin
+        ? { email: form.email, password: form.password }
+        : { email: form.email, password: form.password, name: form.name, handle: form.handle || "@" + form.email.split("@")[0] }
+      );
+    } catch (err) {
+      setError(err.message || "Something went wrong. Please try again.");
+    } finally {
+      setLoading(false);
+    }
   };
+
+  const handleKey = (e) => { if (e.key === "Enter") submit(); };
 
   return (
     <div style={{ minHeight: "calc(100vh - 61px)", background: P.bg, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
@@ -2885,31 +2973,36 @@ const AuthPage = ({ mode, onSwitch, onEnter }) => {
         <h2 style={{ fontFamily: FF_D, fontSize: 28, color: P.ink, margin: "0 0 6px", fontWeight: 400 }}>{isLogin ? "Welcome back" : "Create your Nook"}</h2>
         <p style={{ color: P.inkLight, fontSize: 14, margin: "0 0 28px" }}>{isLogin ? "Sign in to your personal dashboard" : "Your cosy corner of the internet awaits"}</p>
         {!isLogin && (
-          <div style={{ marginBottom: 14 }}>
-            <label style={{ display: "block", fontFamily: FF_S, fontSize: 13, color: P.inkLight, marginBottom: 5 }}>Name</label>
-            <input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} placeholder="Margot Ellison"
-              style={{ width: "100%", border: `1.5px solid ${P.lavender}`, borderRadius: 12, padding: "10px 14px", fontFamily: FF_S, fontSize: 14, background: P.lavenderLight, color: P.ink, outline: "none", boxSizing: "border-box" }} />
-          </div>
+          <>
+            <div style={{ marginBottom: 14 }}>
+              <label style={{ display: "block", fontFamily: FF_S, fontSize: 13, color: P.inkLight, marginBottom: 5 }}>Name</label>
+              <input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} onKeyDown={handleKey} placeholder="Margot Ellison"
+                style={{ width: "100%", border: `1.5px solid ${P.lavender}`, borderRadius: 12, padding: "10px 14px", fontFamily: FF_S, fontSize: 14, background: P.lavenderLight, color: P.ink, outline: "none", boxSizing: "border-box" }} />
+            </div>
+            <div style={{ marginBottom: 14 }}>
+              <label style={{ display: "block", fontFamily: FF_S, fontSize: 13, color: P.inkLight, marginBottom: 5 }}>Handle</label>
+              <input value={form.handle} onChange={e => setForm({ ...form, handle: e.target.value })} onKeyDown={handleKey} placeholder="@margot"
+                style={{ width: "100%", border: `1.5px solid ${P.lavender}`, borderRadius: 12, padding: "10px 14px", fontFamily: FF_S, fontSize: 14, background: P.lavenderLight, color: P.ink, outline: "none", boxSizing: "border-box" }} />
+            </div>
+          </>
         )}
         <div style={{ marginBottom: 14 }}>
           <label style={{ display: "block", fontFamily: FF_S, fontSize: 13, color: P.inkLight, marginBottom: 5 }}>Email</label>
-          <input value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} placeholder="hello@example.com" type="email"
-            onKeyDown={e => e.key === "Enter" && handleSubmit()}
+          <input value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} onKeyDown={handleKey} placeholder="hello@example.com" type="email"
             style={{ width: "100%", border: `1.5px solid ${P.lavender}`, borderRadius: 12, padding: "10px 14px", fontFamily: FF_S, fontSize: 14, background: P.lavenderLight, color: P.ink, outline: "none", boxSizing: "border-box" }} />
         </div>
-        <div style={{ marginBottom: 20 }}>
+        <div style={{ marginBottom: error ? 14 : 28 }}>
           <label style={{ display: "block", fontFamily: FF_S, fontSize: 13, color: P.inkLight, marginBottom: 5 }}>Password</label>
-          <input value={form.password} onChange={e => setForm({ ...form, password: e.target.value })} placeholder="••••••••" type="password"
-            onKeyDown={e => e.key === "Enter" && handleSubmit()}
+          <input value={form.password} onChange={e => setForm({ ...form, password: e.target.value })} onKeyDown={handleKey} placeholder="••••••••" type="password"
             style={{ width: "100%", border: `1.5px solid ${P.lavender}`, borderRadius: 12, padding: "10px 14px", fontFamily: FF_S, fontSize: 14, background: P.lavenderLight, color: P.ink, outline: "none", boxSizing: "border-box" }} />
         </div>
-        {err && <div style={{ background: "#FDF0F0", border: "1.5px solid #F0B8C8", borderRadius: 10, padding: "10px 14px", marginBottom: 16, fontFamily: FF_S, fontSize: 13, color: "#C04060" }}>{err}</div>}
-        <button onClick={handleSubmit} disabled={submitting} style={{ width: "100%", background: submitting ? P.lavenderLight : P.lavender, border: "none", borderRadius: 14, padding: "13px", cursor: submitting ? "default" : "pointer", fontSize: 15, fontWeight: 600, color: P.ink, boxShadow: `0 4px 16px ${P.lavender}80` }}>
-          {submitting ? "Please wait…" : isLogin ? "Sign in →" : "Create my Nook →"}
+        {error && <div style={{ background: "#FDE8EF", border: "1px solid #F0B8C8", borderRadius: 10, padding: "10px 14px", fontFamily: FF_S, fontSize: 13, color: "#C05070", marginBottom: 18 }}>{error}</div>}
+        <button onClick={submit} disabled={loading} style={{ width: "100%", background: loading ? P.lavenderMid : P.lavender, border: "none", borderRadius: 14, padding: "13px", cursor: loading ? "wait" : "pointer", fontSize: 15, fontWeight: 600, color: P.ink, boxShadow: `0 4px 16px ${P.lavender}80`, transition: "all 0.2s" }}>
+          {loading ? "Please wait…" : isLogin ? "Sign in →" : "Create my Nook →"}
         </button>
         <p style={{ textAlign: "center", color: P.inkLight, fontSize: 13, marginTop: 20 }}>
           {isLogin ? "Don't have a Nook?" : "Already have a Nook?"}{" "}
-          <span style={{ color: "#9B85D8", cursor: "pointer", fontWeight: 600 }} onClick={onSwitch}>{isLogin ? "Sign up" : "Log in"}</span>
+          <span style={{ color: "#9B85D8", cursor: "pointer", fontWeight: 600 }} onClick={() => onNavigate(isLogin ? "signup" : "login")}>{isLogin ? "Sign up" : "Log in"}</span>
         </p>
       </div>
     </div>
@@ -2932,29 +3025,12 @@ const WidgetToggleCard = ({ w, onToggle }) => {
   );
 };
 
-const DashboardPage = ({ view, onNavigate, profilePic, setProfilePic, widgetRequests, setWidgetRequests, following, toggleFollow, initialWidgets }) => {
-  const { user, profile } = useAuth();
-
-  const displayName = profile?.name || user?.email?.split('@')[0] || 'Your Nook';
-  const displayHandle = profile?.handle || '@you';
-
-  const STORAGE_KEY = user ? `nook_widgets_${user.id}` : null;
-
-  const startingWidgets = (() => {
-    if (STORAGE_KEY) {
-      try {
-        const saved = localStorage.getItem(STORAGE_KEY);
-        if (saved) return JSON.parse(saved);
-      } catch {}
-    }
-    return initialWidgets || INITIAL_WIDGETS.map(w => ({ ...w, enabled: false, isPublic: false }));
-  })();
-
-  const [widgets, setWidgets] = useState(startingWidgets);
-  const [widgetOrder, setWidgetOrder] = useState(() => startingWidgets.map(w => w.id));
+const DashboardPage = ({ view, onNavigate, profilePic, setProfilePic, widgetRequests, setWidgetRequests, following, toggleFollow }) => {
+  const [widgets, setWidgets] = useState(INITIAL_WIDGETS);
+  const [widgetOrder, setWidgetOrder] = useState(() => INITIAL_WIDGETS.map(w => w.id));
   const [editBio, setEditBio] = useState(false);
-  const [bio, setBio] = useState(profile?.bio || "");
-  const [bioLinks, setBioLinks] = useState([]);
+  const [bio, setBio] = useState("Designer & dreamer 🌿 Collecting good books, quiet mornings, and ambitious to-do lists that may or may not get done.");
+  const [bioLinks, setBioLinks] = useState([{ label: "Studio Ellison", url: "https://studioellison.co" }]);
   const [bioEmail, setBioEmail] = useState("");
   const [editBioLink, setEditBioLink] = useState(false);
   const [draftBioLinks, setDraftBioLinks] = useState(bioLinks);
@@ -2968,13 +3044,6 @@ const DashboardPage = ({ view, onNavigate, profilePic, setProfilePic, widgetRequ
   const toggleExpand = (id) => setExpandedWidgets(s => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
   const fileInputRef = useRef(null);
 
-  // Persist widget state whenever it changes
-  useEffect(() => {
-    if (STORAGE_KEY && widgets.length > 0) {
-      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(widgets)); } catch {}
-    }
-  }, [widgets, STORAGE_KEY]);
-
   // ── Lifted widget data (shared with ArchiveWidget) ────────────────────────
   const initReading = INITIAL_WIDGETS.find(w => w.id === "reading").data.items;
   const initGoals   = INITIAL_WIDGETS.find(w => w.id === "goals").data.items;
@@ -2985,7 +3054,20 @@ const DashboardPage = ({ view, onNavigate, profilePic, setProfilePic, widgetRequ
   const [goals, setGoals]               = useState(initGoals);
   const [habits, setHabits]             = useState(initHabits);
   const [pods, setPods]                 = useState(initPods);
-  const [exerciseChecked, setExerciseChecked] = useState(() => new Set());
+  const [exerciseChecked, setExerciseChecked] = useState(() => {
+    // pre-seed realistic exercise days for current year
+    const s = new Set();
+    const today = new Date();
+    const yearStart = new Date(today.getFullYear(), 0, 1);
+    const d = new Date(yearStart);
+    let i = 0;
+    while (d <= today) {
+      if (i % 7 !== 2 && i % 7 !== 5) s.add(d.toISOString().slice(0, 10));
+      d.setDate(d.getDate() + 1);
+      i++;
+    }
+    return s;
+  });
   const togglePublic = (id) => setWidgets(w => w.map(x => x.id === id ? { ...x, isPublic: !x.isPublic } : x));
   const toggleEnabled = (id) => {
     setWidgets(w => w.map(x => x.id === id ? { ...x, enabled: !x.enabled } : x));
@@ -3080,7 +3162,7 @@ const DashboardPage = ({ view, onNavigate, profilePic, setProfilePic, widgetRequ
         <div style={{ background: P.white, borderRadius: 24, padding: "28px 32px", border: `1.5px solid ${P.lavender}55`, boxShadow: "0 4px 24px rgba(201,184,240,0.15)", marginBottom: 32, display: "flex", alignItems: "flex-start", gap: 20, flexWrap: "wrap" }}>
           {/* Clickable avatar with upload overlay */}
           <div style={{ position: "relative", flexShrink: 0, cursor: showPublic ? "default" : "pointer" }} onClick={() => !showPublic && fileInputRef.current?.click()}>
-            <UserAvatar user={{ ...profile, color: profile?.avatar_color }} size={80} photoPic={profilePic} />
+            <UserAvatar user={ME_BASE} size={80} photoPic={profilePic} />
             {!showPublic && <div style={{
               position: "absolute", inset: 0, borderRadius: "50%",
               background: "rgba(61,53,80,0.45)", display: "flex", alignItems: "center",
@@ -3095,8 +3177,8 @@ const DashboardPage = ({ view, onNavigate, profilePic, setProfilePic, widgetRequ
           </div>
           <div style={{ flex: 1, minWidth: 200 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 4 }}>
-              <h2 style={{ fontFamily: FF_D, fontSize: 26, margin: 0, color: P.ink, fontWeight: 400 }}>{displayName}</h2>
-              <span style={{ fontFamily: FF_S, fontSize: 12, color: P.inkLight, background: P.lavenderLight, borderRadius: 20, padding: "2px 10px" }}>{displayHandle}</span>
+              <h2 style={{ fontFamily: FF_D, fontSize: 26, margin: 0, color: P.ink, fontWeight: 400 }}>{ME_BASE.name}</h2>
+              <span style={{ fontFamily: FF_S, fontSize: 12, color: P.inkLight, background: P.lavenderLight, borderRadius: 20, padding: "2px 10px" }}>{ME_BASE.handle}</span>
             </div>
             {editBio ? (
               <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
@@ -3342,46 +3424,48 @@ const DashboardPage = ({ view, onNavigate, profilePic, setProfilePic, widgetRequ
   );
 };
 
-const MessagesPage = ({ requests, setRequests }) => {
-  const { user } = useAuth();
-  const {
-    conversations, activeConversation, messages, loading, messagesLoading,
-    selectConversation, sendMessage, startDM, startGroupChat,
-    typingUsers, setTyping, totalUnread,
-  } = useMessages();
-
+const MessagesPage = ({ convos, setConvos, requests, setRequests }) => {
+  const [activeId, setActiveId] = useState("c1");
   const [msgTab, setMsgTab] = useState("messages");
   const [searchConvos, setSearchConvos] = useState("");
   const [showNew, setShowNew] = useState(false);
-  const [showChat, setShowChat] = useState(false);
+  const activeConvo = convos.find(c => c.id === activeId);
 
-  const handleSelect = (id) => {
-    selectConversation(id);
-    setShowChat(true);
+  const acceptRequest = (req) => {
+    const newConvo = { id: `c${Date.now()}`, type: "dm", participants: ["me", req.from], messages: [{ id: "m1", from: req.from, text: req.preview, ts: req.ts, read: false }] };
+    setConvos(prev => [newConvo, ...prev]);
+    setRequests(prev => prev.filter(r => r.id !== req.id));
+    setActiveId(newConvo.id);
+    setMsgTab("messages");
   };
 
-  const startConvo = async ({ tab, selected, groupName }) => {
+  const startConvo = ({ tab, selected, groupName }) => {
     if (tab === "dm") {
-      const { conversationId, error } = await startDM(selected[0]);
-      if (!error && conversationId) handleSelect(conversationId);
+      const existing = convos.find(c => c.type === "dm" && c.participants.includes(selected[0]));
+      if (existing) { setActiveId(existing.id); setShowNew(false); return; }
+      const newConvo = { id: `c${Date.now()}`, type: "dm", participants: ["me", selected[0]], messages: [] };
+      setConvos(prev => [newConvo, ...prev]);
+      setActiveId(newConvo.id);
     } else {
-      const { conversationId, error } = await startGroupChat(selected, groupName);
-      if (!error && conversationId) handleSelect(conversationId);
+      const newConvo = { id: `c${Date.now()}`, type: "group", name: groupName, participants: ["me", ...selected], messages: [] };
+      setConvos(prev => [newConvo, ...prev]);
+      setActiveId(newConvo.id);
     }
     setShowNew(false);
     setMsgTab("messages");
   };
 
-  const acceptRequest = (req) => {
-    setRequests(prev => prev.filter(r => r.id !== req.id));
-    setMsgTab("messages");
-  };
-
-  const filtered = conversations.filter(c => {
+  const filtered = convos.filter(c => {
     if (!searchConvos.trim()) return true;
     const q = searchConvos.toLowerCase();
-    return c.displayName?.toLowerCase().includes(q);
+    if (c.type === "group") return c.name.toLowerCase().includes(q);
+    const other = getUser(c.participants.find(id => id !== "me"));
+    return other?.name.toLowerCase().includes(q) || other?.handle.toLowerCase().includes(q);
   });
+
+  const [showChat, setShowChat] = useState(false); // mobile: show chat pane vs list pane
+
+  const selectConvo = (id) => { setActiveId(id); setShowChat(true); };
 
   return (
     <div className="nook-msg-layout">
@@ -3410,15 +3494,9 @@ const MessagesPage = ({ requests, setRequests }) => {
         </div>
         <div style={{ flex: 1, overflowY: "auto", padding: "0 8px" }}>
           {msgTab === "messages" && (
-            loading
-              ? <p style={{ textAlign: "center", color: P.inkFaint, fontSize: 13, padding: "30px 16px" }}>Loading…</p>
-              : filtered.length === 0
-                ? <div style={{ textAlign: "center", padding: "48px 16px", color: P.inkFaint }}>
-                    <div style={{ fontSize: 28, marginBottom: 8 }}>✉️</div>
-                    <p style={{ fontFamily: FF_S, fontSize: 13, margin: 0 }}>No conversations yet</p>
-                    <p style={{ fontFamily: FF_S, fontSize: 12, margin: "6px 0 0", color: P.inkFaint }}>Start one with the + New button</p>
-                  </div>
-                : filtered.map(c => <ConvoItem key={c.id} convo={c} isActive={activeConversation?.id === c.id} onClick={() => handleSelect(c.id)} currentUserId={user?.id} />)
+            filtered.length === 0
+              ? <p style={{ textAlign: "center", color: P.inkFaint, fontSize: 13, padding: "30px 16px" }}>No conversations found</p>
+              : filtered.map(c => <ConvoItem key={c.id} convo={c} isActive={activeId === c.id} onClick={() => selectConvo(c.id)} />)
           )}
           {msgTab === "requests" && (
             requests.length === 0
@@ -3433,20 +3511,12 @@ const MessagesPage = ({ requests, setRequests }) => {
 
       {/* Chat area */}
       <div className={`nook-msg-main${!showChat ? " nook-msg-hidden" : ""}`} style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+        {/* Mobile back button */}
         <button className="nook-msg-back" onClick={() => setShowChat(false)} style={{ display: "none", alignItems: "center", gap: 8, padding: "12px 16px", background: P.white, border: "none", borderBottom: `1px solid ${P.lavender}33`, cursor: "pointer", fontFamily: FF_S, fontSize: 13, color: "#9B85D8", fontWeight: 600 }}>
           ← Back to messages
         </button>
-        {activeConversation
-          ? <ConversationView
-              key={activeConversation.id}
-              convo={activeConversation}
-              messages={messages}
-              messagesLoading={messagesLoading}
-              sendMessage={sendMessage}
-              setTyping={setTyping}
-              typingUsers={typingUsers}
-              currentUserId={user?.id}
-            />
+        {activeConvo
+          ? <ConversationView key={activeId} convo={activeConvo} />
           : <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: 12, color: P.inkFaint, background: P.bg }}>
               <div style={{ fontSize: 40 }}>✉️</div>
               <p style={{ fontFamily: FF_D, fontSize: 20, color: P.inkLight, margin: 0 }}>Select a conversation</p>
@@ -3470,17 +3540,54 @@ const WORK_SECTIONS = [
   { id: "meetings",  label: "Meetings",   icon: "📅" },
 ];
 
-const INIT_MASTER_TODOS = [];
-const INIT_DAILY_TODOS = [];
-const INIT_NOTES = [];
-const INIT_REMINDERS = [];
-const INIT_WORKFLOW_COLS = [
-  { id: "wc1", title: "Backlog",     color: "#EDE8FB", dot: "#9B85D8", cards: [] },
-  { id: "wc2", title: "In Progress", color: "#E4F8F2", dot: "#5DCAAA", cards: [] },
-  { id: "wc3", title: "Review",      color: "#FEF0EA", dot: "#E8956A", cards: [] },
-  { id: "wc4", title: "Done",        color: "#E8F3FC", dot: "#5AAADE", cards: [] },
+const INIT_MASTER_TODOS = [
+  { id: "mt1", text: "Finalise Studio Ellison brand guidelines", done: false, priority: "high" },
+  { id: "mt2", text: "Send invoice to Birdhouse Media", done: false, priority: "high" },
+  { id: "mt3", text: "Review Palette app beta feedback", done: false, priority: "medium" },
+  { id: "mt4", text: "Update portfolio case studies", done: true,  priority: "low" },
+  { id: "mt5", text: "Write April newsletter draft", done: false, priority: "medium" },
+  { id: "mt6", text: "Research conference submissions", done: false, priority: "low" },
 ];
-const INIT_MEETINGS = [];
+const INIT_DAILY_TODOS = [
+  { id: "dt1", text: "Check emails before 9am", done: true,  priority: "medium" },
+  { id: "dt2", text: "Finish homepage hero section", done: false, priority: "high" },
+  { id: "dt3", text: "15-min design review with Soren", done: false, priority: "medium" },
+  { id: "dt4", text: "Block deep-work time 2–4pm", done: false, priority: "low" },
+];
+const INIT_NOTES = [
+  { id: "n1", title: "Brand Direction Notes", body: "Leaning into earthy tones + high-contrast type. Reference: Kinfolk, Cereal mag. Key words: warmth, restraint, craft.", pinned: true, color: 0, ts: Date.now() - 86400000 },
+  { id: "n2", title: "Client Call — Birdhouse", body: "They want the rebrand live by end of April. Need 3 logo concepts by the 18th. Budget confirmed at £4,200.", pinned: true, color: 2, ts: Date.now() - 3600000 * 3 },
+  { id: "n3", title: "Product ideas", body: "- Font pairing tool\n- Dashboard for freelancers\n- Notion template shop\n- Print-on-demand poster series", pinned: false, color: 4, ts: Date.now() - 86400000 * 2 },
+  { id: "n4", title: "Reading: The Creative Act", body: "Chapter 6 — on constraints: 'Limitations are often the seed of creativity.' Want to apply this to how I brief myself.", pinned: false, color: 1, ts: Date.now() - 86400000 * 5 },
+];
+const INIT_REMINDERS = [
+  { id: "r1", text: "Send invoice to Birdhouse Media",    date: "2025-03-15", time: "09:00", done: false, priority: "high" },
+  { id: "r2", text: "Palette beta closes — collect data", date: "2025-03-20", time: "17:00", done: false, priority: "medium" },
+  { id: "r3", text: "Tax return deadline",                date: "2025-04-05", time: "23:59", done: false, priority: "high" },
+  { id: "r4", text: "Catch up with Cleo re: collab",      date: "2025-03-14", time: "11:00", done: true,  priority: "low" },
+];
+const INIT_WORKFLOW_COLS = [
+  { id: "wc1", title: "Backlog",     color: "#EDE8FB", dot: "#9B85D8", cards: [
+    { id: "w1", text: "Research competitor rebrand", tag: "Birdhouse" },
+    { id: "w2", text: "Palette onboarding flow",     tag: "Palette"   },
+  ]},
+  { id: "wc2", title: "In Progress", color: "#E4F8F2", dot: "#5DCAAA", cards: [
+    { id: "w3", text: "Homepage hero design",         tag: "Studio"   },
+    { id: "w4", text: "Logo concepts ×3",             tag: "Birdhouse"},
+  ]},
+  { id: "wc3", title: "Review",      color: "#FEF0EA", dot: "#E8956A", cards: [
+    { id: "w5", text: "Brand colour palette",         tag: "Birdhouse"},
+  ]},
+  { id: "wc4", title: "Done",        color: "#E8F3FC", dot: "#5AAADE", cards: [
+    { id: "w6", text: "Discovery call notes",         tag: "Birdhouse"},
+    { id: "w7", text: "Figma workspace setup",        tag: "Studio"   },
+  ]},
+];
+const INIT_MEETINGS = [
+  { id: "me1", title: "Birdhouse check-in",        date: "2025-03-14", time: "11:00", attendees: "Client + Margot", notes: "Share mood board. Confirm timeline.", done: false },
+  { id: "me2", title: "Palette beta team sync",    date: "2025-03-17", time: "15:30", attendees: "Dev team",        notes: "Review feedback, decide on v0.3 scope.", done: false },
+  { id: "me3", title: "Monthly freelance review",  date: "2025-03-31", time: "10:00", attendees: "Just me",         notes: "Review P&L, pipeline, goals for April.", done: false },
+];
 
 // Reusable work-page input style
 const wi = (extra = {}) => ({
@@ -3578,8 +3685,9 @@ const NOTE_COLORS = [
   { bg: P.roseLight,     border: P.rose,      dot: "#D8708A" },
 ];
 
-const WorkNotes = ({ notes, setNotes }) => {
-  const [active, setActive]         = useState(notes[0]?.id ?? null);
+const WorkNotes = ({ notes: init }) => {
+  const [notes, setNotes]           = useState(init);
+  const [active, setActive]         = useState(init[0]?.id ?? null);
   const [search, setSearch]         = useState("");
   const [creating, setCreating]     = useState(false);
   const [newTitle, setNewTitle]     = useState("");
@@ -3676,7 +3784,8 @@ const WorkNotes = ({ notes, setNotes }) => {
   );
 };
 
-const WorkReminders = ({ reminders, setReminders }) => {
+const WorkReminders = ({ reminders: init }) => {
+  const [reminders, setReminders] = useState(init);
   const [adding, setAdding]       = useState(false);
   const [draft, setDraft]         = useState({ text: "", date: "", time: "", priority: "medium" });
 
@@ -4114,15 +4223,12 @@ const WorkOverview = ({ masterTodos, dailyTodos, reminders, meetings, onGoTo }) 
 };
 
 const WorkPage = () => {
-  const { user, profile } = useAuth();
   const [section, setSection]       = useState("overview");
   const [masterTodos, setMasterTodos] = useState(INIT_MASTER_TODOS);
   const [dailyTodos, setDailyTodos]   = useState(INIT_DAILY_TODOS);
-  const [reminders, setReminders]     = useState(INIT_REMINDERS);
+  const [reminders]                   = useState(INIT_REMINDERS);
   const [meetings]                    = useState(INIT_MEETINGS);
-  const [notes, setNotes]             = useState(INIT_NOTES);
 
-  const displayName = profile?.name || user?.email?.split('@')[0] || 'there';
   const goTo = (s) => setSection(s);
   const active = WORK_SECTIONS.find(s => s.id === section);
 
@@ -4150,15 +4256,15 @@ const WorkPage = () => {
         <div className="nook-work-header" style={{ background: P.white, borderBottom: `1px solid ${P.lavender}22`, padding: "18px 32px", display: "flex", alignItems: "baseline", gap: 12, position: "sticky", top: 0, zIndex: 10, flexWrap: "wrap" }}>
           <span style={{ fontSize: 20 }}>{active?.icon}</span>
           <h2 style={{ fontFamily: FF_D, fontSize: 22, color: P.ink, margin: 0, fontWeight: 400 }}>
-            {section === "overview" ? `Good ${new Date().getHours() < 12 ? "morning" : new Date().getHours() < 17 ? "afternoon" : "evening"}, ${displayName.split(" ")[0]}` : active?.label}
+            {section === "overview" ? `Good ${new Date().getHours() < 12 ? "morning" : new Date().getHours() < 17 ? "afternoon" : "evening"}, Margot` : active?.label}
           </h2>
           {section === "overview" && <span style={{ fontFamily: FF_S, fontSize: 13, color: P.inkFaint }}>{new Date().toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" })}</span>}
         </div>
         <div className="nook-page-pad">
           {section === "overview"  && <WorkOverview masterTodos={masterTodos} dailyTodos={dailyTodos} reminders={reminders} meetings={meetings} onGoTo={goTo} />}
           {section === "todos"     && <WorkTodos masterTodos={masterTodos} setMasterTodos={setMasterTodos} dailyTodos={dailyTodos} setDailyTodos={setDailyTodos} />}
-          {section === "notes"     && <WorkNotes notes={notes} setNotes={setNotes} />}
-          {section === "reminders" && <WorkReminders reminders={reminders} setReminders={setReminders} />}
+          {section === "notes"     && <WorkNotes />}
+          {section === "reminders" && <WorkReminders reminders={reminders} />}
           {section === "kanban"    && <WorkKanban />}
           {section === "focus"     && <WorkFocus />}
           {section === "meetings"  && <WorkMeetings meetings={meetings} />}
@@ -4242,25 +4348,33 @@ const WIDGET_POPULARITY = [
   { id: "projects",   title: "Projects",         icon: "🚀", count: 2, pct: 29 },
 ];
 
-const FLAGGED_CONTENT = [];
-const FEEDBACK_SEED = [];
-const ANNOUNCEMENTS_SEED = [];
+const FLAGGED_CONTENT = [
+  { id: "fc1", type: "post",    user: "@ada",   title: "My daily routine", reason: "Spam / promotional", ts: Date.now() - 86400000 * 1, status: "open"     },
+  { id: "fc2", type: "profile", user: "@felix", title: "Bio section",      reason: "Inappropriate content", ts: Date.now() - 86400000 * 3, status: "open"  },
+  { id: "fc3", type: "post",    user: "@ada",   title: "Affiliate links",  reason: "Spam / promotional", ts: Date.now() - 86400000 * 5, status: "resolved" },
+];
+
+const FEEDBACK_SEED = [
+  { id: "fb1", user: "@cleo",  type: "bug",       subject: "Drag and drop breaks on mobile",       body: "When I try to reorder widgets on my phone the page scrolls instead of moving the widget.", ts: Date.now() - 86400000 * 1, status: "open"     },
+  { id: "fb2", user: "@soren", type: "feature",   subject: "Dark mode please!",                     body: "Would love a dark mode option for late night Nooking.", ts: Date.now() - 86400000 * 2,     status: "noted"    },
+  { id: "fb3", user: "@iris",  type: "feedback",  subject: "Love the new gallery widget",           body: "The new gallery layout is beautiful. Really impressed with how quickly things are improving!", ts: Date.now() - 86400000 * 3, status: "closed" },
+  { id: "fb4", user: "@ada",   type: "bug",       subject: "Reading widget loses star ratings",     body: "Sometimes when I refresh the page my star ratings reset to zero on the reading list.", ts: Date.now() - 86400000 * 4, status: "open"     },
+  { id: "fb5", user: "@theo",  type: "feature",   subject: "Export my data",                        body: "Would be great to export everything as JSON or CSV for backup purposes.", ts: Date.now() - 86400000 * 6, status: "noted"    },
+];
+
+const ANNOUNCEMENTS_SEED = [
+  { id: "an1", title: "Welcome to Nook beta!", body: "We're thrilled to have you. This is an early build — expect rough edges and rapid improvements. Your feedback shapes everything.", sent: Date.now() - 86400000 * 30, status: "sent" },
+  { id: "an2", title: "Gallery widget now live 🖼", body: "You can now add a photo & video gallery to your Nook. Head to Customise to enable it.", sent: Date.now() - 86400000 * 10, status: "sent" },
+];
 
 const AdminPage = ({ widgetRequests, setWidgetRequests }) => {
-  const { user } = useAuth();
-  const {
-    users: adminUsers, setUsers: setAdminUsers,
-    signupsByDay, loading: adminLoading, error: adminError,
-    totalUsers, activeUsers, weekSignups, todayVisitors, todaySignups,
-    suspendUser, deleteUser, refresh,
-  } = useAdminData();
-
   const [section, setSection] = useState("overview");
   const [userSearch, setUserSearch] = useState("");
   const [userFilter, setUserFilter] = useState("all");
   const [selectedUser, setSelectedUser] = useState(null);
-  const [flagged, setFlagged] = useState([]);
-  const [feedback, setFeedback] = useState([]);
+  const [adminUsers, setAdminUsers] = useState(ADMIN_USERS);
+  const [flagged, setFlagged] = useState(FLAGGED_CONTENT);
+  const [feedback, setFeedback] = useState(FEEDBACK_SEED);
   const [announcements, setAnnouncements] = useState(ANNOUNCEMENTS_SEED);
   const [newAnn, setNewAnn] = useState({ title: "", body: "" });
   const [annSent, setAnnSent] = useState(false);
@@ -4273,6 +4387,10 @@ const AdminPage = ({ widgetRequests, setWidgetRequests }) => {
     declined:   { label: "Declined",  bg: "#F0B8C833",     text: "#D8708A", dot: "#D8708A" },
   };
 
+  const totalUsers   = adminUsers.length;
+  const activeUsers  = adminUsers.filter(u => u.status === "active").length;
+  const todayVisitors = DAU_DATA[DAU_DATA.length - 1].visitors;
+  const weekSignups  = DAU_DATA.reduce((a, d) => a + d.signups, 0);
   const openFlags    = flagged.filter(f => f.status === "open").length;
   const openFeedback = feedback.filter(f => f.status === "open").length;
 
@@ -4334,44 +4452,47 @@ const AdminPage = ({ widgetRequests, setWidgetRequests }) => {
     <div>
       {sectionHead("Overview", "Platform health at a glance")}
       <div className="nook-admin-grid3" style={{ marginBottom: 24 }}>
-        <StatCard value={totalUsers}    label="Total users"         sub={`${activeUsers} not suspended`}          color="#9B85D8" icon="⊙" />
-        <StatCard value={todaySignups}  label="Signups today"       sub="New accounts today"                      color="#5DCAAA" icon="↗" />
-        <StatCard value={weekSignups}   label="Signups this week"   sub="Last 7 days"                             color="#5AAADE" icon="✦" />
-        <StatCard value={activeUsers}   label="Active users"        sub={totalUsers > 0 ? `${Math.round(activeUsers/totalUsers*100)}% of total` : "—"} color="#E8956A" icon="◈" />
-        <StatCard value={openFlags}     label="Open flags"          sub="Needs moderation review"                 color="#D8708A" icon="⚑" />
-        <StatCard value={openFeedback}  label="Open feedback"       sub={`${feedback.length} total submissions`}  color="#C8A830" icon="✉" />
+        <StatCard value={totalUsers}    label="Total users"         sub={`${activeUsers} active today`}          color="#9B85D8" icon="⊙" />
+        <StatCard value={todayVisitors} label="Visitors today"      sub="↑ 18% from yesterday"                  color="#5DCAAA" icon="↗" />
+        <StatCard value={weekSignups}   label="Signups this week"   sub="↑ 12% from last week"                  color="#5AAADE" icon="✦" />
+        <StatCard value={activeUsers}   label="Active users (DAU)"  sub={`${Math.round(activeUsers/totalUsers*100)}% of total`} color="#E8956A" icon="◈" />
+        <StatCard value={openFlags}     label="Open flags"          sub="Needs moderation review"               color="#D8708A" icon="⚑" />
+        <StatCard value={openFeedback}  label="Open feedback"       sub={`${feedback.length} total submissions`} color="#C8A830" icon="✉" />
       </div>
 
       <div className="nook-admin-grid2">
+              <span style={{ fontFamily: FF_S, fontSize: 11, color: P.inkFaint }}>This week</span>
+            </div>
+            <MiniBar data={DAU_DATA} valueKey="visitors" labelKey="day" color="#9B85D8" height={90} />
+          </>
+        )}
         {card(
           <>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
               <span style={{ fontFamily: FF_D, fontSize: 16, color: P.ink }}>New signups (7d)</span>
               <span style={{ fontFamily: FF_S, fontSize: 11, color: P.inkFaint }}>{weekSignups} total</span>
             </div>
-            <MiniBar data={signupsByDay} valueKey="signups" labelKey="day" color="#9B85D8" height={90} />
+            <MiniBar data={DAU_DATA} valueKey="signups" labelKey="day" color="#5DCAAA" height={90} />
           </>
         )}
+      </div>
+
+      <div style={{ marginTop: 20 }}>
         {card(
           <>
             <div style={{ fontFamily: FF_D, fontSize: 16, color: P.ink, marginBottom: 14 }}>Recent signups</div>
-            {adminLoading ? (
-              <p style={{ fontFamily: FF_S, fontSize: 13, color: P.inkFaint }}>Loading…</p>
-            ) : adminUsers.length === 0 ? (
-              <p style={{ fontFamily: FF_S, fontSize: 13, color: P.inkFaint }}>No users yet.</p>
-            ) : (
-              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                {adminUsers.slice(0, 5).map(u => (
-                  <div key={u.id} style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                    <UserAvatar user={{ ...u, color: u.avatar_color }} size={34} />
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontFamily: FF_S, fontSize: 13, fontWeight: 600, color: P.ink }}>{u.name || u.email?.split('@')[0]} <span style={{ color: P.inkFaint, fontWeight: 400 }}>{u.handle}</span></div>
-                    </div>
-                    <span style={{ background: u.suspended ? "#F0B8C833" : P.lavenderLight, color: u.suspended ? "#D8708A" : "#3BAA80", borderRadius: 20, padding: "2px 10px", fontFamily: FF_S, fontSize: 11, fontWeight: 600 }}>{u.suspended ? "suspended" : "active"}</span>
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              {[...adminUsers].sort((a,b) => new Date(b.joined) - new Date(a.joined)).slice(0, 4).map(u => (
+                <div key={u.id} style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                  <UserAvatar user={u} size={34} />
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontFamily: FF_S, fontSize: 13, fontWeight: 600, color: P.ink }}>{u.name} <span style={{ color: P.inkFaint, fontWeight: 400 }}>{u.handle}</span></div>
+                    <div style={{ fontFamily: FF_S, fontSize: 11, color: P.inkFaint }}>Joined {u.joined}</div>
                   </div>
-                ))}
-              </div>
-            )}
+                  <span style={{ background: u.status === "active" ? P.mintLight : P.lavenderLight, color: u.status === "active" ? "#3BAA80" : P.inkFaint, borderRadius: 20, padding: "2px 10px", fontFamily: FF_S, fontSize: 11, fontWeight: 600 }}>{u.status}</span>
+                </div>
+              ))}
+            </div>
           </>
         )}
       </div>
@@ -4383,38 +4504,31 @@ const AdminPage = ({ widgetRequests, setWidgetRequests }) => {
       {sectionHead("Analytics", "Traffic, growth, and engagement metrics")}
 
       <div className="nook-admin-grid4" style={{ marginBottom: 24 }}>
-        <StatCard value={totalUsers}  label="Total accounts"   sub="All registered users"     color="#5DCAAA" icon="⊞" />
-        <StatCard value={weekSignups} label="Signups this week" sub="Last 7 days"              color="#5AAADE" icon="↗" />
-        <StatCard value={activeUsers} label="Active accounts"  sub="Not suspended"             color="#E8956A" icon="👁" />
+        <StatCard value="4.2"  label="Avg widgets/user" sub="Across all accounts"       color="#5DCAAA" icon="⊞" />
+        <StatCard value="8m"   label="Avg session"      sub="Minutes per visit"         color="#5AAADE" icon="⏱" />
+        <StatCard value="34%"  label="Public profiles"  sub="Of all user dashboards"    color="#E8956A" icon="👁" />
       </div>
 
       <div className="nook-admin-grid2" style={{ marginBottom: 20 }}>
         {card(
           <>
-            <div style={{ fontFamily: FF_D, fontSize: 16, color: P.ink, marginBottom: 4 }}>Signups this week</div>
-            <div style={{ fontFamily: FF_S, fontSize: 12, color: P.inkFaint, marginBottom: 16 }}>New accounts created per day</div>
-            <MiniBar data={signupsByDay} valueKey="signups" labelKey="day" color="#9B85D8" height={100} />
+            <div style={{ fontFamily: FF_D, fontSize: 16, color: P.ink, marginBottom: 4 }}>Visitors this week</div>
+            <div style={{ fontFamily: FF_S, fontSize: 12, color: P.inkFaint, marginBottom: 16 }}>Unique daily visitors</div>
+            <MiniBar data={DAU_DATA} valueKey="visitors" labelKey="day" color="#9B85D8" height={100} />
             <div style={{ display: "flex", justifyContent: "space-between", marginTop: 12 }}>
-              <span style={{ fontFamily: FF_S, fontSize: 12, color: P.inkFaint }}>Peak: {signupsByDay.length ? Math.max(...signupsByDay.map(d=>d.signups)) : 0} signups in a day</span>
-              <span style={{ fontFamily: FF_S, fontSize: 12, color: P.inkFaint }}>Total: {weekSignups} this week</span>
+              <span style={{ fontFamily: FF_S, fontSize: 12, color: P.inkFaint }}>Peak: {Math.max(...DAU_DATA.map(d=>d.visitors))} on {DAU_DATA.find(d => d.visitors === Math.max(...DAU_DATA.map(d=>d.visitors))).day}</span>
+              <span style={{ fontFamily: FF_S, fontSize: 12, color: P.inkFaint }}>Total: {DAU_DATA.reduce((a,d)=>a+d.visitors,0)}</span>
             </div>
           </>
         )}
         {card(
           <>
-            <div style={{ fontFamily: FF_D, fontSize: 16, color: P.ink, marginBottom: 4 }}>Total users</div>
-            <div style={{ fontFamily: FF_S, fontSize: 12, color: P.inkFaint, marginBottom: 16 }}>All registered accounts</div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 14, paddingTop: 8 }}>
-              {[
-                { label: "Total accounts", value: totalUsers, color: "#9B85D8" },
-                { label: "Active (not suspended)", value: activeUsers, color: "#5DCAAA" },
-                { label: "Suspended", value: adminUsers.filter(u=>u.suspended).length, color: "#D8708A" },
-              ].map(s => (
-                <div key={s.label} style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  <span style={{ fontFamily: FF_S, fontSize: 13, color: P.inkLight }}>{s.label}</span>
-                  <span style={{ fontFamily: FF_D, fontSize: 20, color: s.color }}>{s.value}</span>
-                </div>
-              ))}
+            <div style={{ fontFamily: FF_D, fontSize: 16, color: P.ink, marginBottom: 4 }}>Signups this week</div>
+            <div style={{ fontFamily: FF_S, fontSize: 12, color: P.inkFaint, marginBottom: 16 }}>New accounts created per day</div>
+            <MiniBar data={DAU_DATA} valueKey="signups" labelKey="day" color="#5DCAAA" height={100} />
+            <div style={{ display: "flex", justifyContent: "space-between", marginTop: 12 }}>
+              <span style={{ fontFamily: FF_S, fontSize: 12, color: P.inkFaint }}>Conversion: {(weekSignups / DAU_DATA.reduce((a,d)=>a+d.visitors,0) * 100).toFixed(1)}%</span>
+              <span style={{ fontFamily: FF_S, fontSize: 12, color: P.inkFaint }}>Total: {weekSignups}</span>
             </div>
           </>
         )}
@@ -4425,8 +4539,9 @@ const AdminPage = ({ widgetRequests, setWidgetRequests }) => {
           <div style={{ fontFamily: FF_D, fontSize: 16, color: P.ink, marginBottom: 16 }}>User status breakdown</div>
           <div className="nook-admin-grid3">
             {[
-              { label: "Active",         value: activeUsers,              color: "#5DCAAA", sub: "Not suspended" },
-              { label: "Suspended",      value: adminUsers.filter(u=>u.suspended).length, color: "#D8708A", sub: "Access restricted" },
+              { label: "Active (7d)",   value: activeUsers,                   color: "#5DCAAA", sub: "Logged in this week" },
+              { label: "Inactive",      value: totalUsers - activeUsers,       color: "#F5C26B", sub: "No activity in 7d" },
+              { label: "Flagged",       value: adminUsers.filter(u=>u.flagged).length, color: "#D8708A", sub: "Under review" },
             ].map(item => (
               <div key={item.label} style={{ background: item.color + "15", borderRadius: 14, padding: "16px 18px", border: `1.5px solid ${item.color}33` }}>
                 <div style={{ fontFamily: FF_D, fontSize: 28, color: item.color, lineHeight: 1, marginBottom: 4 }}>{item.value}</div>
@@ -4442,11 +4557,8 @@ const AdminPage = ({ widgetRequests, setWidgetRequests }) => {
 
   const UsersSection = () => {
     const filtered = adminUsers
-      .filter(u => {
-        if (userFilter === "suspended") return u.suspended;
-        return true;
-      })
-      .filter(u => !userSearch || u.name?.toLowerCase().includes(userSearch.toLowerCase()) || u.handle?.toLowerCase().includes(userSearch.toLowerCase()) || u.email?.toLowerCase().includes(userSearch.toLowerCase()));
+      .filter(u => userFilter === "all" || u.status === userFilter || (userFilter === "flagged" && u.flagged))
+      .filter(u => !userSearch || u.name.toLowerCase().includes(userSearch.toLowerCase()) || u.handle.toLowerCase().includes(userSearch.toLowerCase()));
 
     return (
       <div>
@@ -4454,7 +4566,7 @@ const AdminPage = ({ widgetRequests, setWidgetRequests }) => {
 
         <div style={{ display: "flex", gap: 10, marginBottom: 20, alignItems: "center", flexWrap: "wrap" }}>
           <div style={{ display: "flex", gap: 6 }}>
-            {[["all","All"],["suspended","Suspended ⊘"]].map(([v,l]) => (
+            {[["all","All"],["active","Active"],["inactive","Inactive"],["flagged","Flagged ⚑"]].map(([v,l]) => (
               <button key={v} onClick={() => setUserFilter(v)} style={{ background: userFilter === v ? P.lavender : P.white, border: `1.5px solid ${userFilter === v ? P.lavender : P.lavender + "55"}`, borderRadius: 20, padding: "6px 14px", cursor: "pointer", fontFamily: FF_S, fontSize: 12, color: P.ink, fontWeight: userFilter === v ? 600 : 400, transition: "all 0.15s" }}>{l}</button>
             ))}
           </div>
@@ -4464,42 +4576,33 @@ const AdminPage = ({ widgetRequests, setWidgetRequests }) => {
           </div>
         </div>
 
-        {adminError && (
-          <div style={{ marginBottom: 16, padding: "16px 18px", background: "#F0B8C822", borderRadius: 14, border: "1.5px solid #D8708A44", fontFamily: FF_S, fontSize: 13, color: P.ink, lineHeight: 1.6 }}>
-            <div style={{ fontWeight: 700, color: "#D8708A", marginBottom: 6 }}>⚠ {adminError ? `Query error: ${adminError}` : "No users returned — likely a Supabase RLS policy issue."}</div>
-            Run this in <strong>Supabase → SQL Editor</strong>:
-            <pre style={{ fontSize: 11, background: "#F5F2FC", padding: "10px 12px", borderRadius: 8, marginTop: 8, overflowX: "auto", color: "#3D3550", lineHeight: 1.6 }}>{`CREATE POLICY "Read all profiles"
-  ON profiles FOR SELECT
-  TO authenticated
-  USING (true);`}</pre>
-          </div>
-        )}
-        {adminLoading ? (
-          <div style={{ padding: "40px", textAlign: "center", color: P.inkFaint, fontFamily: FF_S, fontSize: 14 }}>Loading users…</div>
-        ) : filtered.length === 0 ? (
-          <div style={{ padding: "40px", textAlign: "center", color: P.inkFaint, fontFamily: FF_S, fontSize: 14 }}>No users found</div>
-        ) : card(
+        {card(
           <div>
-            <div style={{ display: "grid", gridTemplateColumns: "2fr 2fr 120px", gap: 10, padding: "0 4px 10px", borderBottom: `1px solid ${P.lavender}33`, marginBottom: 12 }}>
-              {["User","Email","Actions"].map(h => (
+            <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr 1fr 1fr 120px", gap: 10, padding: "0 4px 10px", borderBottom: `1px solid ${P.lavender}33`, marginBottom: 12 }}>
+              {["User","Joined","Last seen","Widgets","Posts","Actions"].map(h => (
                 <span key={h} style={{ fontFamily: FF_S, fontSize: 11, fontWeight: 700, color: P.inkFaint, textTransform: "uppercase", letterSpacing: 0.5 }}>{h}</span>
               ))}
             </div>
             {filtered.map(u => (
-              <div key={u.id} style={{ display: "grid", gridTemplateColumns: "2fr 2fr 120px", gap: 10, padding: "10px 4px", borderBottom: `1px solid ${P.lavender}11`, alignItems: "center" }}>
+              <div key={u.id} style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr 1fr 1fr 120px", gap: 10, padding: "10px 4px", borderBottom: `1px solid ${P.lavender}11`, alignItems: "center" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                  <UserAvatar user={{ ...u, color: u.avatar_color }} size={32} />
+                  <UserAvatar user={u} size={32} />
                   <div>
                     <div style={{ fontFamily: FF_S, fontSize: 13, fontWeight: 600, color: P.ink, display: "flex", alignItems: "center", gap: 6 }}>
-                      {u.name || u.email?.split('@')[0] || 'Unknown'}
+                      {u.name}
+                      {u.flagged && <span style={{ background: "#F0B8C844", color: "#D8708A", borderRadius: 20, padding: "1px 7px", fontSize: 10, fontWeight: 600 }}>⚑ flagged</span>}
                       {u.suspended && <span style={{ background: "#F0B8C888", color: "#D8708A", borderRadius: 20, padding: "1px 7px", fontSize: 10, fontWeight: 600 }}>suspended</span>}
                     </div>
-                    <div style={{ fontFamily: FF_S, fontSize: 11, color: P.inkFaint }}>{u.handle || ''}</div>
+                    <div style={{ fontFamily: FF_S, fontSize: 11, color: P.inkFaint }}>{u.handle}</div>
                   </div>
                 </div>
-                <span style={{ fontFamily: FF_S, fontSize: 12, color: P.inkLight, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{u.email || '—'}</span>
+                <span style={{ fontFamily: FF_S, fontSize: 12, color: P.inkLight }}>{u.joined}</span>
+                <span style={{ fontFamily: FF_S, fontSize: 12, color: u.lastSeen === "today" || u.lastSeen === "now" ? "#3BAA80" : P.inkLight }}>{u.lastSeen}</span>
+                <span style={{ fontFamily: FF_S, fontSize: 12, color: P.inkLight }}>{u.widgets}</span>
+                <span style={{ fontFamily: FF_S, fontSize: 12, color: P.inkLight }}>{u.posts}</span>
                 <div style={{ display: "flex", gap: 5 }}>
-                  <button onClick={() => suspendUser(u.id, !u.suspended)} style={{ background: u.suspended ? "#F0B8C888" : P.lavenderLight, border: "none", borderRadius: 8, padding: "4px 8px", cursor: "pointer", fontFamily: FF_S, fontSize: 10, color: u.suspended ? "#D8708A" : P.inkFaint, fontWeight: 600 }} title={u.suspended ? "Unsuspend" : "Suspend"}>{u.suspended ? "↩ Restore" : "⊘ Suspend"}</button>
+                  <button onClick={() => setAdminUsers(us => us.map(x => x.id === u.id ? { ...x, flagged: !x.flagged } : x))} style={{ background: u.flagged ? "#F0B8C844" : P.lavenderLight, border: "none", borderRadius: 8, padding: "4px 8px", cursor: "pointer", fontFamily: FF_S, fontSize: 10, color: u.flagged ? "#D8708A" : P.inkFaint, fontWeight: 600 }} title={u.flagged ? "Unflag" : "Flag"}>⚑</button>
+                  <button onClick={() => setAdminUsers(us => us.map(x => x.id === u.id ? { ...x, suspended: !x.suspended } : x))} style={{ background: u.suspended ? "#F0B8C888" : P.lavenderLight, border: "none", borderRadius: 8, padding: "4px 8px", cursor: "pointer", fontFamily: FF_S, fontSize: 10, color: u.suspended ? "#D8708A" : P.inkFaint, fontWeight: 600 }} title={u.suspended ? "Unsuspend" : "Suspend"}>{u.suspended ? "↩" : "⊘"}</button>
                 </div>
               </div>
             ))}
@@ -4515,23 +4618,20 @@ const AdminPage = ({ widgetRequests, setWidgetRequests }) => {
       {card(
         <div>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
-            <span style={{ fontFamily: FF_S, fontSize: 13, color: P.inkFaint }}>{totalUsers} registered users</span>
+            <span style={{ fontFamily: FF_S, fontSize: 13, color: P.inkFaint }}>{totalUsers} users · {WIDGET_POPULARITY.reduce((a,w)=>a+w.count,0)} total widget installs</span>
           </div>
-          <p style={{ fontFamily: FF_S, fontSize: 13, color: P.inkFaint, margin: "0 0 20px", padding: "12px 16px", background: P.lavenderLight, borderRadius: 12 }}>
-            Widget usage analytics will populate as users enable widgets on their dashboards.
-          </p>
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-            {INITIAL_WIDGETS.slice(0, 10).map((w, i) => (
+            {WIDGET_POPULARITY.map((w, i) => (
               <div key={w.id} style={{ display: "flex", alignItems: "center", gap: 14 }}>
                 <div style={{ width: 22, fontFamily: FF_S, fontSize: 12, color: P.inkFaint, textAlign: "right", flexShrink: 0 }}>#{i+1}</div>
                 <div style={{ width: 28, height: 28, borderRadius: 8, background: WIDGET_COLORS[i % WIDGET_COLORS.length].bg, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, flexShrink: 0 }}>{w.icon}</div>
                 <div style={{ flex: 1 }}>
                   <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}>
                     <span style={{ fontFamily: FF_S, fontSize: 13, fontWeight: 600, color: P.ink }}>{w.title}</span>
-                    <span style={{ fontFamily: FF_S, fontSize: 12, color: P.inkFaint }}>—</span>
+                    <span style={{ fontFamily: FF_S, fontSize: 12, color: P.inkFaint }}>{w.count} / {totalUsers} users · {w.pct}%</span>
                   </div>
                   <div style={{ background: P.lavenderLight, borderRadius: 20, height: 7, overflow: "hidden" }}>
-                    <div style={{ width: `0%`, height: "100%", background: WIDGET_COLORS[i % WIDGET_COLORS.length].dot, borderRadius: 20 }} />
+                    <div style={{ width: `${w.pct}%`, height: "100%", background: `linear-gradient(90deg, ${WIDGET_COLORS[i % WIDGET_COLORS.length].dot}, ${WIDGET_COLORS[i % WIDGET_COLORS.length].accent})`, borderRadius: 20, transition: "width 0.6s ease" }} />
                   </div>
                 </div>
               </div>
@@ -4553,7 +4653,6 @@ const AdminPage = ({ widgetRequests, setWidgetRequests }) => {
       <div>
         {sectionHead("Widget Requests", "Feature requests submitted by users")}
         <div className="nook-admin-grid4" style={{ marginBottom: 24 }}>
-          {["new","reviewing","planned","declined"].map(s => (
             <div key={s} style={{ background: P.white, border: `1.5px solid ${STATUS_CFG[s].dot}33`, borderRadius: 16, padding: "16px 18px", cursor: "pointer" }} onClick={() => setWqFilter(s)}>
               <div style={{ fontFamily: FF_D, fontSize: 28, color: STATUS_CFG[s].dot, lineHeight: 1 }}>{counts[s]}</div>
               <div style={{ fontFamily: FF_S, fontSize: 12, color: P.inkLight, marginTop: 4 }}>{STATUS_CFG[s].label}</div>
@@ -4751,7 +4850,20 @@ const AdminPage = ({ widgetRequests, setWidgetRequests }) => {
   );
 };
 
-const FEED_SEED = [];
+const FEED_SEED = [
+  { id: "f1",  uid: "u1", type: "blog",     ts: Date.now() - 1000*60*40,       title: "The notebook I've been keeping", preview: "I started carrying a small Leuchtturm everywhere about six months ago. At first just for lists, then for fragments — things I didn't want to lose. It became something else entirely.", category: "Personal", readTime: 3 },
+  { id: "f2",  uid: "u2", type: "photo",    ts: Date.now() - 1000*60*60*2,     caption: "Golden hour off the Howth cliffs. Some mornings you just have to go.", tags: ["photography", "ireland"], color: "#B8D8F0" },
+  { id: "f3",  uid: "u3", type: "reading",  ts: Date.now() - 1000*60*60*5,     book: "Convenience Store Woman", author: "Sayaka Murata", rating: 5, note: "Read it in one sitting — spare, strange, completely unforgettable." },
+  { id: "f4",  uid: "u1", type: "goal",     ts: Date.now() - 1000*60*60*8,     goal: "Finish the illustrated alphabet project", progress: 78, note: "Getting close! Just W, X and Y left to draw." },
+  { id: "f5",  uid: "u2", type: "photo",    ts: Date.now() - 1000*60*60*24,    caption: "The old library at dawn. Worth waking up at 5am for.", tags: ["architecture", "light"], color: "#C9B8F0" },
+  { id: "f6",  uid: "u3", type: "blog",     ts: Date.now() - 1000*60*60*26,    title: "On designing with constraints", preview: "Every brief I've ever loved has had some kind of obstacle built into it. Not despite the constraints, but because of them.", category: "Design", readTime: 4 },
+  { id: "f7",  uid: "u1", type: "reading",  ts: Date.now() - 1000*60*60*30,    book: "The Secret History", author: "Donna Tartt", rating: 4, note: "Absolutely devoured this. The prose is lush and the atmosphere suffocates you in the best way." },
+  { id: "f8",  uid: "u2", type: "goal",     ts: Date.now() - 1000*60*60*36,    goal: "Shoot one roll of film per week", progress: 60, note: "Four weeks in. Starting to see patterns in what I reach for." },
+  { id: "f9",  uid: "u3", type: "mood",     ts: Date.now() - 1000*60*60*48,    mood: "☀", label: "Energised", note: "Great studio day — everything just clicked." },
+  { id: "f10", uid: "u1", type: "blog",     ts: Date.now() - 1000*60*60*50,    title: "Things I learned making zines", preview: "You don't need permission. You don't need a printer that works perfectly. You just need something to say and the audacity to staple it together.", category: "Essay", readTime: 5 },
+  { id: "f11", uid: "u2", type: "reading",  ts: Date.now() - 1000*60*60*72,    book: "Ways of Seeing", author: "John Berger", rating: 5, note: "Required reading. Changed how I look at images — and everything else." },
+  { id: "f12", uid: "u3", type: "photo",    ts: Date.now() - 1000*60*60*80,    caption: "New moodboard for the autumn collection. Texture, texture, texture.", tags: ["moodboard", "design"], color: "#F0B8C8" },
+];
 
 const MOOD_EMOJIS = { "☀": "Sunny", "🌙": "Reflective", "🌧": "Heavy", "⚡": "Energised", "🌿": "Calm", "🔥": "Motivated", "💫": "Creative", "😴": "Tired" };
 
@@ -4764,7 +4876,23 @@ const timeAgo = (ts) => {
   return new Date(ts).toLocaleDateString("en-IE", { day: "numeric", month: "short" });
 };
 
-const COMMENT_SEED = {};
+const COMMENT_SEED = {
+  f1:  [
+    { id: "c1", uid: "u2", text: "This resonated so much — I've been keeping one for about two years now and it genuinely changed how I think.", ts: Date.now() - 1000*60*20 },
+    { id: "c2", uid: "u3", text: "The part about fragments is exactly it. It's not a journal, it's more like a net for catching things.", ts: Date.now() - 1000*60*12 },
+  ],
+  f2:  [{ id: "c3", uid: "u3", text: "This colour 😭 What time did you have to get up for this?", ts: Date.now() - 1000*60*60 }],
+  f3:  [
+    { id: "c4", uid: "u1", text: "I finished this last month! The ending absolutely floored me.", ts: Date.now() - 1000*60*60*3 },
+    { id: "c5", uid: "u6", text: "Adding this to my list immediately.", ts: Date.now() - 1000*60*60*2 },
+  ],
+  f6:  [{ id: "c6", uid: "u2", text: "The brief for a photography project I loved most was 'make something boring' — nothing else. Still one of my best series.", ts: Date.now() - 1000*60*60*20 }],
+  f10: [
+    { id: "c7", uid: "u3", text: "The audacity to staple it together 😂 This is everything.", ts: Date.now() - 1000*60*60*44 },
+    { id: "c8", uid: "u2", text: "Saving this. I've been putting off starting mine for months.", ts: Date.now() - 1000*60*60*43 },
+    { id: "c9", uid: "u5", text: "Would love to see one of yours someday!", ts: Date.now() - 1000*60*60*42 },
+  ],
+};
 
 const FeedCard = ({ item, user, following, toggleFollow, onViewUser }) => {
   const [liked, setLiked] = useState(false);
@@ -4774,7 +4902,7 @@ const FeedCard = ({ item, user, following, toggleFollow, onViewUser }) => {
   const [commentText, setCommentText] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const inputRef = useRef();
-  const color = WIDGET_COLORS[Math.abs(user.id?.split('').reduce((a,c) => a + c.charCodeAt(0), 0) || 0) % WIDGET_COLORS.length];
+  const color = WIDGET_COLORS[USERS.findIndex(u => u.id === user.id) % WIDGET_COLORS.length];
 
   const typeConfig = {
     blog:    { icon: "✍", label: "wrote a post",    accent: P.lavenderLight,  dot: "#9B85D8" },
@@ -4938,106 +5066,28 @@ const FeedCard = ({ item, user, following, toggleFollow, onViewUser }) => {
   );
 };
 
-const RealFeedCard = ({ item, currentUserId, onLike, onComment, onDelete, onViewUser }) => {
-  const [showComments, setShowComments] = useState(false);
-  const [commentText, setCommentText] = useState("");
-  const [submitting, setSubmitting] = useState(false);
-  const isOwn = item.user_id === currentUserId;
-  const poster = item.profiles;
-
-  const submitComment = async () => {
-    if (!commentText.trim() || submitting) return;
-    setSubmitting(true);
-    await onComment(commentText.trim());
-    setCommentText("");
-    setSubmitting(false);
-  };
-
-  return (
-    <div style={{ background: P.white, borderRadius: 20, padding: "20px 24px", boxShadow: "0 2px 16px rgba(61,53,80,0.06)", border: `1px solid ${P.lavender}22` }}>
-      <div style={{ display: "flex", alignItems: "flex-start", gap: 12, marginBottom: 14 }}>
-        <div onClick={() => onViewUser?.(poster)} style={{ cursor: "pointer" }}>
-          <UserAvatar user={poster} size={40} />
-        </div>
-        <div style={{ flex: 1 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-            <div>
-              <span style={{ fontFamily: FF_S, fontSize: 14, fontWeight: 600, color: P.ink }}>{poster?.name}</span>
-              <span style={{ fontFamily: FF_S, fontSize: 12, color: P.inkFaint, marginLeft: 8 }}>{poster?.handle}</span>
-            </div>
-            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <span style={{ fontFamily: FF_S, fontSize: 11, color: P.inkFaint }}>{fmtTime(new Date(item.created_at).getTime())}</span>
-              {isOwn && <button onClick={onDelete} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 13, color: P.inkFaint, padding: "2px 6px", borderRadius: 8 }}>✕</button>}
-            </div>
-          </div>
-          {item.content && <p style={{ fontFamily: FF_S, fontSize: 14, color: P.ink, margin: "8px 0 0", lineHeight: 1.6 }}>{item.content}</p>}
-          {item.image_url && <img src={item.image_url} alt="" style={{ width: "100%", borderRadius: 12, marginTop: 10, maxHeight: 320, objectFit: "cover" }} />}
-        </div>
-      </div>
-      <div style={{ display: "flex", gap: 16, paddingTop: 12, borderTop: `1px solid ${P.lavender}22` }}>
-        <button onClick={onLike} style={{ background: "none", border: "none", cursor: "pointer", fontFamily: FF_S, fontSize: 13, color: item.isLiked ? "#D8708A" : P.inkFaint, display: "flex", alignItems: "center", gap: 5, fontWeight: item.isLiked ? 600 : 400 }}>
-          {item.isLiked ? "♥" : "♡"} {item.likeCount}
-        </button>
-        <button onClick={() => setShowComments(s => !s)} style={{ background: "none", border: "none", cursor: "pointer", fontFamily: FF_S, fontSize: 13, color: P.inkFaint, display: "flex", alignItems: "center", gap: 5 }}>
-          💬 {item.commentCount}
-        </button>
-      </div>
-      {showComments && (
-        <div style={{ marginTop: 14 }}>
-          {(item.comments || []).map(c => (
-            <div key={c.id} style={{ display: "flex", gap: 10, marginBottom: 10 }}>
-              <UserAvatar user={c.profiles} size={28} />
-              <div style={{ background: P.lavenderLight, borderRadius: 12, padding: "8px 12px", flex: 1 }}>
-                <span style={{ fontFamily: FF_S, fontSize: 12, fontWeight: 600, color: P.ink }}>{c.profiles?.name} </span>
-                <span style={{ fontFamily: FF_S, fontSize: 13, color: P.ink }}>{c.body}</span>
-              </div>
-            </div>
-          ))}
-          <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
-            <input value={commentText} onChange={e => setCommentText(e.target.value)} onKeyDown={e => e.key === "Enter" && submitComment()} placeholder="Write a comment…"
-              style={{ flex: 1, border: `1.5px solid ${P.lavender}`, borderRadius: 20, padding: "7px 14px", fontFamily: FF_S, fontSize: 13, background: P.lavenderLight, color: P.ink, outline: "none" }} />
-            <button onClick={submitComment} disabled={!commentText.trim() || submitting}
-              style={{ background: commentText.trim() ? P.lavender : P.lavenderLight, border: "none", borderRadius: 20, padding: "7px 16px", cursor: commentText.trim() ? "pointer" : "default", fontFamily: FF_S, fontSize: 13, fontWeight: 600, color: P.ink }}>
-              Post
-            </button>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-};
-
-const FeedPage = ({ onNavigate, onViewUser }) => {
-  const { user } = useAuth();
-  const {
-    posts, loading, error, hasMore,
-    createPost, deletePost, toggleLike, addComment, deleteComment,
-    toggleFollow, isFollowing, loadMore, refresh,
-    feedFilter, setFeedFilter,
-  } = useFeed();
-
+const FeedPage = ({ following, toggleFollow, onNavigate, onViewUser }) => {
+  const [filter, setFilter] = useState("all");
   const [search, setSearch] = useState("");
-  const [newPostText, setNewPostText] = useState("");
-  const [posting, setPosting] = useState(false);
-  const [showCompose, setShowCompose] = useState(false);
 
-  const filtered = posts.filter(item => {
-    if (!search) return true;
-    const q = search.toLowerCase();
-    return (
-      item.profiles?.name?.toLowerCase().includes(q) ||
-      item.content?.toLowerCase().includes(q)
-    );
-  });
+  const feedItems = FEED_SEED
+    .filter(item => following.includes(item.uid))
+    .filter(item => filter === "all" || item.type === filter)
+    .filter(item => {
+      if (!search) return true;
+      const q = search.toLowerCase();
+      const u = USERS.find(u => u.id === item.uid);
+      return (
+        u?.name.toLowerCase().includes(q) ||
+        item.title?.toLowerCase().includes(q) ||
+        item.book?.toLowerCase().includes(q) ||
+        item.caption?.toLowerCase().includes(q) ||
+        item.goal?.toLowerCase().includes(q)
+      );
+    })
+    .sort((a, b) => b.ts - a.ts);
 
-  const handlePost = async () => {
-    if (!newPostText.trim()) return;
-    setPosting(true);
-    await createPost(newPostText);
-    setNewPostText("");
-    setShowCompose(false);
-    setPosting(false);
-  };
+  const unfollowedUsers = USERS.filter(u => !following.includes(u.id));
 
   return (
     <div style={{ minHeight: "100vh", background: P.bg, padding: "32px 0" }}>
@@ -5045,37 +5095,19 @@ const FeedPage = ({ onNavigate, onViewUser }) => {
 
         {/* Main feed column */}
         <div>
+          {/* Header */}
           <div style={{ marginBottom: 24 }}>
             <h1 style={{ fontFamily: FF_D, fontSize: 32, color: P.ink, margin: "0 0 6px", fontWeight: 400 }}>Your Feed</h1>
-            <p style={{ fontFamily: FF_S, fontSize: 14, color: P.inkLight, margin: 0 }}>What's happening in your community</p>
-          </div>
-
-          {/* Compose */}
-          <div style={{ background: P.white, borderRadius: 20, padding: "16px 20px", marginBottom: 20, boxShadow: "0 2px 16px rgba(61,53,80,0.06)", border: `1px solid ${P.lavender}33` }}>
-            {showCompose ? (
-              <>
-                <textarea value={newPostText} onChange={e => setNewPostText(e.target.value)} placeholder="What's on your mind?" rows={3} autoFocus
-                  style={{ width: "100%", border: `1.5px solid ${P.lavender}`, borderRadius: 12, padding: "10px 14px", fontFamily: FF_S, fontSize: 14, background: P.lavenderLight, color: P.ink, outline: "none", resize: "none", boxSizing: "border-box" }} />
-                <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", marginTop: 10 }}>
-                  <button onClick={() => { setShowCompose(false); setNewPostText(""); }} style={{ background: "none", border: "none", cursor: "pointer", fontFamily: FF_S, fontSize: 13, color: P.inkFaint }}>Cancel</button>
-                  <button onClick={handlePost} disabled={posting || !newPostText.trim()} style={{ background: newPostText.trim() ? P.lavender : P.lavenderLight, border: "none", borderRadius: 12, padding: "8px 20px", cursor: newPostText.trim() ? "pointer" : "default", fontFamily: FF_S, fontSize: 13, fontWeight: 600, color: P.ink }}>
-                    {posting ? "Posting…" : "Post"}
-                  </button>
-                </div>
-              </>
-            ) : (
-              <div onClick={() => setShowCompose(true)} style={{ display: "flex", alignItems: "center", gap: 12, cursor: "text" }}>
-                <div style={{ width: 36, height: 36, borderRadius: "50%", background: P.lavender, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, flexShrink: 0 }}>✦</div>
-                <div style={{ flex: 1, border: `1.5px solid ${P.lavender}44`, borderRadius: 20, padding: "9px 16px", fontFamily: FF_S, fontSize: 14, color: P.inkFaint, background: P.lavenderLight }}>Share something with your community…</div>
-              </div>
-            )}
+            <p style={{ fontFamily: FF_S, fontSize: 14, color: P.inkLight, margin: 0 }}>
+              Updates from the {following.length} {following.length === 1 ? "person" : "people"} you follow
+            </p>
           </div>
 
           {/* Filter bar */}
           <div style={{ display: "flex", gap: 8, marginBottom: 20, flexWrap: "wrap", alignItems: "center" }}>
             <div style={{ display: "flex", gap: 6, flex: 1, flexWrap: "wrap" }}>
-              {[["all","All"],["following","Following"]].map(([v, label]) => (
-                <button key={v} onClick={() => setFeedFilter(v)} style={{ background: feedFilter === v ? P.lavender : P.white, border: `1.5px solid ${feedFilter === v ? P.lavender : P.lavender + "55"}`, borderRadius: 20, padding: "6px 14px", cursor: "pointer", fontFamily: FF_S, fontSize: 12, fontWeight: feedFilter === v ? 600 : 400, color: P.ink, transition: "all 0.15s" }}>{label}</button>
+              {[["all","All"],["blog","Blog ✍"],["photo","Photos 📸"],["reading","Reading 📖"],["goal","Goals ★"],["mood","Mood ☀"]].map(([v, label]) => (
+                <button key={v} onClick={() => setFilter(v)} style={{ background: filter === v ? P.lavender : P.white, border: `1.5px solid ${filter === v ? P.lavender : P.lavender + "55"}`, borderRadius: 20, padding: "6px 14px", cursor: "pointer", fontFamily: FF_S, fontSize: 12, fontWeight: filter === v ? 600 : 400, color: P.ink, transition: "all 0.15s" }}>{label}</button>
               ))}
             </div>
             <div style={{ position: "relative" }}>
@@ -5085,44 +5117,72 @@ const FeedPage = ({ onNavigate, onViewUser }) => {
           </div>
 
           {/* Feed */}
-          {loading && posts.length === 0 ? (
-            <div style={{ background: P.white, borderRadius: 20, padding: "60px 40px", textAlign: "center" }}>
-              <p style={{ fontFamily: FF_S, fontSize: 14, color: P.inkFaint }}>Loading feed…</p>
-            </div>
-          ) : error ? (
-            <div style={{ background: P.white, borderRadius: 20, padding: "40px", textAlign: "center" }}>
-              <p style={{ fontFamily: FF_S, fontSize: 14, color: P.inkFaint }}>Couldn't load feed. <button onClick={refresh} style={{ background: "none", border: "none", color: "#9B85D8", cursor: "pointer", fontFamily: FF_S, fontSize: 14 }}>Try again</button></p>
-            </div>
-          ) : filtered.length === 0 ? (
+          {following.length === 0 ? (
             <div style={{ background: P.white, borderRadius: 20, padding: "60px 40px", textAlign: "center", boxShadow: "0 2px 16px rgba(61,53,80,0.06)" }}>
               <div style={{ fontSize: 48, marginBottom: 16 }}>🌿</div>
-              <h3 style={{ fontFamily: FF_D, fontSize: 22, color: P.ink, fontWeight: 400, margin: "0 0 10px" }}>Nothing here yet</h3>
-              <p style={{ fontFamily: FF_S, fontSize: 14, color: P.inkLight, margin: "0 0 20px" }}>Be the first to post, or switch to "All" to see everyone.</p>
+              <h3 style={{ fontFamily: FF_D, fontSize: 22, color: P.ink, fontWeight: 400, margin: "0 0 10px" }}>Your feed is empty</h3>
+              <p style={{ fontFamily: FF_S, fontSize: 14, color: P.inkLight, margin: "0 0 20px" }}>Follow some people to see their updates here.</p>
+            </div>
+          ) : feedItems.length === 0 ? (
+            <div style={{ background: P.white, borderRadius: 20, padding: "48px 40px", textAlign: "center", boxShadow: "0 2px 16px rgba(61,53,80,0.06)" }}>
+              <div style={{ fontSize: 40, marginBottom: 12 }}>🔍</div>
+              <p style={{ fontFamily: FF_S, fontSize: 14, color: P.inkLight, margin: 0 }}>No updates match that filter yet.</p>
             </div>
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-              {filtered.map(item => (
-                <RealFeedCard
-                  key={item.id}
-                  item={item}
-                  currentUserId={user?.id}
-                  onLike={() => toggleLike(item.id)}
-                  onComment={(body) => addComment(item.id, body)}
-                  onDelete={() => deletePost(item.id)}
-                  onViewUser={onViewUser}
-                />
-              ))}
-              {hasMore && (
-                <button onClick={loadMore} style={{ background: P.white, border: `1.5px solid ${P.lavender}`, borderRadius: 16, padding: "12px", cursor: "pointer", fontFamily: FF_S, fontSize: 13, color: P.inkLight, fontWeight: 600 }}>
-                  Load more
-                </button>
-              )}
+              {feedItems.map(item => {
+                const user = USERS.find(u => u.id === item.uid);
+                if (!user) return null;
+                return <FeedCard key={item.id} item={item} user={user} following={following} toggleFollow={toggleFollow} onViewUser={onViewUser} />;
+              })}
             </div>
           )}
         </div>
 
         {/* Sidebar */}
         <div style={{ display: "flex", flexDirection: "column", gap: 18, position: "sticky", top: 96 }}>
+
+          {/* Who you follow */}
+          <div style={{ background: P.white, borderRadius: 20, padding: "20px", boxShadow: "0 2px 16px rgba(61,53,80,0.06)" }}>
+            <h4 style={{ fontFamily: FF_D, fontSize: 16, color: P.ink, margin: "0 0 14px", fontWeight: 400 }}>Following ({following.length})</h4>
+            {following.length === 0 ? (
+              <p style={{ fontFamily: FF_S, fontSize: 12, color: P.inkFaint, margin: 0 }}>Nobody yet — discover people below!</p>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                {USERS.filter(u => following.includes(u.id)).map(u => (
+                  <div key={u.id} style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <UserAvatar user={u} size={34} showStatus />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontFamily: FF_S, fontSize: 13, fontWeight: 600, color: P.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{u.name}</div>
+                      <div style={{ fontFamily: FF_S, fontSize: 11, color: P.inkFaint }}>{u.handle}</div>
+                    </div>
+                    <button onClick={() => toggleFollow(u.id)} style={{ background: P.lavenderLight, border: "none", borderRadius: 20, padding: "3px 10px", cursor: "pointer", fontFamily: FF_S, fontSize: 10, color: P.inkFaint, fontWeight: 600, flexShrink: 0 }}>Unfollow</button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Discover */}
+          {unfollowedUsers.length > 0 && (
+            <div style={{ background: P.white, borderRadius: 20, padding: "20px", boxShadow: "0 2px 16px rgba(61,53,80,0.06)" }}>
+              <h4 style={{ fontFamily: FF_D, fontSize: 16, color: P.ink, margin: "0 0 14px", fontWeight: 400 }}>Discover people</h4>
+              <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                {unfollowedUsers.map(u => (
+                  <div key={u.id} style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <UserAvatar user={u} size={34} showStatus />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontFamily: FF_S, fontSize: 13, fontWeight: 600, color: P.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{u.name}</div>
+                      <div style={{ fontFamily: FF_S, fontSize: 11, color: P.inkFaint, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{u.bio}</div>
+                    </div>
+                    <button onClick={() => toggleFollow(u.id)} style={{ background: P.lavender, border: "none", borderRadius: 20, padding: "4px 12px", cursor: "pointer", fontFamily: FF_S, fontSize: 10, fontWeight: 600, color: P.ink, flexShrink: 0, transition: "all 0.15s" }}>+ Follow</button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Your own profile shortcut */}
           <div style={{ background: `linear-gradient(135deg, ${P.lavenderLight}, ${P.white})`, borderRadius: 20, padding: "20px", boxShadow: "0 2px 16px rgba(61,53,80,0.06)", border: `1px solid ${P.lavender}44` }}>
             <p style={{ fontFamily: FF_S, fontSize: 12, color: P.inkFaint, margin: "0 0 10px" }}>Your Nook</p>
             <p style={{ fontFamily: FF_D, fontSize: 15, color: P.ink, margin: "0 0 14px", lineHeight: 1.4 }}>Share your own updates — keep your widgets fresh!</p>
@@ -5134,7 +5194,15 @@ const FeedPage = ({ onNavigate, onViewUser }) => {
   );
 };
 
-const NOTIF_SEED = [];
+const NOTIF_SEED = [
+  { id: "n1", type: "follow",  uid: "u4", ts: Date.now() - 1000*60*8,        read: false, text: "Felix Oduya started following you" },
+  { id: "n2", type: "follow",  uid: "u5", ts: Date.now() - 1000*60*35,       read: false, text: "Ada Kowalski started following you" },
+  { id: "n3", type: "like",    uid: "u1", ts: Date.now() - 1000*60*60*2,     read: false, text: "Cleo Hartwell liked your blog post" },
+  { id: "n4", type: "comment", uid: "u2", ts: Date.now() - 1000*60*60*4,     read: true,  text: "Soren Vale commented on your goals widget" },
+  { id: "n5", type: "follow",  uid: "u6", ts: Date.now() - 1000*60*60*6,     read: true,  text: "Theo Marsh started following you" },
+  { id: "n6", type: "like",    uid: "u3", ts: Date.now() - 1000*60*60*10,    read: true,  text: "Iris Nakamura liked your reading list" },
+  { id: "n7", type: "mention", uid: "u1", ts: Date.now() - 1000*60*60*24,    read: true,  text: "Cleo Hartwell mentioned you in Book Club 🌙" },
+];
 
 const NOTIF_ICONS = { follow: "👤", like: "♥", comment: "💬", mention: "✦" };
 const NOTIF_COLORS = { follow: P.lavender, like: "#F0B8C8", comment: P.sky, mention: P.butter };
@@ -5264,11 +5332,10 @@ const UserProfileModal = ({ user, following, toggleFollow, onClose, onMessage })
 };
 
 const SettingsPage = ({ profilePic, setProfilePic, onLogout }) => {
-  const { user, profile, updateProfile } = useAuth();
   const [section, setSection] = useState("account");
-  const [name, setName]       = useState(profile?.name || "");
-  const [email, setEmail]     = useState(user?.email || "");
-  const [handle, setHandle]   = useState(profile?.handle || "");
+  const [name, setName]       = useState("Margot Ellison");
+  const [email, setEmail]     = useState("margot@studioellison.co");
+  const [handle, setHandle]   = useState("@margot");
   const [saved, setSaved]     = useState(false);
   const [accent, setAccent]   = useState("#C9B8F0");
   const [notifPrefs, setNotifPrefs] = useState({ follows: true, likes: true, comments: true, mentions: true, announcements: false });
@@ -5276,10 +5343,7 @@ const SettingsPage = ({ profilePic, setProfilePic, onLogout }) => {
   const [deleteConfirm, setDeleteConfirm] = useState("");
   const fileRef = useRef();
 
-  const save = async () => {
-    try { await updateProfile({ name, handle }); } catch {}
-    setSaved(true); setTimeout(() => setSaved(false), 2500);
-  };
+  const save = () => { setSaved(true); setTimeout(() => setSaved(false), 2500); };
 
   const ACCENTS = ["#C9B8F0","#B4E8D8","#F8CEBA","#B8D8F0","#F0B8C8","#F5E8B0","#A8D8A8","#F0D0A8"];
 
@@ -5617,21 +5681,17 @@ const HomePageNew = ({ onNavigate, profilePic }) => {
       {/* Community strip */}
       <div style={{ maxWidth: 880, margin: "0 auto", padding: "72px 32px" }}>
         <div style={{ textAlign: "center", marginBottom: 36 }}>
-          <h2 style={{ fontFamily: FF_D, fontSize: 32, color: P.ink, margin: "0 0 10px", fontWeight: 400 }}>Your space, your way</h2>
-          <p style={{ fontFamily: FF_S, fontSize: 15, color: P.inkLight, margin: 0 }}>Everything in one calm, personal dashboard.</p>
+          <h2 style={{ fontFamily: FF_D, fontSize: 32, color: P.ink, margin: "0 0 10px", fontWeight: 400 }}>Join the community</h2>
+          <p style={{ fontFamily: FF_S, fontSize: 15, color: P.inkLight, margin: 0 }}>Real people using Nook to track, share, and connect.</p>
         </div>
         <div style={{ display: "flex", gap: 16, justifyContent: "center", flexWrap: "wrap", marginBottom: 36 }}>
-          {[
-            { initials: "A", color: P.lavender, name: "Reading & Goals" },
-            { initials: "B", color: P.mint,     name: "Travel & Hobbies" },
-            { initials: "C", color: P.peach,    name: "Mood & Habits" },
-            { initials: "D", color: P.sky,      name: "Projects & Blog" },
-            { initials: "E", color: P.rose,     name: "Feed & Messages" },
-            { initials: "F", color: P.butter,   name: "Work & Notes" },
-          ].map(u => (
-            <div key={u.initials} style={{ background: P.white, borderRadius: 18, padding: "18px 20px", width: 160, border: `1.5px solid ${P.lavender}33`, boxShadow: "0 2px 12px rgba(201,184,240,0.1)", textAlign: "center" }}>
-              <div style={{ width: 44, height: 44, borderRadius: "50%", background: u.color, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: FF_D, fontSize: 16, color: P.ink, margin: "0 auto 10px" }}>{u.initials}</div>
-              <div style={{ fontFamily: FF_S, fontSize: 13, color: P.inkLight }}>{u.name}</div>
+          {USERS.map(u => (
+            <div key={u.id} style={{ background: P.white, borderRadius: 18, padding: "18px 20px", width: 180, border: `1.5px solid ${P.lavender}33`, boxShadow: "0 2px 12px rgba(201,184,240,0.1)" }}>
+              <UserAvatar user={u} size={44} showStatus />
+              <div style={{ marginTop: 10 }}>
+                <div style={{ fontFamily: FF_D, fontSize: 15, color: P.ink }}>{u.name.split(" ")[0]}</div>
+                <div style={{ fontFamily: FF_S, fontSize: 12, color: P.inkFaint, marginTop: 2 }}>{u.bio}</div>
+              </div>
             </div>
           ))}
         </div>
@@ -5639,17 +5699,17 @@ const HomePageNew = ({ onNavigate, profilePic }) => {
         {/* Testimonials */}
         <div className="nook-home-testimonials" style={{ marginBottom: 48 }}>
           {[
-            { initials: "S", color: P.lavender, name: "Sarah M.",    handle: "@sarah",  quote: "Nook replaced about five different apps for me. It's the first personal dashboard I've actually kept up with." },
-            { initials: "J", color: P.mint,     name: "James K.",    handle: "@james",  quote: "I love how I can share my reading list and travel widget publicly without exposing everything. The control is just right." },
-            { initials: "L", color: P.peach,    name: "Laura P.",    handle: "@laura",  quote: "The blog widget finally gave me a place to write that doesn't feel like shouting into a void. It's calm and mine." },
-          ].map(({ initials, color, name, handle, quote }) => (
-            <div key={handle} style={{ background: P.white, borderRadius: 18, padding: "22px", border: `1px solid ${P.lavender}33` }}>
+            { user: USERS[0], quote: "Nook replaced about five different apps for me. It's the first personal dashboard I've actually kept up with." },
+            { user: USERS[1], quote: "I love how I can share my reading list and travel widget publicly without exposing everything. The control is just right." },
+            { user: USERS[2], quote: "The blog widget finally gave me a place to write that doesn't feel like shouting into a void. It's calm and mine." },
+          ].map(({ user, quote }) => (
+            <div key={user.id} style={{ background: P.white, borderRadius: 18, padding: "22px", border: `1px solid ${P.lavender}33` }}>
               <p style={{ fontFamily: FF_D, fontSize: 14, color: P.ink, margin: "0 0 16px", lineHeight: 1.7, fontStyle: "italic" }}>"{quote}"</p>
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                <div style={{ width: 32, height: 32, borderRadius: "50%", background: color, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: FF_D, fontSize: 12, color: P.ink, flexShrink: 0 }}>{initials}</div>
+                <UserAvatar user={user} size={32} />
                 <div>
-                  <div style={{ fontFamily: FF_S, fontSize: 13, fontWeight: 600, color: P.ink }}>{name}</div>
-                  <div style={{ fontFamily: FF_S, fontSize: 11, color: P.inkFaint }}>{handle}</div>
+                  <div style={{ fontFamily: FF_S, fontSize: 13, fontWeight: 600, color: P.ink }}>{user.name}</div>
+                  <div style={{ fontFamily: FF_S, fontSize: 11, color: P.inkFaint }}>{user.handle}</div>
                 </div>
               </div>
             </div>
@@ -5673,15 +5733,14 @@ const HomePageNew = ({ onNavigate, profilePic }) => {
   );
 };
 
-export default function App() {
-  const { user, profile, loading: authLoading, profileLoading, signIn, signUp, signOut } = useAuth();
-  const [page, setPage] = useState(() => {
-    try { return sessionStorage.getItem("nook_page") || "home"; } catch { return "home"; }
-  });
+export default function NookApp({ user, profile, onSignUp, onSignIn, onSignOut, onUpdateProfile, widgets: externalWidgets, onSaveWidget, onReorderWidgets, following: externalFollowing, onToggleFollow }) {
+  const [page, setPage] = useState("home");
   const [convos, setConvos] = useState(INITIAL_CONVOS);
   const [requests, setRequests] = useState(INITIAL_REQUESTS);
   const [profilePic, setProfilePic] = useState(null);
-  const [following, setFollowing] = useState([]);
+  // following and toggleFollow come from Supabase via props (fall back to local for demo)
+  const [_following, _setFollowing] = useState(["u1", "u2", "u3"]);
+  const following = externalFollowing?.length > 0 ? externalFollowing : _following;
   const [notifications, setNotifications] = useState(NOTIF_SEED);
   const [showNotifs, setShowNotifs] = useState(false);
   const [viewingUser, setViewingUser] = useState(null);
@@ -5721,122 +5780,79 @@ export default function App() {
     try { localStorage.setItem("nook_state", JSON.stringify({ following, profilePic, hasOnboarded })); } catch {}
   }, [following, profilePic, hasOnboarded]);
 
-  useEffect(() => {
-    try { sessionStorage.setItem("nook_page", page); } catch {}
-  }, [page]);
-
   const toggleFollow = (uid) => {
     const isNowFollowing = !following.includes(uid);
-    setFollowing(fs => isNowFollowing ? [...fs, uid] : fs.filter(id => id !== uid));
+    if (onToggleFollow) {
+      onToggleFollow(uid);
+    } else {
+      _setFollowing(fs => isNowFollowing ? [...fs, uid] : fs.filter(id => id !== uid));
+    }
     if (isNowFollowing) {
-      const user = USERS.find(u => u.id === uid);
-      if (user) {
-        const notif = { id: `n${Date.now()}`, type: "follow", uid: "me", ts: Date.now(), read: false, text: `You are now following ${user.name}` };
+      const u = USERS.find(u => u.id === uid);
+      if (u) {
+        const notif = { id: `n${Date.now()}`, type: "follow", uid: "me", ts: Date.now(), read: false, text: `You are now following ${u.name}` };
         setNotifications(ns => [notif, ...ns]);
       }
     }
   };
 
+  // Build ME from real profile if available
+  const ME = profile ? {
+    id: "me",
+    name: profile.name || "You",
+    handle: profile.handle || "@you",
+    initials: (profile.name || "Y").split(" ").map(w=>w[0]).join("").toUpperCase().slice(0,2),
+    color: profile.avatar_color || P.lavender,
+    status: "online"
+  } : ME_BASE;
+
   const unreadNotifs = notifications.filter(n => !n.read).length;
   const totalUnread = convos.reduce((a, c) => a + c.messages.filter(m => m.from !== "me" && !m.read).length, 0);
-  const isLoggedIn = !!user;
-  const ADMIN_ID = import.meta.env.VITE_ADMIN_USER_ID;
-  const isAdmin = !!user && !!ADMIN_ID && user.id === ADMIN_ID;
+  const isLoggedIn = !!user || !["home", "login", "signup"].includes(page);
 
   const navigate = (p) => {
-    // Guard: redirect to login if not authenticated and trying to access protected pages
-    const publicPages = ["home", "login", "signup"];
-    if (!user && !publicPages.includes(p)) { setPage("login"); return; }
+    // If real user is logged in, don't allow going to auth pages
+    if (user && ["login","signup"].includes(p)) { setPage("dashboard"); return; }
     setPage(p);
     setShowNotifs(false);
   };
 
-  const logout = async () => {
-    if (user) {
-      try { localStorage.removeItem(`nook_widgets_${user.id}`); } catch {}
-      // Note: intentionally keep nook_onboarded_${user.id} so they don't re-onboard on next login
+  // Auto-navigate when auth state changes
+  useEffect(() => {
+    if (user && ["login","signup","home"].includes(page)) {
+      setPage("dashboard");
     }
-    await signOut();
-    try { sessionStorage.removeItem("nook_page"); } catch {}
+  }, [user]);
+  const logout = () => {
     setPage("home");
     setHasOnboarded(false);
+    if (onSignOut) onSignOut();
   };
 
-  const [pendingEmail, setPendingEmail] = useState(() => {
-    try { return sessionStorage.getItem("nook_pending_email") || null; } catch { return null; }
-  });
-
-  const handleLogin = async ({ email, password }) => {
-    const { error } = await signIn({ email, password });
-    if (!error) navigate("dashboard");
-    return { error };
-  };
-
-  const handleSignup = async ({ email, password, name }) => {
-    const { error } = await signUp({ email, password, name });
-    if (!error) {
-      try { sessionStorage.setItem("nook_pending_email", email); } catch {}
-      setPendingEmail(email);
+  const handleSignup = async ({ email, password, name, handle }) => {
+    if (onSignUp) {
+      try {
+        await onSignUp({ email, password, name, handle });
+        if (!hasOnboarded) { setShowOnboarding(true); } else { navigate("dashboard"); }
+      } catch (err) { throw err; }
+    } else {
+      if (!hasOnboarded) { setShowOnboarding(true); } else { navigate("dashboard"); }
     }
-    return { error };
   };
-  const [initialWidgets, setInitialWidgets] = useState(null);
 
-  const completeOnboarding = async (name, bio, chosenIds) => {
-    try {
-      const { supabase } = await import('./lib/supabase');
-      if (user && (name || bio)) {
-        await supabase.from('profiles').update({ name, bio }).eq('id', user.id);
-      }
-    } catch {}
-    // Mark this specific user as onboarded in localStorage
-    try { localStorage.setItem(`nook_onboarded_${user?.id}`, "1"); } catch {}
-    const widgets = INITIAL_WIDGETS.map(w => ({
-      ...w,
-      enabled: chosenIds.includes(w.id),
-      isPublic: chosenIds.includes(w.id),
-    }));
-    setInitialWidgets(widgets);
-    setHasOnboarded(true);
-    setShowOnboarding(false);
-    setPage("dashboard");
+  const handleSignIn = async ({ email, password }) => {
+    if (onSignIn) {
+      try {
+        await onSignIn({ email, password });
+        navigate("dashboard");
+      } catch (err) { throw err; }
+    } else {
+      navigate("dashboard");
+    }
   };
+  const completeOnboarding = () => { setHasOnboarded(true); setShowOnboarding(false); navigate("dashboard"); };
 
   const openUserProfile = (uid) => { const u = USERS.find(u => u.id === uid); if (u) setViewingUser(u); };
-
-  // Redirect unauthenticated users away from protected pages
-  const protectedPages = ["dashboard","customize","messages","feed","work","admin","settings"];
-  useEffect(() => {
-    if (authLoading) return;
-    if (showOnboarding) return;
-    if (!user && protectedPages.includes(page)) { setPage("login"); return; }
-    if (user && pendingEmail) {
-      // Brand new signup that just confirmed email
-      setPendingEmail(null);
-      try { sessionStorage.removeItem("nook_pending_email"); } catch {}
-      const alreadyOnboarded = (() => { try { return !!localStorage.getItem(`nook_onboarded_${user.id}`); } catch { return false; } })();
-      if (!alreadyOnboarded) { setShowOnboarding(true); return; }
-      setPage("dashboard"); return;
-    }
-    if (user && ["login","signup","home"].includes(page)) {
-      // Set the flag for any existing user who has navigated here
-      // Only show onboarding if this is a fresh signup (flag not set AND no pending email means returning user)
-      const alreadyOnboarded = (() => { try { return !!localStorage.getItem(`nook_onboarded_${user.id}`); } catch { return false; } })();
-      if (!alreadyOnboarded) {
-        // Set the flag now — treat any login to home/login page as already onboarded
-        try { localStorage.setItem(`nook_onboarded_${user.id}`, "1"); } catch {}
-      }
-      setPage("dashboard"); return;
-    }
-    if (page === "admin" && !isAdmin) { setPage("dashboard"); }
-  }, [user, authLoading, profile, page, showOnboarding, isAdmin, pendingEmail]);
-
-  // Show nothing while Supabase checks session — prevents flash of login page
-  if (authLoading) return (
-    <div style={{ minHeight: "100vh", background: "#F5F2FC", display: "flex", alignItems: "center", justifyContent: "center" }}>
-      <div style={{ fontFamily: "'DM Serif Display', serif", fontSize: 28, color: "#C9B8F0" }}>✦ Nook</div>
-    </div>
-  );
 
   return (
     <>
@@ -5975,7 +5991,7 @@ export default function App() {
         }
       `}</style>
 
-      <Nav page={page} onNavigate={navigate} onLogout={logout} unreadCount={totalUnread} isLoggedIn={isLoggedIn} isAdmin={isAdmin} me={profile || ME_BASE} profilePic={profilePic} following={following}
+      <Nav page={page} onNavigate={navigate} onLogout={logout} unreadCount={totalUnread} isLoggedIn={isLoggedIn} me={ME} profilePic={profilePic} following={following}
         unreadNotifs={unreadNotifs} showNotifs={showNotifs} setShowNotifs={setShowNotifs}
         notifications={notifications}
         onMarkRead={(id) => setNotifications(ns => ns.map(n => n.id === id ? { ...n, read: true } : n))}
@@ -5983,35 +5999,17 @@ export default function App() {
       />
 
       {page === "home"    && <HomePageNew onNavigate={navigate} profilePic={profilePic} />}
-      {page === "login"   && !user && <AuthPage mode="login"  onSwitch={() => navigate("signup")} onEnter={handleLogin} />}
-      {page === "signup"  && !user && !pendingEmail && <AuthPage mode="signup" onSwitch={() => navigate("login")}  onEnter={handleSignup} />}
-      {pendingEmail && !user && (
-        <div style={{ minHeight: "calc(100vh - 61px)", background: P.bg, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
-          <div style={{ background: P.white, borderRadius: 28, padding: "48px 44px", maxWidth: 440, width: "100%", textAlign: "center", boxShadow: "0 8px 40px rgba(61,53,80,0.10)", border: `1.5px solid ${P.lavender}44` }}>
-            <div style={{ fontSize: 48, marginBottom: 20 }}>✉️</div>
-            <h2 style={{ fontFamily: FF_D, fontSize: 26, color: P.ink, margin: "0 0 12px", fontWeight: 400 }}>Check your email</h2>
-            <p style={{ fontFamily: FF_S, fontSize: 15, color: P.inkLight, lineHeight: 1.6, margin: "0 0 8px" }}>
-              We sent a confirmation link to
-            </p>
-            <p style={{ fontFamily: FF_S, fontSize: 15, color: P.ink, fontWeight: 600, margin: "0 0 24px" }}>{pendingEmail}</p>
-            <p style={{ fontFamily: FF_S, fontSize: 13, color: P.inkFaint, lineHeight: 1.6, margin: "0 0 28px" }}>
-              Click the link in the email to verify your account. Once confirmed, you'll be taken through a short setup and then straight to your Nook.
-            </p>
-            <button onClick={() => { setPendingEmail(null); navigate("login"); }} style={{ background: P.lavenderLight, border: `1.5px solid ${P.lavender}`, borderRadius: 14, padding: "11px 28px", cursor: "pointer", fontFamily: FF_S, fontSize: 14, color: P.ink, fontWeight: 600 }}>
-              Back to login
-            </button>
-          </div>
-        </div>
-      )}
+      {page === "login"   && <AuthPage mode="login"  onSwitch={() => navigate("signup")} onEnter={() => navigate("dashboard")} />}
+      {page === "signup"  && <AuthPage mode="signup" onSwitch={() => navigate("login")}  onEnter={handleSignup} />}
 
-      {["dashboard","customize"].includes(page) && user && (
-        <DashboardPage view={page} onNavigate={navigate} profilePic={profilePic} setProfilePic={setProfilePic} widgetRequests={widgetRequests} setWidgetRequests={setWidgetRequests} following={following} toggleFollow={toggleFollow} onViewUser={openUserProfile} initialWidgets={initialWidgets} />
+      {["dashboard","customize"].includes(page) && (
+        <DashboardPage view={page} onNavigate={navigate} profilePic={profilePic} setProfilePic={setProfilePic} widgetRequests={widgetRequests} setWidgetRequests={setWidgetRequests} following={following} toggleFollow={toggleFollow} onViewUser={openUserProfile} />
       )}
-      {page === "messages" && user && <MessagesPage requests={requests} setRequests={setRequests} />}
-      {page === "feed"     && user && <FeedPage onNavigate={navigate} onViewUser={openUserProfile} />}
-      {page === "work"     && user && <WorkPage />}
-      {page === "admin"    && isAdmin && <AdminPage widgetRequests={widgetRequests} setWidgetRequests={setWidgetRequests} />}
-      {page === "settings" && user && <SettingsPage profilePic={profilePic} setProfilePic={setProfilePic} onLogout={logout} />}
+      {page === "messages" && <MessagesPage convos={convos} setConvos={setConvos} requests={requests} setRequests={setRequests} />}
+      {page === "feed"     && <FeedPage following={following} toggleFollow={toggleFollow} onNavigate={navigate} onViewUser={openUserProfile} />}
+      {page === "work"     && <WorkPage />}
+      {page === "admin"    && <AdminPage widgetRequests={widgetRequests} setWidgetRequests={setWidgetRequests} />}
+      {page === "settings" && <SettingsPage profilePic={profilePic} setProfilePic={setProfilePic} onLogout={logout} />}
 
       {/* User profile modal */}
       {viewingUser && (
