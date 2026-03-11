@@ -1708,7 +1708,7 @@ const GALLERY_SEED = [
   { id: "g3", mediaType: "image", mediaSrc: null, caption: "Morning light through the kitchen window. Some days just start right ☀️",  tags: [],       link: "",                     linkLabel: "", ts: Date.now() - 86400000 * 9, color: "#C9B8F0" },
 ];
 
-const GalleryPostModal = ({ post, onClose, onUpdate, onDelete, isOwner, color }) => {
+const GalleryPostModal = ({ post, onClose, onUpdate, onDelete, isOwner, color, authorName }) => {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState({ caption: post.caption, tags: post.tags.join(" "), link: post.link, linkLabel: post.linkLabel });
   const [copied, setCopied] = useState(false);
@@ -1745,7 +1745,7 @@ const GalleryPostModal = ({ post, onClose, onUpdate, onDelete, isOwner, color })
           <div style={{ padding: "18px 20px", borderBottom: `1px solid ${P.lavender}44`, display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
             <UserAvatar user={ME_BASE} size={34} />
             <div style={{ flex: 1 }}>
-              <div style={{ fontFamily: FF_S, fontSize: 14, fontWeight: 600, color: P.ink }}>{ME_BASE.name}</div>
+              <div style={{ fontFamily: FF_S, fontSize: 14, fontWeight: 600, color: P.ink }}>{authorName || ME_BASE.name}</div>
               <div style={{ fontFamily: FF_S, fontSize: 11, color: P.inkFaint }}>{fmtDate(post.ts)}</div>
             </div>
             <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 20, color: P.inkFaint, lineHeight: 1 }}>×</button>
@@ -1829,7 +1829,7 @@ const GalleryPostModal = ({ post, onClose, onUpdate, onDelete, isOwner, color })
   );
 };
 
-const GalleryWidget = ({ data, color, isOwnDashboard, onDataChange }) => {
+const GalleryWidget = ({ data, color, isOwnDashboard, onDataChange, authorName }) => {
   const [posts, setPosts] = useState(() => data.posts?.length > 0 ? data.posts : GALLERY_SEED);
   const [activePost, setActivePost] = useState(null);
   const [adding, setAdding] = useState(false);
@@ -1951,6 +1951,7 @@ const GalleryWidget = ({ data, color, isOwnDashboard, onDataChange }) => {
           onClose={() => setActivePost(null)}
           onUpdate={(updated) => { updatePost(updated); setActivePost(updated); }}
           onDelete={(id) => { deletePost(id); setActivePost(null); }}
+          authorName={authorName}
         />
       )}
     </div>
@@ -2470,7 +2471,7 @@ const WIDGET_RENDERERS = {
   bookmarks: BookmarksWidget,
 };
 
-const ShareWidgetModal = ({ widget, onClose }) => {
+const ShareWidgetModal = ({ widget, onClose, handle }) => {
   const [sent, setSent]       = useState([]);   // user ids already sent to
   const [search, setSearch]   = useState("");
   const [justSent, setJustSent] = useState(null); // id of last-sent user (for flash)
@@ -2511,10 +2512,10 @@ const ShareWidgetModal = ({ widget, onClose }) => {
           {/* Copy link row */}
           <div style={{ display: "flex", gap: 8, marginBottom: 20 }}>
             <div style={{ flex: 1, background: P.lavenderLight, borderRadius: 10, padding: "9px 12px", fontFamily: FF_S, fontSize: 12, color: P.inkFaint, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-              nook.app/{ME_BASE.handle}/{widget.id}
+              nook.app/{handle || ME_BASE.handle}/{widget.id}
             </div>
             <button
-              onClick={() => { navigator.clipboard?.writeText(`nook.app/${ME_BASE.handle}/${widget.id}`); }}
+              onClick={() => { navigator.clipboard?.writeText(`nook.app/${handle || ME_BASE.handle}/${widget.id}`); }}
               style={{ background: P.lavender, border: "none", borderRadius: 10, padding: "9px 14px", cursor: "pointer", fontFamily: FF_S, fontSize: 12, fontWeight: 600, color: P.ink, flexShrink: 0 }}>
               Copy link
             </button>
@@ -2571,7 +2572,7 @@ const ShareWidgetModal = ({ widget, onClose }) => {
   );
 };
 
-const WidgetCard = ({ widget, onTogglePublic, isOwnDashboard, dragHandleProps, onToggleExpand, isExpanded, liveData, onDataChange }) => {
+const WidgetCard = ({ widget, onTogglePublic, isOwnDashboard, dragHandleProps, onToggleExpand, isExpanded, liveData, onDataChange, handle }) => {
   const color = WIDGET_COLORS[widget.colorIdx];
   const Renderer = WIDGET_RENDERERS[widget.id];
   const [showShare, setShowShare] = useState(false);
@@ -2617,7 +2618,7 @@ const WidgetCard = ({ widget, onTogglePublic, isOwnDashboard, dragHandleProps, o
       </div>
       <Renderer data={widget.data} color={color} isOwnDashboard={isOwnDashboard} onDataChange={onDataChange} {...(liveData || {})} />
     </div>
-    {showShare && <ShareWidgetModal widget={widget} onClose={() => setShowShare(false)} />}
+    {showShare && <ShareWidgetModal widget={widget} onClose={() => setShowShare(false)} handle={handle} />}
     </>
   );
 };
@@ -2945,7 +2946,7 @@ const WidgetToggleCard = ({ w, onToggle }) => {
 };
 
 const DashboardPage = ({ user: userProp, view, onNavigate, profilePic, setProfilePic, widgetRequests, setWidgetRequests, following, toggleFollow, initialWidgets }) => {
-  const { user: authUser, profile } = useAuth();
+  const { user: authUser, profile, updateProfile } = useAuth();
   const user = userProp || authUser;
 
   const displayName = profile?.name || user?.email?.split('@')[0] || 'Your Nook';
@@ -3093,6 +3094,7 @@ const DashboardPage = ({ user: userProp, view, onNavigate, profilePic, setProfil
     if (id === "habitstreak") return { habits, setHabits };
     if (id === "podcast")     return { pods, setPods };
     if (id === "exercise")    return { checked: exerciseChecked, setChecked: setExerciseChecked };
+    if (id === "gallery")     return { authorName: profile?.name || user?.email?.split('@')[0] };
     return {};
   };
 
@@ -3166,7 +3168,7 @@ const DashboardPage = ({ user: userProp, view, onNavigate, profilePic, setProfil
             {editBio ? (
               <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
                 <textarea value={bio} onChange={e => setBio(e.target.value)} rows={2} style={{ flex: 1, border: `1.5px solid ${P.lavender}`, borderRadius: 10, padding: "8px 12px", fontFamily: FF_S, fontSize: 14, background: P.lavenderLight, color: P.ink, outline: "none", resize: "none" }} />
-                <button onClick={() => setEditBio(false)} style={{ background: P.lavender, border: "none", borderRadius: 10, padding: "0 14px", cursor: "pointer", fontFamily: FF_S, fontSize: 13, fontWeight: 600, color: P.ink }}>Save</button>
+                <button onClick={async () => { setEditBio(false); try { await updateProfile({ bio }); } catch {} }} style={{ background: P.lavender, border: "none", borderRadius: 10, padding: "0 14px", cursor: "pointer", fontFamily: FF_S, fontSize: 13, fontWeight: 600, color: P.ink }}>Save</button>
               </div>
             ) : (
               <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
@@ -3302,7 +3304,7 @@ const DashboardPage = ({ user: userProp, view, onNavigate, profilePic, setProfil
                             onDrop={(e) => onDrop(e, w.id)}
                             onDragEnd={onDragEnd}
                             style={{ gridColumn: expandedWidgets.has(w.id) ? "1 / -1" : "auto", opacity: dragId === w.id ? 0.45 : 1, outline: dragOverId === w.id && dragId !== w.id ? `2px dashed ${P.lavender}` : "none", borderRadius: 22, transition: "opacity 0.15s" }}>
-                            <WidgetCard widget={w} onTogglePublic={() => togglePublic(w.id)} isOwnDashboard onToggleExpand={() => toggleExpand(w.id)} isExpanded={expandedWidgets.has(w.id)} dragHandleProps={{ draggable: false }} liveData={getLiveData(w.id)} onDataChange={(newData) => onDataChange(w.id, newData)} />
+                            <WidgetCard widget={w} onTogglePublic={() => togglePublic(w.id)} isOwnDashboard onToggleExpand={() => toggleExpand(w.id)} isExpanded={expandedWidgets.has(w.id)} dragHandleProps={{ draggable: false }} liveData={getLiveData(w.id)} onDataChange={(newData) => onDataChange(w.id, newData)} handle={profile?.handle} />
                           </div>
                         ))}
                       </div>
@@ -5183,7 +5185,101 @@ const RealFeedCard = ({ item, currentUserId, onLike, onComment, onDelete, onView
   );
 };
 
-const FeedPage = ({ onNavigate, onViewUser }) => {
+
+const FeedSidebar = ({ onNavigate, toggleFollow, following = [], onViewUser }) => {
+  const [query, setQuery] = useState("");
+  const [focused, setFocused] = useState(false);
+
+  const results = query.trim().length > 0
+    ? USERS.filter(u => {
+        const q = query.toLowerCase();
+        return u.name.toLowerCase().includes(q) || u.handle.toLowerCase().includes(q);
+      })
+    : [];
+
+  const followed = USERS.filter(u => following.includes(u.id));
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 18, position: "sticky", top: 96 }}>
+      {/* Find people */}
+      <div style={{ background: P.white, borderRadius: 20, padding: "20px", boxShadow: "0 2px 16px rgba(61,53,80,0.06)", border: `1px solid ${P.lavender}44` }}>
+        <div style={{ fontFamily: FF_D, fontSize: 17, color: P.ink, marginBottom: 14 }}>Find people</div>
+        <div style={{ position: "relative", marginBottom: 14 }}>
+          <span style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", fontSize: 13, color: P.inkFaint, pointerEvents: "none" }}>🔍</span>
+          <input
+            value={query}
+            onChange={e => setQuery(e.target.value)}
+            onFocus={() => setFocused(true)}
+            onBlur={() => setTimeout(() => setFocused(false), 150)}
+            placeholder="Search by name or handle…"
+            style={{ width: "100%", border: `1.5px solid ${focused ? P.lavender : P.lavender + "66"}`, borderRadius: 12, padding: "8px 12px 8px 32px", fontFamily: FF_S, fontSize: 13, background: P.lavenderLight, color: P.ink, outline: "none", boxSizing: "border-box", transition: "border-color 0.15s" }}
+          />
+        </div>
+
+        {/* Search results */}
+        {query.trim().length > 0 && (
+          results.length === 0 ? (
+            <p style={{ fontFamily: FF_S, fontSize: 13, color: P.inkFaint, margin: 0, textAlign: "center", padding: "10px 0" }}>No users found</p>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              {results.map(u => (
+                <UserRow key={u.id} u={u} isFollowing={following.includes(u.id)} onToggle={() => toggleFollow(u.id)} onView={() => onViewUser(u)} />
+              ))}
+            </div>
+          )
+        )}
+
+        {/* Following list when not searching */}
+        {query.trim().length === 0 && (
+          <>
+            {followed.length > 0 ? (
+              <>
+                <div style={{ fontFamily: FF_S, fontSize: 11, color: P.inkFaint, fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 10 }}>Following</div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                  {followed.map(u => (
+                    <UserRow key={u.id} u={u} isFollowing={true} onToggle={() => toggleFollow(u.id)} onView={() => onViewUser(u)} />
+                  ))}
+                </div>
+                <div style={{ borderTop: `1px solid ${P.lavender}22`, margin: "14px 0 10px" }} />
+              </>
+            ) : null}
+            <div style={{ fontFamily: FF_S, fontSize: 11, color: P.inkFaint, fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 10 }}>Suggested</div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              {USERS.filter(u => !following.includes(u.id)).slice(0, 4).map(u => (
+                <UserRow key={u.id} u={u} isFollowing={false} onToggle={() => toggleFollow(u.id)} onView={() => onViewUser(u)} />
+              ))}
+            </div>
+          </>
+        )}
+      </div>
+
+      {/* Go to dashboard */}
+      <div style={{ background: `linear-gradient(135deg, ${P.lavenderLight}, ${P.white})`, borderRadius: 20, padding: "18px 20px", boxShadow: "0 2px 16px rgba(61,53,80,0.06)", border: `1px solid ${P.lavender}44` }}>
+        <p style={{ fontFamily: FF_D, fontSize: 15, color: P.ink, margin: "0 0 12px", lineHeight: 1.4 }}>Keep your Nook fresh ✦</p>
+        <button onClick={() => onNavigate("dashboard")} style={{ width: "100%", background: P.lavender, border: "none", borderRadius: 12, padding: "9px", cursor: "pointer", fontFamily: FF_S, fontSize: 13, fontWeight: 600, color: P.ink }}>Go to my dashboard →</button>
+      </div>
+    </div>
+  );
+};
+
+const UserRow = ({ u, isFollowing, onToggle, onView }) => (
+  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+    <div onClick={onView} style={{ cursor: "pointer", flexShrink: 0 }}>
+      <UserAvatar user={u} size={36} />
+    </div>
+    <div onClick={onView} style={{ flex: 1, minWidth: 0, cursor: "pointer" }}>
+      <div style={{ fontFamily: FF_S, fontSize: 13, fontWeight: 600, color: P.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{u.name}</div>
+      <div style={{ fontFamily: FF_S, fontSize: 11, color: P.inkFaint }}>{u.handle}</div>
+    </div>
+    <button
+      onClick={onToggle}
+      style={{ flexShrink: 0, background: isFollowing ? P.lavenderLight : P.lavender, border: `1.5px solid ${P.lavender}`, borderRadius: 20, padding: "4px 12px", cursor: "pointer", fontFamily: FF_S, fontSize: 11, fontWeight: 600, color: isFollowing ? P.inkFaint : P.ink, transition: "all 0.15s", whiteSpace: "nowrap" }}>
+      {isFollowing ? "Following" : "Follow"}
+    </button>
+  </div>
+);
+
+const FeedPage = ({ onNavigate, onViewUser, following, toggleFollowApp }) => {
   const { user } = useAuth();
   const {
     posts, loading, error, hasMore,
@@ -5298,13 +5394,7 @@ const FeedPage = ({ onNavigate, onViewUser }) => {
         </div>
 
         {/* Sidebar */}
-        <div style={{ display: "flex", flexDirection: "column", gap: 18, position: "sticky", top: 96 }}>
-          <div style={{ background: `linear-gradient(135deg, ${P.lavenderLight}, ${P.white})`, borderRadius: 20, padding: "20px", boxShadow: "0 2px 16px rgba(61,53,80,0.06)", border: `1px solid ${P.lavender}44` }}>
-            <p style={{ fontFamily: FF_S, fontSize: 12, color: P.inkFaint, margin: "0 0 10px" }}>Your Nook</p>
-            <p style={{ fontFamily: FF_D, fontSize: 15, color: P.ink, margin: "0 0 14px", lineHeight: 1.4 }}>Share your own updates — keep your widgets fresh!</p>
-            <button onClick={() => onNavigate("dashboard")} style={{ width: "100%", background: P.lavender, border: "none", borderRadius: 12, padding: "9px", cursor: "pointer", fontFamily: FF_S, fontSize: 13, fontWeight: 600, color: P.ink }}>Go to my dashboard →</button>
-          </div>
-        </div>
+        <FeedSidebar onNavigate={onNavigate} following={following} toggleFollow={toggleFollowApp || toggleFollow} onViewUser={onViewUser} />
       </div>
     </div>
   );
@@ -5447,8 +5537,16 @@ const SettingsPage = ({ profilePic, setProfilePic, onLogout }) => {
   const [handle, setHandle]   = useState(profile?.handle || "");
   const [saved, setSaved]     = useState(false);
   const [accent, setAccent]   = useState("#C9B8F0");
-  const [notifPrefs, setNotifPrefs] = useState({ follows: true, likes: true, comments: true, mentions: true, announcements: false });
-  const [privPrefs, setPrivPrefs]   = useState({ defaultPublic: false, showOnline: true, allowMessages: true });
+  const [notifPrefs, setNotifPrefs] = useState(() => {
+    try { const s = localStorage.getItem(`nook_notif_${user?.id}`); if (s) return JSON.parse(s); } catch {}
+    return { follows: true, likes: true, comments: true, mentions: true, announcements: false };
+  });
+  const [privPrefs, setPrivPrefs] = useState(() => {
+    try { const s = localStorage.getItem(`nook_priv_${user?.id}`); if (s) return JSON.parse(s); } catch {}
+    return { defaultPublic: false, showOnline: true, allowMessages: true };
+  });
+  useEffect(() => { if (user?.id) try { localStorage.setItem(`nook_notif_${user.id}`, JSON.stringify(notifPrefs)); } catch {} }, [notifPrefs, user?.id]);
+  useEffect(() => { if (user?.id) try { localStorage.setItem(`nook_priv_${user.id}`, JSON.stringify(privPrefs)); } catch {} }, [privPrefs, user?.id]);
   const [deleteConfirm, setDeleteConfirm] = useState("");
   const fileRef = useRef();
 
@@ -6177,7 +6275,7 @@ export default function App() {
         </div>
       )}
       {page === "messages" && user && <MessagesPage requests={requests} setRequests={setRequests} />}
-      {page === "feed"     && user && <FeedPage onNavigate={navigate} onViewUser={openUserProfile} />}
+      {page === "feed"     && user && <FeedPage onNavigate={navigate} onViewUser={openUserProfile} following={following} toggleFollowApp={toggleFollow} />}
       {page === "work"     && user && <WorkPage />}
       {page === "admin"    && isAdmin && <AdminPage widgetRequests={widgetRequests} setWidgetRequests={setWidgetRequests} />}
       {page === "settings" && user && <SettingsPage profilePic={profilePic} setProfilePic={setProfilePic} onLogout={logout} />}
