@@ -9,7 +9,7 @@ import { useAuth } from './useAuth'
  *   conversations.type  ('dm' | 'group')   — NOT is_group boolean
  *   chat_messages       — new table created by migration
  *     .id, .conversation_id, .sender_id, .content, .created_at
- *   conversation_members.joined_at  — extra column (fine, ignored)
+ *   conversation_members.conversation_id + user_id
  *
  * Returns:
  *   conversations       – with displayName, lastMessage, unreadCount
@@ -29,6 +29,28 @@ import { useAuth } from './useAuth'
 
 const TYPING_THROTTLE_MS = 2000
 
+// ─── Per-user "last read" timestamp helpers ───────────────────────────────
+// Stored in localStorage as { [conversationId]: ISO-string }
+// A conversation's unread count is the number of messages from others that
+// arrived AFTER the stored timestamp, so reading a conversation and then
+// navigating away keeps the badge cleared on the next fetch.
+function getReadTimestamps(userId) {
+  if (!userId) return {}
+  try {
+    const raw = localStorage.getItem(`nook_msg_read_${userId}`)
+    return raw ? JSON.parse(raw) : {}
+  } catch { return {} }
+}
+
+function saveReadTimestamp(userId, conversationId) {
+  if (!userId || !conversationId) return
+  try {
+    const ts = getReadTimestamps(userId)
+    ts[conversationId] = new Date().toISOString()
+    localStorage.setItem(`nook_msg_read_${userId}`, JSON.stringify(ts))
+  } catch {}
+}
+
 export function useMessages() {
   const { user, profile } = useAuth()
   const [conversations, setConversations] = useState([])
@@ -42,14 +64,19 @@ export function useMessages() {
   const lastTypingSentRef = useRef(0)
   const messageChannelRef = useRef(null)
   const typingChannelRef = useRef(null)
+  const activeConversationIdRef = useRef(null) // mirrors activeConversationId for closure access
 
   // ─── Fetch conversations ──────────────────────────────────────────────────
+  // Uses flat queries instead of nested joins to avoid requiring FK constraints
+  // in PostgREST (which would 400 if conversation_members.user_id -> profiles.id
+  // foreign key isn't registered in the DB schema).
 
   const fetchConversations = useCallback(async () => {
     if (!supabase || !user) return
     setLoading(true)
 
     try {
+      // Step 1: Get conversation IDs the user belongs to
       const { data: memberData, error: memberError } = await supabase
         .from('conversation_members')
         .select('conversation_id')
@@ -60,42 +87,67 @@ export function useMessages() {
 
       const convIds = memberData.map(m => m.conversation_id)
 
+      // Step 2: Get conversations (flat — no nested join)
       const { data: convData, error: convError } = await supabase
         .from('conversations')
-        .select(`
-          id, type, name, created_at,
-          conversation_members (
-            user_id, joined_at,
-            profiles:user_id ( id, name, handle, avatar_color, avatar_url )
-          )
-        `)
+        .select('id, type, name, created_at')
         .in('id', convIds)
 
       if (convError) throw convError
+      if (!convData?.length) { setConversations([]); setLoading(false); return }
+
+      // Step 3: Get all members for these conversations
+      const { data: allMembers, error: allMembersError } = await supabase
+        .from('conversation_members')
+        .select('conversation_id, user_id')
+        .in('conversation_id', convIds)
+
+      if (allMembersError) throw allMembersError
+
+      // Step 4: Get profiles for all member user IDs
+      const allUserIds = [...new Set((allMembers || []).map(m => m.user_id))]
+      const { data: profilesData, error: profilesError } = await supabase
+        .from('profiles')
+        .select('id, name, handle, avatar_color, avatar_url')
+        .in('id', allUserIds)
+
+      if (profilesError) throw profilesError
+
+      const profilesById = Object.fromEntries((profilesData || []).map(p => [p.id, p]))
+
+      // Step 5: For each conversation, fetch last message + assemble metadata
+      // Load persisted read-timestamps so unread counts survive navigation
+      const readTimestamps = getReadTimestamps(user.id)
 
       const withMeta = await Promise.all((convData || []).map(async (conv) => {
+        const convMembers = (allMembers || []).filter(m => m.conversation_id === conv.id)
+
         const { data: lastMsg } = await supabase
           .from('chat_messages')
-          .select('id, content, created_at, sender_id, profiles:sender_id (name, handle)')
+          .select('id, content, created_at, sender_id')
           .eq('conversation_id', conv.id)
           .order('created_at', { ascending: false })
           .limit(1)
           .maybeSingle()
 
-        const { count: unreadCount } = await supabase
+        // Only count messages that arrived after the user last read this conversation.
+        // If no timestamp exists (never opened), count everything from others.
+        const lastRead = readTimestamps[conv.id]
+        let unreadQuery = supabase
           .from('chat_messages')
           .select('id', { count: 'exact', head: true })
           .eq('conversation_id', conv.id)
           .neq('sender_id', user.id)
+        if (lastRead) unreadQuery = unreadQuery.gt('created_at', lastRead)
+        const { count: unreadCount } = await unreadQuery
 
-        const otherMembers = conv.conversation_members
+        const otherMembers = convMembers
           .filter(m => m.user_id !== user.id)
-          .map(m => m.profiles)
+          .map(m => profilesById[m.user_id] || null)
 
-        // conversations.type is 'dm' or 'group'
         const isGroup = conv.type === 'group'
         const displayName = isGroup
-          ? (conv.name || otherMembers.map(m => m?.name).filter(Boolean).join(', '))
+          ? (conv.name || otherMembers.map(m => m?.name).filter(Boolean).join(', ') || 'Group Chat')
           : (otherMembers[0]?.name || 'Unknown')
 
         return {
@@ -104,7 +156,7 @@ export function useMessages() {
           displayName,
           displayAvatar: isGroup ? null : otherMembers[0],
           otherMembers,
-          lastMessage: lastMsg || null,
+          lastMessage: lastMsg ? { ...lastMsg, profiles: profilesById[lastMsg.sender_id] || null } : null,
           unreadCount: unreadCount || 0,
         }
       }))
@@ -132,17 +184,31 @@ export function useMessages() {
     if (!supabase || !conversationId) return
     setMessagesLoading(true)
     try {
-      const { data, error: msgError } = await supabase
+      // Get messages flat first, then fetch profiles separately
+      const { data: msgData, error: msgError } = await supabase
         .from('chat_messages')
-        .select(`
-          id, content, created_at, sender_id,
-          profiles:sender_id ( id, name, handle, avatar_color, avatar_url )
-        `)
+        .select('id, content, created_at, sender_id')
         .eq('conversation_id', conversationId)
         .order('created_at', { ascending: true })
 
       if (msgError) throw msgError
-      setMessages(data || [])
+      if (!msgData?.length) { setMessages([]); setMessagesLoading(false); return }
+
+      // Fetch profiles for all senders
+      const senderIds = [...new Set(msgData.map(m => m.sender_id))]
+      const { data: senderProfiles } = await supabase
+        .from('profiles')
+        .select('id, name, handle, avatar_color, avatar_url')
+        .in('id', senderIds)
+
+      const profilesById = Object.fromEntries((senderProfiles || []).map(p => [p.id, p]))
+
+      const enriched = msgData.map(msg => ({
+        ...msg,
+        profiles: profilesById[msg.sender_id] || null,
+      }))
+
+      setMessages(enriched)
     } catch (err) {
       setError(err.message)
     } finally {
@@ -154,7 +220,17 @@ export function useMessages() {
 
   const selectConversation = useCallback((conversationId) => {
     setActiveConversationId(conversationId)
+    activeConversationIdRef.current = conversationId  // keep ref in sync for closure access
     setTypingUsers([])
+
+    // Clear unread count and persist the read timestamp so it survives navigation
+    if (conversationId) {
+      setConversations(prev => prev.map(c =>
+        c.id === conversationId ? { ...c, unreadCount: 0 } : c
+      ))
+      // Persist: any future fetchConversations will count only messages after now
+      saveReadTimestamp(user?.id, conversationId)
+    }
 
     if (messageChannelRef.current) supabase?.removeChannel(messageChannelRef.current)
     if (typingChannelRef.current) supabase?.removeChannel(typingChannelRef.current)
@@ -172,21 +248,27 @@ export function useMessages() {
         table: 'chat_messages',
         filter: `conversation_id=eq.${conversationId}`,
       }, async (payload) => {
-        const { data } = await supabase
-          .from('chat_messages')
-          .select(`id, content, created_at, sender_id,
-            profiles:sender_id (id, name, handle, avatar_color, avatar_url)`)
-          .eq('id', payload.new.id)
-          .single()
+        // Fetch the sender profile separately
+        const { data: senderProfile } = await supabase
+          .from('profiles')
+          .select('id, name, handle, avatar_color, avatar_url')
+          .eq('id', payload.new.sender_id)
+          .maybeSingle()
 
-        if (data) {
-          setMessages(prev => prev.some(m => m.id === data.id) ? prev : [...prev, data])
-          setConversations(prev => prev.map(c => c.id !== conversationId ? c : {
-            ...c,
-            lastMessage: data,
-            unreadCount: data.sender_id !== user?.id ? c.unreadCount + 1 : c.unreadCount,
-          }))
+        const data = { ...payload.new, profiles: senderProfile || null }
+
+        setMessages(prev => prev.some(m => m.id === data.id) ? prev : [...prev, data])
+        // If this conversation is active the user is reading it right now —
+        // keep unread at 0 and update the read timestamp so future fetches agree.
+        const isActive = activeConversationIdRef.current === conversationId
+        if (isActive && data.sender_id !== user?.id) {
+          saveReadTimestamp(user?.id, conversationId)
         }
+        setConversations(prev => prev.map(c => c.id !== conversationId ? c : {
+          ...c,
+          lastMessage: data,
+          unreadCount: (data.sender_id !== user?.id && !isActive) ? c.unreadCount + 1 : c.unreadCount,
+        }))
       })
       .subscribe()
 
@@ -218,26 +300,42 @@ export function useMessages() {
   }, [])
 
   // ─── Send message ─────────────────────────────────────────────────────────
+  // Uses client-side UUID + insert-without-select to avoid RLS SELECT timing issues
 
   const sendMessage = useCallback(async (content) => {
     if (!supabase || !user || !activeConversationId) return { error: 'Not ready' }
     if (!content?.trim()) return { error: 'Message cannot be empty' }
 
-    const { data, error } = await supabase
+    const msgId = crypto.randomUUID()
+    const { error: insertError } = await supabase
       .from('chat_messages')
       .insert({
+        id: msgId,
         conversation_id: activeConversationId,
         sender_id: user.id,
         content: content.trim(),
       })
-      .select(`id, content, created_at, sender_id,
-        profiles:sender_id (id, name, handle, avatar_color, avatar_url)`)
-      .single()
 
-    if (error) return { error: error.message }
-    setMessages(prev => prev.some(m => m.id === data.id) ? prev : [...prev, data])
-    return { data }
-  }, [user, activeConversationId])
+    if (insertError) return { error: insertError.message }
+
+    // Optimistically add message to state using known data
+    const optimisticMsg = {
+      id: msgId,
+      conversation_id: activeConversationId,
+      sender_id: user.id,
+      content: content.trim(),
+      created_at: new Date().toISOString(),
+      profiles: profile ? {
+        id: user.id,
+        name: profile.name,
+        handle: profile.handle,
+        avatar_color: profile.avatar_color,
+        avatar_url: profile.avatar_url,
+      } : null,
+    }
+    setMessages(prev => prev.some(m => m.id === msgId) ? prev : [...prev, optimisticMsg])
+    return { data: optimisticMsg }
+  }, [user, profile, activeConversationId])
 
   // ─── Typing indicator ─────────────────────────────────────────────────────
 
@@ -259,60 +357,96 @@ export function useMessages() {
     }
   }, [user, profile])
 
+  // ─── Delete conversation ──────────────────────────────────────────────────
+
+  const deleteConversation = useCallback(async (conversationId) => {
+    if (!supabase || !user) return { error: 'Not authenticated' }
+
+    const { error: delError } = await supabase
+      .from('conversations')
+      .delete()
+      .eq('id', conversationId)
+
+    if (delError) return { error: delError.message }
+
+    setConversations(prev => prev.filter(c => c.id !== conversationId))
+    if (activeConversationId === conversationId) {
+      setActiveConversationId(null)
+      setMessages([])
+    }
+    return {}
+  }, [user, activeConversationId])
+
+  // ─── Delete message ───────────────────────────────────────────────────────
+
+  const deleteMessage = useCallback(async (messageId) => {
+    if (!supabase || !user) return { error: 'Not authenticated' }
+
+    const { error: delError } = await supabase
+      .from('chat_messages')
+      .delete()
+      .eq('id', messageId)
+      .eq('sender_id', user.id) // safety: can only delete own messages
+
+    if (delError) return { error: delError.message }
+
+    setMessages(prev => prev.filter(m => m.id !== messageId))
+
+    // Update lastMessage in conversations list if this was the last message
+    setConversations(prev => prev.map(c => {
+      if (c.lastMessage?.id !== messageId) return c
+      return { ...c, lastMessage: null }
+    }))
+
+    return {}
+  }, [user])
+
   // ─── Start DM ─────────────────────────────────────────────────────────────
 
   const startDM = useCallback(async (targetUserId) => {
     if (!supabase || !user) return { error: 'Not authenticated' }
     if (targetUserId === user.id) return { error: "Can't DM yourself" }
 
-    // Check for existing DM
-    const { data: myConvs } = await supabase
-      .from('conversation_members').select('conversation_id').eq('user_id', user.id)
-    const myConvIds = (myConvs || []).map(c => c.conversation_id)
+    // Check for existing DM using already-loaded conversations list
+    const existingDM = conversations.find(c =>
+      !c.isGroup && c.otherMembers?.some(m => m?.id === targetUserId)
+    )
+    if (existingDM) return { conversationId: existingDM.id }
 
-    if (myConvIds.length > 0) {
-      const { data: shared } = await supabase
-        .from('conversation_members').select('conversation_id')
-        .eq('user_id', targetUserId).in('conversation_id', myConvIds)
-
-      for (const s of (shared || [])) {
-        const { data: conv } = await supabase
-          .from('conversations').select('id, type')
-          .eq('id', s.conversation_id).maybeSingle()
-        if (conv?.type === 'dm') return { conversationId: conv.id }
-      }
-    }
-
-    // Create new DM
-    const { data: conv, error: convError } = await supabase
-      .from('conversations').insert({ type: 'dm' }).select().single()
+    // Generate UUID client-side so we never need SELECT after INSERT
+    const convId = crypto.randomUUID()
+    const { error: convError } = await supabase
+      .from('conversations').insert({ id: convId, type: 'dm' })
     if (convError) return { error: convError.message }
 
-    await supabase.from('conversation_members').insert([
-      { conversation_id: conv.id, user_id: user.id },
-      { conversation_id: conv.id, user_id: targetUserId },
+    const { error: memberError } = await supabase.from('conversation_members').insert([
+      { conversation_id: convId, user_id: user.id },
+      { conversation_id: convId, user_id: targetUserId },
     ])
+    if (memberError) return { error: memberError.message }
 
     await fetchConversations()
-    return { conversationId: conv.id }
-  }, [user, fetchConversations])
+    return { conversationId: convId }
+  }, [user, conversations, fetchConversations])
 
   // ─── Start group chat ─────────────────────────────────────────────────────
 
   const startGroupChat = useCallback(async (userIds, name = '') => {
     if (!supabase || !user) return { error: 'Not authenticated' }
 
-    const { data: conv, error: convError } = await supabase
-      .from('conversations').insert({ type: 'group', name: name || null }).select().single()
+    const convId = crypto.randomUUID()
+    const { error: convError } = await supabase
+      .from('conversations').insert({ id: convId, type: 'group', name: name || null })
     if (convError) return { error: convError.message }
 
     const members = [user.id, ...userIds.filter(id => id !== user.id)]
-    await supabase.from('conversation_members').insert(
-      members.map(uid => ({ conversation_id: conv.id, user_id: uid }))
+    const { error: memberError } = await supabase.from('conversation_members').insert(
+      members.map(uid => ({ conversation_id: convId, user_id: uid }))
     )
+    if (memberError) return { error: memberError.message }
 
     await fetchConversations()
-    return { conversationId: conv.id }
+    return { conversationId: convId }
   }, [user, fetchConversations])
 
   const activeConversation = conversations.find(c => c.id === activeConversationId) || null
@@ -327,6 +461,8 @@ export function useMessages() {
     error,
     selectConversation,
     sendMessage,
+    deleteMessage,
+    deleteConversation,
     startDM,
     startGroupChat,
     typingUsers,

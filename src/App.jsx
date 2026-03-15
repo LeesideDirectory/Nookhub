@@ -1,5 +1,5 @@
 // NOOK BUILD v43 - supabase import fix
-import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
+import { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo, createContext, useContext } from 'react'
 import { useAuth } from './hooks/useAuth'
 import { useFeed } from './hooks/useFeed'
 import { useMessages } from './hooks/useMessages'
@@ -145,7 +145,27 @@ const Toggle = ({ on, onChange, small }) => {
   );
 };
 
-const Nav = ({ page, onNavigate, onLogout, unreadCount, isLoggedIn, isAdmin, me, profilePic, following, unreadNotifs, showNotifs, setShowNotifs, notifications, onMarkRead, onMarkAllRead }) => {
+// ─── Profile view context — lets any component open a user profile by handle ─
+const ProfileViewContext = createContext(null);
+
+const HandleBadge = ({ handle, style = {} }) => {
+  const openProfile = useContext(ProfileViewContext);
+  if (!handle) return null;
+  if (!openProfile) return <span style={style}>{handle}</span>;
+  return (
+    <span
+      onClick={e => { e.stopPropagation(); openProfile(handle); }}
+      style={{ color: "#9B85D8", cursor: "pointer", fontWeight: 600, transition: "opacity 0.15s", ...style }}
+      onMouseEnter={e => e.currentTarget.style.opacity = "0.75"}
+      onMouseLeave={e => e.currentTarget.style.opacity = "1"}
+    >
+      {handle}
+    </span>
+  );
+};
+
+const Nav = ({ page, onNavigate, onLogout, unreadCount, isLoggedIn, isAdmin, me, profilePic, following, unreadNotifs, showNotifs, setShowNotifs, notifications, onMarkRead, onMarkAllRead, onOpenProfile, accent = "#C9B8F0" }) => {
+  const accentLight = accent + "33";
   const [menuOpen, setMenuOpen] = useState(false);
   const close = () => setMenuOpen(false);
 
@@ -155,7 +175,7 @@ const Nav = ({ page, onNavigate, onLogout, unreadCount, isLoggedIn, isAdmin, me,
         {/* Logo */}
         <div onClick={() => { onNavigate(isLoggedIn ? "dashboard" : "home"); close(); }}
           style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer" }}>
-          <div style={{ width: 30, height: 30, borderRadius: 9, background: P.lavender, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14 }}>✦</div>
+          <div style={{ width: 30, height: 30, borderRadius: 9, background: accent, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14 }}>✦</div>
           <span style={{ fontFamily: FF_D, fontSize: 22, color: P.ink }}>Nook</span>
         </div>
 
@@ -164,28 +184,28 @@ const Nav = ({ page, onNavigate, onLogout, unreadCount, isLoggedIn, isAdmin, me,
           {isLoggedIn ? (
             <>
               {[["dashboard","My Dashboard"],["feed","Feed"],["messages","Messages"],["work","Work 🔒"],["customize","Customise"]].map(([v, label]) => (
-                <button key={v} onClick={() => onNavigate(v)} style={{ background: page === v ? P.lavender : "transparent", border: `1.5px solid ${page === v ? P.lavender : P.lavender + "66"}`, borderRadius: 10, padding: "7px 15px", cursor: "pointer", fontFamily: FF_S, fontSize: 13, color: P.ink, fontWeight: page === v ? 600 : 400, transition: "all 0.2s", display: "flex", alignItems: "center", gap: 6 }}>
+                <button key={v} onClick={() => onNavigate(v)} style={{ background: page === v ? accent : "transparent", border: `1.5px solid ${page === v ? accent : accent + "66"}`, borderRadius: 10, padding: "7px 15px", cursor: "pointer", fontFamily: FF_S, fontSize: 13, color: P.ink, fontWeight: page === v ? 600 : 400, transition: "all 0.2s", display: "flex", alignItems: "center", gap: 6 }}>
                   {label}
                   {v === "messages" && unreadCount > 0 && <span style={{ background: P.rose, borderRadius: 20, padding: "1px 7px", fontSize: 10, fontWeight: 700, color: P.ink }}>{unreadCount}</span>}
                 </button>
               ))}
               <div style={{ width: 1, height: 22, background: P.lavender + "55", margin: "0 4px" }} />
               <div style={{ position: "relative" }}>
-                <button onClick={() => setShowNotifs(v => !v)} style={{ position: "relative", background: showNotifs ? P.lavenderLight : "transparent", border: `1.5px solid ${showNotifs ? P.lavender : P.lavender + "44"}`, borderRadius: 10, padding: "6px 10px", cursor: "pointer", fontSize: 16, lineHeight: 1, transition: "all 0.2s" }}>
+                <button onClick={() => setShowNotifs(v => !v)} style={{ position: "relative", background: showNotifs ? accentLight : "transparent", border: `1.5px solid ${showNotifs ? accent : accent + "44"}`, borderRadius: 10, padding: "6px 10px", cursor: "pointer", fontSize: 16, lineHeight: 1, transition: "all 0.2s" }}>
                   🔔
                   {unreadNotifs > 0 && <span style={{ position: "absolute", top: -4, right: -4, background: P.rose, borderRadius: "50%", width: 16, height: 16, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: FF_S, fontSize: 9, fontWeight: 700, color: P.ink, border: `2px solid ${P.white}` }}>{unreadNotifs}</span>}
                 </button>
-                {showNotifs && <NotificationsDropdown notifs={notifications} onMarkRead={onMarkRead} onMarkAllRead={onMarkAllRead} onNavigate={onNavigate} onClose={() => setShowNotifs(false)} />}
+                {showNotifs && <NotificationsDropdown notifs={notifications} onMarkRead={onMarkRead} onMarkAllRead={onMarkAllRead} onNavigate={onNavigate} onOpenProfile={onOpenProfile} onClose={() => setShowNotifs(false)} />}
               </div>
               <UserAvatar user={me} size={32} showStatus photoPic={profilePic} />
-              <button onClick={() => onNavigate("settings")} title="Settings" style={{ background: page === "settings" ? P.lavender : "transparent", border: `1.5px solid ${page === "settings" ? P.lavender : P.lavender + "44"}`, borderRadius: 10, padding: "6px 10px", cursor: "pointer", fontSize: 14, color: P.inkLight, lineHeight: 1, transition: "all 0.2s" }}>⚙</button>
-              {isAdmin && <button onClick={() => onNavigate("admin")} title="Admin panel" style={{ background: page === "admin" ? P.lavender : "transparent", border: `1.5px solid ${page === "admin" ? P.lavender : P.lavender + "44"}`, borderRadius: 10, padding: "6px 8px", cursor: "pointer", fontSize: 11, color: P.inkFaint, lineHeight: 1, transition: "all 0.2s", fontFamily: FF_S, fontWeight: 600 }}>ADMIN</button>}
+              <button onClick={() => onNavigate("settings")} title="Settings" style={{ background: page === "settings" ? accent : "transparent", border: `1.5px solid ${page === "settings" ? accent : accent + "44"}`, borderRadius: 10, padding: "6px 10px", cursor: "pointer", fontSize: 14, color: P.inkLight, lineHeight: 1, transition: "all 0.2s" }}>⚙</button>
+              {isAdmin && <button onClick={() => onNavigate("admin")} title="Admin panel" style={{ background: page === "admin" ? accent : "transparent", border: `1.5px solid ${page === "admin" ? accent : accent + "44"}`, borderRadius: 10, padding: "6px 8px", cursor: "pointer", fontSize: 11, color: P.inkFaint, lineHeight: 1, transition: "all 0.2s", fontFamily: FF_S, fontWeight: 600 }}>ADMIN</button>}
               <button onClick={onLogout} style={{ background: "transparent", border: `1.5px solid ${P.rose}55`, borderRadius: 10, padding: "7px 14px", cursor: "pointer", fontFamily: FF_S, fontSize: 13, color: P.inkLight }}>Log out</button>
             </>
           ) : (
             <>
-              <button onClick={() => onNavigate("login")} style={{ background: "transparent", border: `1.5px solid ${P.lavender}`, borderRadius: 12, padding: "8px 22px", cursor: "pointer", fontFamily: FF_S, fontSize: 14, color: P.ink }}>Log in</button>
-              <button onClick={() => onNavigate("signup")} style={{ background: P.lavender, border: "none", borderRadius: 12, padding: "8px 22px", cursor: "pointer", fontFamily: FF_S, fontSize: 14, color: P.ink, fontWeight: 600 }}>Sign up</button>
+              <button onClick={() => onNavigate("login")} style={{ background: "transparent", border: `1.5px solid ${accent}`, borderRadius: 12, padding: "8px 22px", cursor: "pointer", fontFamily: FF_S, fontSize: 14, color: P.ink }}>Log in</button>
+              <button onClick={() => onNavigate("signup")} style={{ background: accent, border: "none", borderRadius: 12, padding: "8px 22px", cursor: "pointer", fontFamily: FF_S, fontSize: 14, color: P.ink, fontWeight: 600 }}>Sign up</button>
             </>
           )}
         </div>
@@ -199,12 +219,12 @@ const Nav = ({ page, onNavigate, onLogout, unreadCount, isLoggedIn, isAdmin, me,
                   🔔
                   {unreadNotifs > 0 && <span style={{ position: "absolute", top: -2, right: -2, background: P.rose, borderRadius: "50%", width: 14, height: 14, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: FF_S, fontSize: 8, fontWeight: 700, color: P.ink }}>{unreadNotifs}</span>}
                 </button>
-                {showNotifs && <NotificationsDropdown notifs={notifications} onMarkRead={onMarkRead} onMarkAllRead={onMarkAllRead} onNavigate={onNavigate} onClose={() => setShowNotifs(false)} />}
+                {showNotifs && <NotificationsDropdown notifs={notifications} onMarkRead={onMarkRead} onMarkAllRead={onMarkAllRead} onNavigate={onNavigate} onOpenProfile={onOpenProfile} onClose={() => setShowNotifs(false)} />}
               </div>
               <UserAvatar user={me} size={28} photoPic={profilePic} />
             </>
           )}
-          <button onClick={() => setMenuOpen(v => !v)} style={{ background: menuOpen ? P.lavenderLight : "transparent", border: `1.5px solid ${P.lavender}`, borderRadius: 10, padding: "6px 10px", cursor: "pointer", fontSize: 18, lineHeight: 1 }}>
+          <button onClick={() => setMenuOpen(v => !v)} style={{ background: menuOpen ? accentLight : "transparent", border: `1.5px solid ${accent}`, borderRadius: 10, padding: "6px 10px", cursor: "pointer", fontSize: 18, lineHeight: 1 }}>
             {menuOpen ? "✕" : "☰"}
           </button>
         </div>
@@ -216,7 +236,7 @@ const Nav = ({ page, onNavigate, onLogout, unreadCount, isLoggedIn, isAdmin, me,
           {isLoggedIn ? (
             <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
               {[["dashboard","🏠 My Dashboard"],["feed","✦ Feed"],["messages","✉ Messages"],["work","🔒 Work"],["customize","⊞ Customise"],["settings","⚙ Settings"],...(isAdmin ? [["admin","◈ Admin"]] : [])].map(([v, label]) => (
-                <button key={v} onClick={() => { onNavigate(v); close(); }} style={{ background: page === v ? P.lavenderLight : "transparent", border: `1px solid ${page === v ? P.lavender : "transparent"}`, borderRadius: 12, padding: "12px 16px", cursor: "pointer", fontFamily: FF_S, fontSize: 14, color: P.ink, fontWeight: page === v ? 600 : 400, textAlign: "left", display: "flex", alignItems: "center", gap: 8, justifyContent: "space-between" }}>
+                <button key={v} onClick={() => { onNavigate(v); close(); }} style={{ background: page === v ? accentLight : "transparent", border: `1px solid ${page === v ? accent : "transparent"}`, borderRadius: 12, padding: "12px 16px", cursor: "pointer", fontFamily: FF_S, fontSize: 14, color: P.ink, fontWeight: page === v ? 600 : 400, textAlign: "left", display: "flex", alignItems: "center", gap: 8, justifyContent: "space-between" }}>
                   <span>{label}</span>
                   {v === "messages" && unreadCount > 0 && <span style={{ background: P.rose, borderRadius: 20, padding: "1px 8px", fontSize: 11, fontWeight: 700, color: P.ink }}>{unreadCount}</span>}
                 </button>
@@ -237,33 +257,119 @@ const Nav = ({ page, onNavigate, onLogout, unreadCount, isLoggedIn, isAdmin, me,
 };
 
 const TodoWidget = ({ data, color, onDataChange }) => {
-  const [items, setItems] = useState(data.items || []);
-  const [input, setInput] = useState("");
-  const toggle = (i) => {
-    const next = items.map((it, idx) => idx === i ? { ...it, done: !it.done } : it);
-    setItems(next); onDataChange?.({ items: next });
+  // Support both old flat list and new grouped format
+  const initGroups = () => {
+    if (data.groups && data.groups.length > 0) return data.groups;
+    // Migrate old flat items into a default group
+    return [{ id: "default", name: "My Tasks", items: data.items || [] }];
   };
-  const add = () => {
-    if (input.trim()) {
-      const next = [...items, { text: input.trim(), done: false }];
-      setItems(next); setInput(""); onDataChange?.({ items: next });
-    }
+  const [groups, setGroups] = useState(initGroups);
+  const [collapsedGroups, setCollapsedGroups] = useState(new Set());
+  const [addingGroup, setAddingGroup] = useState(false);
+  const [newGroupName, setNewGroupName] = useState("");
+  const [groupInputs, setGroupInputs] = useState({});
+
+  const save = (nextGroups) => {
+    setGroups(nextGroups);
+    onDataChange?.({ groups: nextGroups, items: nextGroups.flatMap(g => g.items) });
   };
+
+  const toggleItem = (groupId, itemIdx) => {
+    save(groups.map(g => g.id === groupId
+      ? { ...g, items: g.items.map((it, i) => i === itemIdx ? { ...it, done: !it.done } : it) }
+      : g));
+  };
+  const removeItem = (groupId, itemIdx) => {
+    save(groups.map(g => g.id === groupId
+      ? { ...g, items: g.items.filter((_, i) => i !== itemIdx) }
+      : g));
+  };
+  const addItem = (groupId) => {
+    const input = groupInputs[groupId] || "";
+    if (!input.trim()) return;
+    save(groups.map(g => g.id === groupId
+      ? { ...g, items: [...g.items, { text: input.trim(), done: false }] }
+      : g));
+    setGroupInputs(prev => ({ ...prev, [groupId]: "" }));
+  };
+  const addGroup = () => {
+    if (!newGroupName.trim()) return;
+    save([...groups, { id: `grp${Date.now()}`, name: newGroupName.trim(), items: [] }]);
+    setNewGroupName(""); setAddingGroup(false);
+  };
+  const removeGroup = (groupId) => {
+    if (groups.length <= 1) return; // keep at least one group
+    save(groups.filter(g => g.id !== groupId));
+  };
+  const renameGroup = (groupId, newName) => {
+    save(groups.map(g => g.id === groupId ? { ...g, name: newName } : g));
+  };
+  const toggleCollapse = (groupId) => {
+    setCollapsedGroups(s => { const n = new Set(s); n.has(groupId) ? n.delete(groupId) : n.add(groupId); return n; });
+  };
+
   return (
     <div>
-      {items.map((it, i) => (
-        <div key={i} onClick={() => toggle(i)} style={{ display: "flex", alignItems: "center", gap: 10, padding: "7px 0", borderBottom: `1px solid ${color.accent}55`, cursor: "pointer" }}>
-          <div style={{ width: 18, height: 18, borderRadius: 5, flexShrink: 0, background: it.done ? color.dot : "transparent", border: `2px solid ${it.done ? color.dot : color.dot + "80"}`, display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.2s" }}>
-            {it.done && <span style={{ color: "#fff", fontSize: 11, fontWeight: 700 }}>✓</span>}
+      {groups.map((group) => {
+        const isCollapsed = collapsedGroups.has(group.id);
+        const doneCount = group.items.filter(it => it.done).length;
+        return (
+          <div key={group.id} style={{ marginBottom: 14 }}>
+            {/* Group header */}
+            <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
+              <button onClick={() => toggleCollapse(group.id)} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 10, color: P.inkFaint, padding: "0 2px", lineHeight: 1 }}>
+                {isCollapsed ? "▶" : "▼"}
+              </button>
+              <input
+                value={group.name}
+                onChange={e => renameGroup(group.id, e.target.value)}
+                style={{ flex: 1, background: "none", border: "none", outline: "none", fontFamily: FF_S, fontSize: 12, fontWeight: 700, color: color.dot, textTransform: "uppercase", letterSpacing: 0.5, cursor: "text", padding: 0 }}
+              />
+              <span style={{ fontFamily: FF_S, fontSize: 10, color: P.inkFaint }}>{doneCount}/{group.items.length}</span>
+              {groups.length > 1 && (
+                <button onClick={() => removeGroup(group.id)} style={{ background: "none", border: "none", cursor: "pointer", color: P.inkFaint, fontSize: 13, padding: "0 2px", lineHeight: 1, opacity: 0.5 }}>×</button>
+              )}
+            </div>
+            {/* Group items */}
+            {!isCollapsed && (
+              <>
+                {group.items.map((it, i) => (
+                  <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, padding: "6px 0 6px 16px", borderBottom: `1px solid ${color.accent}55` }}>
+                    <div onClick={() => toggleItem(group.id, i)} style={{ width: 18, height: 18, borderRadius: 5, flexShrink: 0, background: it.done ? color.dot : "transparent", border: `2px solid ${it.done ? color.dot : color.dot + "80"}`, display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.2s", cursor: "pointer" }}>
+                      {it.done && <span style={{ color: "#fff", fontSize: 11, fontWeight: 700 }}>✓</span>}
+                    </div>
+                    <span style={{ flex: 1, fontFamily: FF_S, fontSize: 13.5, color: P.ink, textDecoration: it.done ? "line-through" : "none", opacity: it.done ? 0.5 : 1, transition: "all 0.2s" }}>{it.text}</span>
+                    <button onClick={() => removeItem(group.id, i)} style={{ background: "none", border: "none", cursor: "pointer", color: P.inkFaint, fontSize: 14, padding: "0 2px", opacity: 0, transition: "opacity 0.15s" }}
+                      onMouseEnter={e => e.currentTarget.style.opacity = 1}
+                      onMouseLeave={e => e.currentTarget.style.opacity = 0}>×</button>
+                  </div>
+                ))}
+                <div style={{ display: "flex", gap: 6, marginTop: 6, paddingLeft: 16 }}>
+                  <input
+                    value={groupInputs[group.id] || ""}
+                    onChange={e => setGroupInputs(prev => ({ ...prev, [group.id]: e.target.value }))}
+                    onKeyDown={e => e.key === "Enter" && addItem(group.id)}
+                    placeholder="Add a task…"
+                    style={{ flex: 1, border: `1.5px solid ${color.accent}`, borderRadius: 8, padding: "5px 10px", fontFamily: FF_S, fontSize: 13, background: color.bg, color: P.ink, outline: "none" }}
+                  />
+                  <button onClick={() => addItem(group.id)} style={{ background: color.dot, color: "#fff", border: "none", borderRadius: 8, padding: "5px 12px", cursor: "pointer", fontFamily: FF_S, fontSize: 13, fontWeight: 600 }}>+</button>
+                </div>
+              </>
+            )}
           </div>
-          <span style={{ fontFamily: FF_S, fontSize: 13.5, color: P.ink, textDecoration: it.done ? "line-through" : "none", opacity: it.done ? 0.5 : 1, transition: "all 0.2s" }}>{it.text}</span>
+        );
+      })}
+      {/* Add new group */}
+      {addingGroup ? (
+        <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
+          <input autoFocus value={newGroupName} onChange={e => setNewGroupName(e.target.value)} onKeyDown={e => { if (e.key === "Enter") addGroup(); if (e.key === "Escape") setAddingGroup(false); }} placeholder="Group name…"
+            style={{ flex: 1, border: `1.5px solid ${color.accent}`, borderRadius: 8, padding: "5px 10px", fontFamily: FF_S, fontSize: 12, background: color.bg, color: P.ink, outline: "none" }} />
+          <button onClick={addGroup} style={{ background: color.dot, color: "#fff", border: "none", borderRadius: 8, padding: "5px 10px", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>Add</button>
+          <button onClick={() => setAddingGroup(false)} style={{ background: "none", border: "none", cursor: "pointer", color: P.inkFaint, fontSize: 14 }}>✕</button>
         </div>
-      ))}
-      <div style={{ display: "flex", gap: 6, marginTop: 12 }}>
-        <input value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => e.key === "Enter" && add()} placeholder="Add a task…"
-          style={{ flex: 1, border: `1.5px solid ${color.accent}`, borderRadius: 8, padding: "5px 10px", fontFamily: FF_S, fontSize: 13, background: color.bg, color: P.ink, outline: "none" }} />
-        <button onClick={add} style={{ background: color.dot, color: "#fff", border: "none", borderRadius: 8, padding: "5px 12px", cursor: "pointer", fontFamily: FF_S, fontSize: 13, fontWeight: 600 }}>+</button>
-      </div>
+      ) : (
+        <button onClick={() => setAddingGroup(true)} style={{ marginTop: 8, background: "none", border: `1.5px dashed ${color.dot}55`, borderRadius: 8, padding: "5px 12px", cursor: "pointer", fontFamily: FF_S, fontSize: 11, color: P.inkFaint, width: "100%" }}>+ Add group</button>
+      )}
     </div>
   );
 };
@@ -780,54 +886,104 @@ const FAKE_IG_POSTS = [
 ];
 
 const InstagramWidget = ({ data, color, onDataChange }) => {
-  const [username, setUsername] = useState(data.username || "");
-  const [editingUser, setEditingUser] = useState(false);
-  const [draftUser, setDraftUser] = useState(username);
-  const [activePost, setActivePost] = useState(null);
+  const [draft, setDraft]   = useState(data.username || "");
+  const [step, setStep]     = useState(data.username ? "done" : "idle");
+  const igGradient = "linear-gradient(135deg, #f09433 0%, #e6683c 25%, #dc2743 50%, #cc2366 75%, #bc1888 100%)";
+  const isVerified = data.verified === true;
+
+  const openAndVerify = () => {
+    if (!draft.trim()) return;
+    window.open(`https://instagram.com/${draft.trim().replace(/^@/, "")}`, "_blank");
+    setStep("verifying");
+  };
+  const confirm = () => {
+    const u = draft.trim().replace(/^@/, "");
+    onDataChange?.({ username: u, verified: true });
+    setStep("done");
+  };
+
   return (
     <div>
-      {/* IG header */}
-      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14, paddingBottom: 12, borderBottom: `1px solid ${color.accent}55` }}>
-        <div style={{ width: 36, height: 36, borderRadius: "50%", background: `linear-gradient(135deg, #F8CEBA, #C9B8F0, #B4E8D8)`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, border: `2px solid ${color.dot}` }}>📸</div>
+      {/* Header */}
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16, paddingBottom: 12, borderBottom: `1px solid ${color.accent}55` }}>
+        <div style={{ width: 36, height: 36, borderRadius: "50%", background: igGradient, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, flexShrink: 0 }}>📸</div>
         <div style={{ flex: 1 }}>
-          {editingUser ? (
-            <div style={{ display: "flex", gap: 6 }}>
-              <input value={draftUser} onChange={e => setDraftUser(e.target.value)}
-                style={{ flex: 1, border: `1.5px solid ${color.accent}`, borderRadius: 8, padding: "4px 8px", fontFamily: FF_S, fontSize: 13, background: color.bg, color: P.ink, outline: "none" }} />
-              <button onClick={() => { setUsername(draftUser); setEditingUser(false); onDataChange?.({ username: draftUser }); }} style={{ background: color.dot, color: "#fff", border: "none", borderRadius: 8, padding: "4px 10px", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>✓</button>
-            </div>
-          ) : (
-            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <span style={{ fontFamily: FF_S, fontSize: 14, fontWeight: 600, color: P.ink }}>@{username}</span>
-              <button onClick={() => setEditingUser(true)} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 11, color: P.inkFaint, padding: 0 }}>✎</button>
+          {step === "idle" && (
+            <button onClick={() => setStep("entering")}
+              style={{ background: igGradient, color: "#fff", border: "none", borderRadius: 20, padding: "6px 16px", cursor: "pointer", fontFamily: FF_S, fontSize: 12, fontWeight: 700 }}>
+              Connect your Instagram →
+            </button>
+          )}
+          {step === "entering" && (
+            <div>
+              <div style={{ display: "flex", gap: 4, marginBottom: 6, alignItems: "center" }}>
+                <span style={{ fontFamily: FF_S, fontSize: 13, color: P.inkFaint, flexShrink: 0 }}>@</span>
+                <input value={draft} onChange={e => setDraft(e.target.value.replace(/^@/, ""))}
+                  placeholder="your_username" autoFocus onKeyDown={e => e.key === "Enter" && openAndVerify()}
+                  style={{ flex: 1, border: `1.5px solid ${color.accent}`, borderRadius: 8, padding: "4px 8px", fontFamily: FF_S, fontSize: 13, background: color.bg, color: P.ink, outline: "none" }} />
+              </div>
+              <div style={{ display: "flex", gap: 6 }}>
+                <button onClick={openAndVerify} disabled={!draft.trim()}
+                  style={{ flex: 1, background: igGradient, color: "#fff", border: "none", borderRadius: 8, padding: "5px 10px", cursor: draft.trim() ? "pointer" : "default", opacity: draft.trim() ? 1 : 0.5, fontFamily: FF_S, fontSize: 11, fontWeight: 600 }}>
+                  Open instagram.com/{draft || "…"} →
+                </button>
+                <button onClick={() => setStep(data.username ? "done" : "idle")}
+                  style={{ background: "none", border: "none", cursor: "pointer", color: P.inkFaint, fontSize: 16, padding: "0 4px" }}>×</button>
+              </div>
             </div>
           )}
-          <div style={{ display: "flex", gap: 14, marginTop: 3 }}>
-            {[["9","posts"],["1.2k","followers"],["340","following"]].map(([n, l]) => (
-              <span key={l} style={{ fontFamily: FF_S, fontSize: 11, color: P.inkLight }}><strong style={{ color: P.ink }}>{n}</strong> {l}</span>
-            ))}
-          </div>
+          {step === "verifying" && (
+            <div>
+              <p style={{ fontFamily: FF_S, fontSize: 12, color: P.ink, margin: "0 0 8px", lineHeight: 1.5 }}>
+                Does <strong>instagram.com/{draft}</strong> look like your profile?
+              </p>
+              <div style={{ display: "flex", gap: 6 }}>
+                <button onClick={confirm}
+                  style={{ flex: 1, background: igGradient, color: "#fff", border: "none", borderRadius: 8, padding: "5px 10px", cursor: "pointer", fontFamily: FF_S, fontSize: 11, fontWeight: 700 }}>
+                  ✓ Yes, that's my account
+                </button>
+                <button onClick={() => setStep("entering")}
+                  style={{ background: P.lavenderLight, border: "none", borderRadius: 8, padding: "5px 10px", cursor: "pointer", fontFamily: FF_S, fontSize: 11, color: P.inkLight }}>
+                  ← Back
+                </button>
+              </div>
+            </div>
+          )}
+          {step === "done" && (
+            <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+              <span style={{ fontFamily: FF_S, fontSize: 14, fontWeight: 600, color: P.ink }}>@{data.username}</span>
+              {isVerified
+                ? <span style={{ background: igGradient, borderRadius: 20, padding: "2px 8px", fontFamily: FF_S, fontSize: 10, fontWeight: 700, color: "#fff" }}>✓ Connected</span>
+                : <span title="Click ✎ to verify this is your account" style={{ background: "#E8956A22", borderRadius: 20, padding: "2px 8px", fontFamily: FF_S, fontSize: 10, color: "#E8956A", border: "1px solid #E8956A55" }}>⚠ Unverified</span>
+              }
+              <button onClick={() => { setDraft(data.username || ""); setStep("entering"); }}
+                style={{ background: "none", border: "none", cursor: "pointer", fontSize: 11, color: P.inkFaint, padding: 0 }}>✎</button>
+            </div>
+          )}
         </div>
       </div>
-      {/* Grid */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 4 }}>
-        {FAKE_IG_POSTS.map(post => (
-          <div key={post.id} onClick={() => setActivePost(activePost?.id === post.id ? null : post)}
-            style={{ aspectRatio: "1", borderRadius: 8, background: post.bg, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 26, cursor: "pointer", transition: "transform 0.15s, opacity 0.15s", transform: activePost?.id === post.id ? "scale(0.96)" : "scale(1)", position: "relative", overflow: "hidden" }}>
-            {post.emoji}
-            {activePost?.id === post.id && (
-              <div style={{ position: "absolute", inset: 0, background: "rgba(61,53,80,0.55)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 2, borderRadius: 8 }}>
-                <span style={{ color: "#fff", fontSize: 13, fontWeight: 700 }}>♥ {post.likes}</span>
-                <span style={{ color: "#fff", fontSize: 10, opacity: 0.85, fontFamily: FF_S }}>{post.caption}</span>
-              </div>
-            )}
+
+      {/* Profile link card or empty state */}
+      {data.username ? (
+        <a href={`https://instagram.com/${data.username}`} target="_blank" rel="noreferrer"
+          style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 14, padding: "28px 16px", background: "linear-gradient(160deg, #fff5f0 0%, #fce4f3 100%)", borderRadius: 18, textDecoration: "none", border: "1.5px solid #f7c5e0", transition: "transform 0.15s, box-shadow 0.15s" }}
+          onMouseEnter={e => { e.currentTarget.style.transform = "translateY(-2px)"; e.currentTarget.style.boxShadow = "0 8px 24px rgba(188,24,136,0.15)"; }}
+          onMouseLeave={e => { e.currentTarget.style.transform = "translateY(0)"; e.currentTarget.style.boxShadow = "none"; }}>
+          <div style={{ width: 76, height: 76, borderRadius: "50%", background: igGradient, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 34, boxShadow: "0 4px 14px rgba(220,39,67,0.3)" }}>📸</div>
+          <div style={{ textAlign: "center" }}>
+            <div style={{ fontFamily: FF_S, fontSize: 16, fontWeight: 700, color: "#3d3550", marginBottom: 3 }}>@{data.username}</div>
+            <div style={{ fontFamily: FF_S, fontSize: 12, color: "#9b7aaa" }}>instagram.com/{data.username}</div>
           </div>
-        ))}
-      </div>
-      <a href={`https://instagram.com/${username}`} target="_blank" rel="noreferrer"
-        style={{ display: "block", textAlign: "center", marginTop: 12, fontFamily: FF_S, fontSize: 12, color: color.dot, textDecoration: "none", fontWeight: 600 }}>
-        View on Instagram →
-      </a>
+          <div style={{ background: igGradient, color: "#fff", borderRadius: 22, padding: "9px 24px", fontFamily: FF_S, fontSize: 13, fontWeight: 700, letterSpacing: 0.2 }}>
+            View on Instagram →
+          </div>
+        </a>
+      ) : (
+        <div style={{ textAlign: "center", padding: "36px 16px", color: P.inkFaint, fontFamily: FF_S, fontSize: 13, lineHeight: 1.6 }}>
+          <div style={{ fontSize: 28, marginBottom: 8 }}>📸</div>
+          Connect your Instagram account above to add a link to your profile
+        </div>
+      )}
     </div>
   );
 };
@@ -995,76 +1151,239 @@ const HobbiesWidget = ({ data, color, onDataChange }) => {
 };
 
 const LinkedInWidget = ({ data, color, onDataChange }) => {
-  const [info, setInfo] = useState(data);
-  const [editUser, setEditUser] = useState(false);
-  const [draftUser, setDraftUser] = useState(data.username);
+  const [draft, setDraft] = useState(data.username || "");
+  const [step, setStep]   = useState(data.username ? "done" : "idle");
+  const isVerified = data.verified === true;
+
+  const liInStyle = { color: "#fff", fontWeight: 800, fontSize: 16, fontFamily: "sans-serif" };
+
+  const openAndVerify = () => {
+    if (!draft.trim()) return;
+    window.open(`https://linkedin.com/in/${draft.trim()}`, "_blank");
+    setStep("verifying");
+  };
+  const confirm = () => {
+    const u = draft.trim();
+    onDataChange?.({ username: u, verified: true });
+    setStep("done");
+  };
+
   return (
     <div>
-      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 14, paddingBottom: 12, borderBottom: `1px solid ${color.accent}55` }}>
+      {/* Header */}
+      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16, paddingBottom: 12, borderBottom: `1px solid ${color.accent}55` }}>
         <div style={{ width: 38, height: 38, borderRadius: 10, background: "#0077B5", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-          <span style={{ color: "#fff", fontWeight: 800, fontSize: 16, fontFamily: "sans-serif" }}>in</span>
+          <span style={liInStyle}>in</span>
         </div>
         <div style={{ flex: 1 }}>
-          {editUser ? (
-            <div style={{ display: "flex", gap: 6 }}>
-              <input value={draftUser} onChange={e => setDraftUser(e.target.value)} style={{ flex: 1, border: `1.5px solid ${color.accent}`, borderRadius: 8, padding: "4px 8px", fontFamily: FF_S, fontSize: 13, background: color.bg, color: P.ink, outline: "none" }} />
-              <button onClick={() => { const next = { ...info, username: draftUser }; setInfo(next); setEditUser(false); onDataChange?.(next); }} style={{ background: color.dot, color: "#fff", border: "none", borderRadius: 8, padding: "4px 10px", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>✓</button>
-            </div>
-          ) : (
-            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <span style={{ fontFamily: FF_S, fontSize: 14, fontWeight: 600, color: P.ink }}>{info.username}</span>
-              <button onClick={() => setEditUser(true)} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 11, color: P.inkFaint }}>✎</button>
+          {step === "idle" && (
+            <button onClick={() => setStep("entering")}
+              style={{ background: "#0077B5", color: "#fff", border: "none", borderRadius: 20, padding: "6px 16px", cursor: "pointer", fontFamily: FF_S, fontSize: 12, fontWeight: 700 }}>
+              Connect your LinkedIn →
+            </button>
+          )}
+          {step === "entering" && (
+            <div>
+              <div style={{ marginBottom: 6 }}>
+                <input value={draft} onChange={e => setDraft(e.target.value)} placeholder="your-profile-slug"
+                  autoFocus onKeyDown={e => e.key === "Enter" && openAndVerify()}
+                  style={{ width: "100%", border: `1.5px solid ${color.accent}`, borderRadius: 8, padding: "4px 8px", fontFamily: FF_S, fontSize: 13, background: color.bg, color: P.ink, outline: "none", boxSizing: "border-box" }} />
+                <div style={{ fontFamily: FF_S, fontSize: 10, color: P.inkFaint, marginTop: 2 }}>linkedin.com/in/<strong>{draft || "your-slug"}</strong></div>
+              </div>
+              <div style={{ display: "flex", gap: 6 }}>
+                <button onClick={openAndVerify} disabled={!draft.trim()}
+                  style={{ flex: 1, background: "#0077B5", color: "#fff", border: "none", borderRadius: 8, padding: "5px 10px", cursor: draft.trim() ? "pointer" : "default", opacity: draft.trim() ? 1 : 0.5, fontFamily: FF_S, fontSize: 11, fontWeight: 600 }}>
+                  Open my LinkedIn profile →
+                </button>
+                <button onClick={() => setStep(data.username ? "done" : "idle")}
+                  style={{ background: "none", border: "none", cursor: "pointer", color: P.inkFaint, fontSize: 16, padding: "0 4px" }}>×</button>
+              </div>
             </div>
           )}
-          <div style={{ fontFamily: FF_S, fontSize: 12, color: P.inkLight }}>{info.headline} · {info.followers} followers</div>
+          {step === "verifying" && (
+            <div>
+              <p style={{ fontFamily: FF_S, fontSize: 12, color: P.ink, margin: "0 0 8px", lineHeight: 1.5 }}>
+                Does <strong>linkedin.com/in/{draft}</strong> look like your profile?
+              </p>
+              <div style={{ display: "flex", gap: 6 }}>
+                <button onClick={confirm}
+                  style={{ flex: 1, background: "#0077B5", color: "#fff", border: "none", borderRadius: 8, padding: "5px 10px", cursor: "pointer", fontFamily: FF_S, fontSize: 11, fontWeight: 700 }}>
+                  ✓ Yes, that's my profile
+                </button>
+                <button onClick={() => setStep("entering")}
+                  style={{ background: P.lavenderLight, border: "none", borderRadius: 8, padding: "5px 10px", cursor: "pointer", fontFamily: FF_S, fontSize: 11, color: P.inkLight }}>
+                  ← Back
+                </button>
+              </div>
+            </div>
+          )}
+          {step === "done" && (
+            <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+              <span style={{ fontFamily: FF_S, fontSize: 14, fontWeight: 600, color: P.ink }}>{data.username}</span>
+              {isVerified
+                ? <span style={{ background: "#0077B5", borderRadius: 20, padding: "2px 8px", fontFamily: FF_S, fontSize: 10, fontWeight: 700, color: "#fff" }}>✓ Connected</span>
+                : <span title="Click ✎ to verify this is your profile" style={{ background: "#E8956A22", borderRadius: 20, padding: "2px 8px", fontFamily: FF_S, fontSize: 10, color: "#E8956A", border: "1px solid #E8956A55" }}>⚠ Unverified</span>
+              }
+              <button onClick={() => { setDraft(data.username || ""); setStep("entering"); }}
+                style={{ background: "none", border: "none", cursor: "pointer", fontSize: 11, color: P.inkFaint, padding: 0 }}>✎</button>
+            </div>
+          )}
         </div>
       </div>
-      {info.posts.map((p, i) => (
-        <div key={i} style={{ padding: "9px 0", borderBottom: `1px solid ${color.accent}44` }}>
-          <p style={{ fontFamily: FF_S, fontSize: 13, color: P.ink, margin: "0 0 5px", lineHeight: 1.5 }}>{p.text}</p>
-          <span style={{ fontFamily: FF_S, fontSize: 11, color: P.inkFaint }}>👍 {p.likes}</span>
+
+      {/* Profile link card or empty state */}
+      {data.username ? (
+        <a href={`https://linkedin.com/in/${data.username}`} target="_blank" rel="noreferrer"
+          style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 14, padding: "28px 16px", background: "linear-gradient(160deg, #EBF5FB 0%, #D6EAF8 100%)", borderRadius: 18, textDecoration: "none", border: "1.5px solid #BDE0F5", transition: "transform 0.15s, box-shadow 0.15s" }}
+          onMouseEnter={e => { e.currentTarget.style.transform = "translateY(-2px)"; e.currentTarget.style.boxShadow = "0 8px 24px rgba(0,119,181,0.18)"; }}
+          onMouseLeave={e => { e.currentTarget.style.transform = "translateY(0)"; e.currentTarget.style.boxShadow = "none"; }}>
+          <div style={{ width: 76, height: 76, borderRadius: "50%", background: "#0077B5", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 4px 14px rgba(0,119,181,0.3)" }}>
+            <span style={{ color: "#fff", fontWeight: 800, fontSize: 36, fontFamily: "sans-serif", lineHeight: 1 }}>in</span>
+          </div>
+          <div style={{ textAlign: "center" }}>
+            <div style={{ fontFamily: FF_S, fontSize: 16, fontWeight: 700, color: "#3d3550", marginBottom: 3 }}>{data.username}</div>
+            <div style={{ fontFamily: FF_S, fontSize: 12, color: "#5a7a9a" }}>linkedin.com/in/{data.username}</div>
+          </div>
+          <div style={{ background: "#0077B5", color: "#fff", borderRadius: 22, padding: "9px 24px", fontFamily: FF_S, fontSize: 13, fontWeight: 700, letterSpacing: 0.2 }}>
+            View on LinkedIn →
+          </div>
+        </a>
+      ) : (
+        <div style={{ textAlign: "center", padding: "36px 16px", color: P.inkFaint, fontFamily: FF_S, fontSize: 13, lineHeight: 1.6 }}>
+          <div style={{ width: 48, height: 48, borderRadius: 12, background: "#0077B5", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 12px" }}>
+            <span style={{ color: "#fff", fontWeight: 800, fontSize: 22, fontFamily: "sans-serif" }}>in</span>
+          </div>
+          Connect your LinkedIn profile above to add a link to your dashboard
         </div>
-      ))}
-      <a href={`https://linkedin.com/in/${info.username}`} target="_blank" rel="noreferrer" style={{ display: "block", textAlign: "center", marginTop: 12, fontFamily: FF_S, fontSize: 12, color: color.dot, textDecoration: "none", fontWeight: 600 }}>View on LinkedIn →</a>
+      )}
     </div>
   );
 };
 
 const TwitterWidget = ({ data, color, onDataChange }) => {
-  const [info, setInfo] = useState(data);
-  const [editUser, setEditUser] = useState(false);
-  const [draftUser, setDraftUser] = useState(data.username);
+  const [draft, setDraft] = useState(data.username || "");
+  const [step, setStep]   = useState(data.username ? "done" : "idle");
+  const embedRef = useRef(null);
+  const isVerified = data.verified === true;
+
+  // Load the real Twitter/X timeline embed when confirmed username changes
+  useEffect(() => {
+    if (!data.username || !embedRef.current) return;
+    embedRef.current.innerHTML = "";
+    const anchor = document.createElement("a");
+    anchor.className = "twitter-timeline";
+    anchor.href = `https://twitter.com/${data.username}`;
+    anchor.setAttribute("data-height", "420");
+    anchor.setAttribute("data-chrome", "noheader nofooter noborders transparent");
+    anchor.setAttribute("data-theme", "light");
+    anchor.textContent = `Tweets by @${data.username}`;
+    embedRef.current.appendChild(anchor);
+    if (window.twttr?.widgets) {
+      window.twttr.widgets.load(embedRef.current);
+    } else {
+      if (!document.getElementById("twitter-widgets-js")) {
+        const script = document.createElement("script");
+        script.id = "twitter-widgets-js";
+        script.src = "https://platform.twitter.com/widgets.js";
+        script.async = true; script.charset = "utf-8";
+        document.head.appendChild(script);
+        script.onload = () => { if (window.twttr && embedRef.current) window.twttr.widgets.load(embedRef.current); };
+      }
+    }
+  }, [data.username]);
+
+  const openAndVerify = () => {
+    if (!draft.trim()) return;
+    window.open(`https://x.com/${draft.trim().replace(/^@/, "")}`, "_blank");
+    setStep("verifying");
+  };
+  const confirm = () => {
+    const u = draft.trim().replace(/^@/, "");
+    onDataChange?.({ ...data, username: u, verified: true });
+    setStep("done");
+  };
+
   return (
     <div>
+      {/* Header */}
       <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 14, paddingBottom: 12, borderBottom: `1px solid ${color.accent}55` }}>
         <div style={{ width: 38, height: 38, borderRadius: 10, background: "#000", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
           <span style={{ color: "#fff", fontWeight: 800, fontSize: 17, fontFamily: "sans-serif" }}>✕</span>
         </div>
         <div style={{ flex: 1 }}>
-          {editUser ? (
-            <div style={{ display: "flex", gap: 6 }}>
-              <input value={draftUser} onChange={e => setDraftUser(e.target.value)} style={{ flex: 1, border: `1.5px solid ${color.accent}`, borderRadius: 8, padding: "4px 8px", fontFamily: FF_S, fontSize: 13, background: color.bg, color: P.ink, outline: "none" }} />
-              <button onClick={() => { const next = { ...info, username: draftUser }; setInfo(next); setEditUser(false); onDataChange?.(next); }} style={{ background: color.dot, color: "#fff", border: "none", borderRadius: 8, padding: "4px 10px", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>✓</button>
-            </div>
-          ) : (
-            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <span style={{ fontFamily: FF_S, fontSize: 14, fontWeight: 600, color: P.ink }}>@{info.username}</span>
-              <button onClick={() => setEditUser(true)} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 11, color: P.inkFaint }}>✎</button>
+          {step === "idle" && (
+            <button onClick={() => setStep("entering")}
+              style={{ background: "#000", color: "#fff", border: "none", borderRadius: 20, padding: "6px 16px", cursor: "pointer", fontFamily: FF_S, fontSize: 12, fontWeight: 700 }}>
+              Connect your X account →
+            </button>
+          )}
+          {step === "entering" && (
+            <div>
+              <div style={{ display: "flex", gap: 4, marginBottom: 6, alignItems: "center" }}>
+                <span style={{ fontFamily: FF_S, fontSize: 13, color: P.inkFaint, flexShrink: 0 }}>@</span>
+                <input value={draft} onChange={e => setDraft(e.target.value.replace(/^@/, ""))}
+                  placeholder="your_username" autoFocus onKeyDown={e => e.key === "Enter" && openAndVerify()}
+                  style={{ flex: 1, border: `1.5px solid ${color.accent}`, borderRadius: 8, padding: "4px 8px", fontFamily: FF_S, fontSize: 13, background: color.bg, color: P.ink, outline: "none" }} />
+              </div>
+              <div style={{ display: "flex", gap: 6 }}>
+                <button onClick={openAndVerify} disabled={!draft.trim()}
+                  style={{ flex: 1, background: "#000", color: "#fff", border: "none", borderRadius: 8, padding: "5px 10px", cursor: draft.trim() ? "pointer" : "default", opacity: draft.trim() ? 1 : 0.5, fontFamily: FF_S, fontSize: 11, fontWeight: 600 }}>
+                  Open x.com/{draft || "…"} →
+                </button>
+                <button onClick={() => setStep(data.username ? "done" : "idle")}
+                  style={{ background: "none", border: "none", cursor: "pointer", color: P.inkFaint, fontSize: 16, padding: "0 4px" }}>×</button>
+              </div>
             </div>
           )}
-          <div style={{ fontFamily: FF_S, fontSize: 12, color: P.inkLight }}>{info.followers} followers</div>
+          {step === "verifying" && (
+            <div>
+              <p style={{ fontFamily: FF_S, fontSize: 12, color: P.ink, margin: "0 0 8px", lineHeight: 1.5 }}>
+                Does <strong>x.com/{draft}</strong> look like your profile?
+              </p>
+              <div style={{ display: "flex", gap: 6 }}>
+                <button onClick={confirm}
+                  style={{ flex: 1, background: "#000", color: "#fff", border: "none", borderRadius: 8, padding: "5px 10px", cursor: "pointer", fontFamily: FF_S, fontSize: 11, fontWeight: 700 }}>
+                  ✓ Yes, that's my account
+                </button>
+                <button onClick={() => setStep("entering")}
+                  style={{ background: P.lavenderLight, border: "none", borderRadius: 8, padding: "5px 10px", cursor: "pointer", fontFamily: FF_S, fontSize: 11, color: P.inkLight }}>
+                  ← Back
+                </button>
+              </div>
+            </div>
+          )}
+          {step === "done" && (
+            <div>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                <span style={{ fontFamily: FF_S, fontSize: 14, fontWeight: 600, color: P.ink }}>@{data.username}</span>
+                {isVerified
+                  ? <span style={{ background: "#000", borderRadius: 20, padding: "2px 8px", fontFamily: FF_S, fontSize: 10, fontWeight: 700, color: "#fff" }}>✓ Connected</span>
+                  : <span title="Click ✎ to verify this is your account" style={{ background: "#E8956A22", borderRadius: 20, padding: "2px 8px", fontFamily: FF_S, fontSize: 10, color: "#E8956A", border: "1px solid #E8956A55" }}>⚠ Unverified</span>
+                }
+                <button onClick={() => { setDraft(data.username || ""); setStep("entering"); }}
+                  style={{ background: "none", border: "none", cursor: "pointer", fontSize: 11, color: P.inkFaint, padding: 0 }}>✎</button>
+              </div>
+              {data.username && <div style={{ fontFamily: FF_S, fontSize: 11, color: P.inkLight, marginTop: 2 }}>Live timeline from X</div>}
+            </div>
+          )}
         </div>
       </div>
-      {info.tweets.map((t, i) => (
-        <div key={i} style={{ padding: "9px 0", borderBottom: `1px solid ${color.accent}44` }}>
-          <p style={{ fontFamily: FF_S, fontSize: 13, color: P.ink, margin: "0 0 5px", lineHeight: 1.5 }}>{t.text}</p>
-          <div style={{ display: "flex", gap: 14 }}>
-            <span style={{ fontFamily: FF_S, fontSize: 11, color: P.inkFaint }}>♥ {t.likes}</span>
-            <span style={{ fontFamily: FF_S, fontSize: 11, color: P.inkFaint }}>↺ {t.rts}</span>
-          </div>
+
+      {/* Live embed */}
+      {data.username ? (
+        <div ref={embedRef} style={{ minHeight: 200, borderRadius: 14, overflow: "hidden" }} />
+      ) : (
+        <div style={{ textAlign: "center", padding: "36px 16px", color: P.inkFaint, fontFamily: FF_S, fontSize: 13, lineHeight: 1.6 }}>
+          <div style={{ fontSize: 28, marginBottom: 8 }}>✕</div>
+          Connect your X account above to show your live timeline
         </div>
-      ))}
-      <a href={`https://x.com/${info.username}`} target="_blank" rel="noreferrer" style={{ display: "block", textAlign: "center", marginTop: 12, fontFamily: FF_S, fontSize: 12, color: color.dot, textDecoration: "none", fontWeight: 600 }}>View on X →</a>
+      )}
+      {data.username && (
+        <a href={`https://x.com/${data.username}`} target="_blank" rel="noreferrer"
+          style={{ display: "block", textAlign: "center", marginTop: 10, fontFamily: FF_S, fontSize: 12, color: color.dot, textDecoration: "none", fontWeight: 600 }}>
+          View on X →
+        </a>
+      )}
     </div>
   );
 };
@@ -1134,7 +1453,7 @@ const ProjectsWidget = ({ data, color, onDataChange }) => {
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <input value={p.url} onChange={e => update(p.id, "url", e.target.value)} placeholder="https://…" style={{ flex: 1, border: `1px solid ${color.accent}`, borderRadius: 8, padding: "4px 8px", fontFamily: FF_S, fontSize: 11, background: color.bg, color: color.dot, outline: "none" }} />
             <span onClick={() => cycleStatus(p.id)} title="Click to change status" style={{ background: STATUS[p.status].bg, color: STATUS[p.status].text, borderRadius: 20, padding: "3px 10px", fontFamily: FF_S, fontSize: 11, fontWeight: 600, cursor: "pointer", flexShrink: 0, userSelect: "none" }}>{STATUS[p.status].label}</span>
-            {p.url && p.url !== "#" && <a href={p.url} target="_blank" rel="noreferrer" style={{ fontFamily: FF_S, fontSize: 11, color: color.dot, textDecoration: "none" }}>↗</a>}
+            {p.url && p.url !== "#" && <a href={/^https?:\/\//i.test(p.url) ? p.url : `https://${p.url}`} target="_blank" rel="noreferrer" style={{ fontFamily: FF_S, fontSize: 11, color: color.dot, textDecoration: "none" }} onClick={e => e.stopPropagation()}>↗</a>}
           </div>
         </div>
       ))}
@@ -2670,7 +2989,7 @@ const NewConvoModal = ({ onClose, onStart, currentUserId }) => {
     }
   };
 
-  const canStart = tab === "dm" ? selected.length === 1 : selected.length >= 2 && groupName.trim();
+  const canStart = tab === "dm" ? selected.length === 1 : selected.length >= 1;
 
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(61,53,80,0.35)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 200, backdropFilter: "blur(4px)" }} onClick={onClose}>
@@ -2719,7 +3038,7 @@ const NewConvoModal = ({ onClose, onStart, currentUserId }) => {
                 <UserAvatar user={nu} size={40} />
                 <div style={{ flex: 1 }}>
                   <div style={{ fontFamily: FF_S, fontSize: 14, fontWeight: 500, color: P.ink }}>{u.name || u.handle}</div>
-                  <div style={{ fontFamily: FF_S, fontSize: 12, color: P.inkFaint }}>{u.handle}</div>
+                  <HandleBadge handle={u.handle} style={{ fontSize: 12, fontWeight: 400, color: P.inkFaint }} />
                 </div>
                 {selected.includes(u.id) && <div style={{ width: 20, height: 20, borderRadius: "50%", background: P.lavender, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, color: P.ink, fontWeight: 700 }}>✓</div>}
               </div>
@@ -2727,8 +3046,8 @@ const NewConvoModal = ({ onClose, onStart, currentUserId }) => {
           })}
         </div>
         <div style={{ padding: "12px 24px 22px", borderTop: `1px solid ${P.lavenderLight}` }}>
-          <button onClick={() => canStart && onStart({ tab, selected, groupName })} style={{ width: "100%", background: canStart ? P.lavender : P.lavenderLight, border: "none", borderRadius: 14, padding: "12px", fontFamily: FF_S, fontSize: 14, fontWeight: 600, color: canStart ? P.ink : P.inkFaint, cursor: canStart ? "pointer" : "default", transition: "all 0.2s" }}>
-            {tab === "dm" ? "Open conversation →" : `Create group${selected.length >= 2 ? ` (${selected.length})` : ""} →`}
+          <button onClick={() => { if (canStart) onStart({ tab, selected, groupName }); }} disabled={!canStart} style={{ width: "100%", background: canStart ? P.lavender : P.lavenderLight, border: "none", borderRadius: 14, padding: "12px", fontFamily: FF_S, fontSize: 14, fontWeight: 600, color: canStart ? P.ink : P.inkFaint, cursor: canStart ? "pointer" : "default", transition: "all 0.2s", opacity: canStart ? 1 : 0.6 }}>
+            {tab === "dm" ? "Open conversation →" : selected.length >= 1 ? `Create group (${selected.length + 1} people) →` : "Select people to add →"}
           </button>
         </div>
       </div>
@@ -2761,13 +3080,18 @@ const RequestCard = ({ req, onAccept, onDecline }) => {
   );
 };
 
-const ConvoItem = ({ convo, isActive, onClick, currentUserId }) => {
+const ConvoItem = ({ convo, isActive, onClick, onDelete, currentUserId }) => {
+  const [hovered, setHovered] = useState(false);
   const isGroup = convo.isGroup;
   const lastMsg = convo.lastMessage;
   const unread = convo.unreadCount || 0;
   const displayUser = convo.displayAvatar;
   return (
-    <div onClick={onClick} style={{ display: "flex", alignItems: "center", gap: 12, padding: "11px 14px", borderRadius: 16, cursor: "pointer", background: isActive ? P.lavenderLight : "transparent", border: `1.5px solid ${isActive ? P.lavender : "transparent"}`, transition: "all 0.15s", marginBottom: 3 }}>
+    <div
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      onClick={onClick}
+      style={{ display: "flex", alignItems: "center", gap: 12, padding: "11px 14px", borderRadius: 16, cursor: "pointer", background: isActive ? P.lavenderLight : hovered ? `${P.lavenderLight}88` : "transparent", border: `1.5px solid ${isActive ? P.lavender : "transparent"}`, transition: "all 0.15s", marginBottom: 3, position: "relative" }}>
       {isGroup
         ? <div style={{ width: 44, height: 44, borderRadius: "50%", background: P.lavender, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, flexShrink: 0 }}>👥</div>
         : <UserAvatar user={displayUser} size={44} showStatus />}
@@ -2776,7 +3100,7 @@ const ConvoItem = ({ convo, isActive, onClick, currentUserId }) => {
           <span style={{ fontFamily: FF_S, fontSize: 14, fontWeight: unread > 0 ? 700 : 500, color: P.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
             {convo.displayName}
           </span>
-          {lastMsg && <span style={{ fontFamily: FF_S, fontSize: 11, color: P.inkFaint, flexShrink: 0, marginLeft: 8 }}>{fmtTime(new Date(lastMsg.created_at).getTime())}</span>}
+          {!hovered && lastMsg && <span style={{ fontFamily: FF_S, fontSize: 11, color: P.inkFaint, flexShrink: 0, marginLeft: 8 }}>{fmtTime(new Date(lastMsg.created_at).getTime())}</span>}
         </div>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <span style={{ fontFamily: FF_S, fontSize: 12.5, color: unread > 0 ? P.ink : P.inkFaint, fontWeight: unread > 0 ? 500 : 400, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>
@@ -2784,15 +3108,25 @@ const ConvoItem = ({ convo, isActive, onClick, currentUserId }) => {
               ? `${lastMsg.sender_id === currentUserId ? "You: " : isGroup ? `${lastMsg.profiles?.name?.split(" ")[0]}: ` : ""}${lastMsg.content}`
               : "No messages yet"}
           </span>
-          {unread > 0 && <div style={{ width: 18, height: 18, borderRadius: "50%", background: P.lavender, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: FF_S, fontSize: 10, fontWeight: 700, color: P.ink, flexShrink: 0, marginLeft: 8 }}>{unread}</div>}
+          {!hovered && unread > 0 && <div style={{ width: 18, height: 18, borderRadius: "50%", background: P.lavender, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: FF_S, fontSize: 10, fontWeight: 700, color: P.ink, flexShrink: 0, marginLeft: 8 }}>{unread}</div>}
         </div>
       </div>
+      {hovered && (
+        <button
+          onClick={(e) => { e.stopPropagation(); onDelete && onDelete(convo.id); }}
+          title="Delete conversation"
+          style={{ background: P.white, border: `1px solid ${P.lavender}66`, borderRadius: 8, width: 28, height: 28, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", fontSize: 13, color: P.inkLight, flexShrink: 0, boxShadow: "0 1px 4px rgba(61,53,80,0.1)" }}
+        >
+          🗑
+        </button>
+      )}
     </div>
   );
 };
 
-const ConversationView = ({ convo, messages, messagesLoading, sendMessage, setTyping, typingUsers, currentUserId }) => {
+const ConversationView = ({ convo, messages, messagesLoading, sendMessage, deleteMessage, setTyping, typingUsers, currentUserId }) => {
   const [input, setInput] = useState("");
+  const [hoveredMsgId, setHoveredMsgId] = useState(null);
   const bottomRef = useRef(null);
   const isGroup = convo.isGroup;
   const other = convo.displayAvatar;
@@ -2830,7 +3164,7 @@ const ConversationView = ({ convo, messages, messagesLoading, sendMessage, setTy
         <div style={{ flex: 1 }}>
           <div style={{ fontFamily: FF_D, fontSize: 17, color: P.ink }}>{convo.displayName}</div>
           <div style={{ fontFamily: FF_S, fontSize: 12, color: P.inkFaint, marginTop: 1 }}>
-            {isGroup ? `${convo.conversation_members?.length || 0} members` : other?.handle || ""}
+            {isGroup ? `${(convo.otherMembers?.length || 0) + 1} members` : other?.handle || ""}
           </div>
         </div>
       </div>
@@ -2850,14 +3184,27 @@ const ConversationView = ({ convo, messages, messagesLoading, sendMessage, setTy
           const isMe = msg.sender_id === currentUserId;
           const sender = msg.profiles;
           const isLast = !grouped[i + 1] || grouped[i + 1].sender_id !== msg.sender_id;
+          const isHovered = hoveredMsgId === msg.id;
           return (
-            <div key={msg.id} style={{ display: "flex", flexDirection: isMe ? "row-reverse" : "row", alignItems: "flex-end", gap: 8, marginTop: msg.isFirst ? 14 : 2, animation: "fadeUp 0.2s ease both" }}>
-              {!isMe && <div style={{ width: 28, flexShrink: 0 }}>{isLast && <UserAvatar user={sender} size={28} />}</div>}
+            <div key={msg.id}
+              onMouseEnter={() => setHoveredMsgId(msg.id)}
+              onMouseLeave={() => setHoveredMsgId(null)}
+              style={{ display: "flex", flexDirection: isMe ? "row-reverse" : "row", alignItems: "center", gap: 6, marginTop: msg.isFirst ? 14 : 2, animation: "fadeUp 0.2s ease both" }}>
+              {!isMe && <div style={{ width: 28, flexShrink: 0, alignSelf: "flex-end" }}>{isLast && <UserAvatar user={sender} size={28} />}</div>}
               <div style={{ maxWidth: "68%", display: "flex", flexDirection: "column", alignItems: isMe ? "flex-end" : "flex-start" }}>
                 {msg.isFirst && !isMe && isGroup && <span style={{ fontFamily: FF_S, fontSize: 11, color: P.inkFaint, marginBottom: 3, marginLeft: 4 }}>{sender?.name?.split(" ")[0]}</span>}
                 <div style={{ background: isMe ? P.lavender : P.white, border: isMe ? "none" : `1.5px solid ${P.lavender}44`, borderRadius: isMe ? "16px 4px 16px 16px" : "4px 16px 16px 16px", padding: "9px 14px", fontFamily: FF_S, fontSize: 14, color: P.ink, lineHeight: 1.5, boxShadow: isMe ? `0 2px 12px ${P.lavender}50` : "0 1px 4px rgba(61,53,80,0.06)" }}>{msg.content}</div>
                 {isLast && <span style={{ fontFamily: FF_S, fontSize: 10, color: P.inkFaint, marginTop: 3 }}>{fmtTime(new Date(msg.created_at).getTime())}</span>}
               </div>
+              {isMe && (
+                <button
+                  onClick={() => deleteMessage && deleteMessage(msg.id)}
+                  title="Delete message"
+                  style={{ background: P.white, border: `1px solid ${P.lavender}66`, borderRadius: 8, width: 26, height: 26, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", fontSize: 12, color: P.inkLight, flexShrink: 0, opacity: isHovered ? 1 : 0, pointerEvents: isHovered ? "auto" : "none", transition: "opacity 0.15s" }}
+                >
+                  🗑
+                </button>
+              )}
             </div>
           );
         })}
@@ -2994,7 +3341,12 @@ const DashboardPage = ({ user: userProp, view, onNavigate, profilePic, setProfil
   const user = userProp || authUser;
 
   const displayName = profile?.name || user?.email?.split('@')[0] || 'Your Nook';
-  const displayHandle = profile?.handle || '@you';
+  const rawHandle = profile?.handle || '';
+  const displayHandle = rawHandle
+    ? (rawHandle.startsWith('@') ? rawHandle : '@' + rawHandle)
+    : user?.email
+      ? '@' + user.email.split('@')[0]
+      : '@you';
 
   const STORAGE_KEY = user ? `nook_widgets_${user.id}` : null;
   const ORDER_KEY   = user ? `nook_widget_order_${user.id}` : null;
@@ -3089,6 +3441,26 @@ const DashboardPage = ({ user: userProp, view, onNavigate, profilePic, setProfil
               console.log('[Nook] localStorage widgets, enabled:', ws.filter(w=>w.enabled).map(w=>w.id));
               const merged = ws.map(w => savedWidgetData[w.id] ? { ...w, data: { ...w.data, ...savedWidgetData[w.id] } } : w);
               setWidgets(merged);
+              // Auto-save to widget_configs so public profiles can show these widgets.
+              // This runs once when widget_configs is empty (first time or new account).
+              if (user?.id) {
+                const orderSaved = ORDER_KEY ? localStorage.getItem(ORDER_KEY) : null;
+                const ord = orderSaved ? JSON.parse(orderSaved) : merged.map(w => w.id);
+                const rows = merged.map((w, i) => ({
+                  user_id: user.id,
+                  widget_id: w.id,
+                  enabled: !!w.enabled,
+                  public: !!w.isPublic,
+                  color_idx: w.colorIdx ?? 0,
+                  sort_order: ord.indexOf(w.id) >= 0 ? ord.indexOf(w.id) : i,
+                }));
+                supabase.from('widget_configs')
+                  .upsert(rows, { onConflict: 'user_id,widget_id' })
+                  .then(({ error }) => {
+                    if (error) console.log('[Nook] Auto-save widget_configs error:', error);
+                    else console.log('[Nook] Auto-saved', rows.length, 'widget_configs rows from localStorage');
+                  });
+              }
             } catch(e) { console.log('[Nook] localStorage parse error:', e); }
           }
           if (ORDER_KEY) {
@@ -3120,18 +3492,69 @@ const DashboardPage = ({ user: userProp, view, onNavigate, profilePic, setProfil
   }, [user?.id]); // eslint-disable-line
   const [editBio, setEditBio] = useState(false);
   const [bio, setBio] = useState(profile?.bio || "");
+  // Sync bio when profile loads asynchronously (same pattern as name/handle in SettingsPage)
+  useEffect(() => { if (profile?.bio !== undefined) setBio(profile.bio || ""); }, [profile?.bio]);
   const [bioLinks, setBioLinks] = useState([]);
   const [bioEmail, setBioEmail] = useState("");
   const [editBioLink, setEditBioLink] = useState(false);
   const [draftBioLinks, setDraftBioLinks] = useState(bioLinks);
   const [draftBioEmail, setDraftBioEmail] = useState(bioEmail);
-  const [expandedWidgets, setExpandedWidgets] = useState(new Set(["gallery", "blog"]));
+
+  // Load bio links + widget expanded state from Supabase user_data table
+  useEffect(() => {
+    if (!user?.id) return;
+    supabase.from('user_data').select('key, value').eq('user_id', user.id).in('key', ['bio_links', 'widget_expanded'])
+      .then(({ data }) => {
+        if (!data) return;
+        data.forEach(row => {
+          if (row.key === 'bio_links' && row.value) {
+            if (row.value.links) setBioLinks(row.value.links);
+            if (row.value.email !== undefined) setBioEmail(row.value.email);
+          }
+          if (row.key === 'widget_expanded' && Array.isArray(row.value)) {
+            const expanded = new Set(row.value);
+            setExpandedWidgets(expanded);
+            if (EXPAND_KEY) try { localStorage.setItem(EXPAND_KEY, JSON.stringify(row.value)); } catch {}
+          }
+        });
+      });
+  }, [user?.id]); // eslint-disable-line
+  const EXPAND_KEY = user ? `nook_expanded_${user.id}` : null;
+  const [expandedWidgets, setExpandedWidgets] = useState(() => {
+    if (EXPAND_KEY) {
+      try {
+        const s = localStorage.getItem(EXPAND_KEY);
+        if (s) return new Set(JSON.parse(s));
+      } catch {}
+    }
+    return new Set(["gallery", "blog"]);
+  });
   const [widgetSearch, setWidgetSearch] = useState("");
   const [dragId, setDragId] = useState(null);
   const [dragOverId, setDragOverId] = useState(null);
   const [showPublic, setShowPublic] = useState(false);
   const [showRequestModal, setShowRequestModal] = useState(false);
-  const toggleExpand = (id) => setExpandedWidgets(s => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  const [followerCount, setFollowerCount] = useState(0);
+  useEffect(() => {
+    if (!user?.id) return;
+    supabase.from('follows').select('follower_id', { count: 'exact', head: true }).eq('following_id', user.id)
+      .then(({ count }) => { if (count !== null) setFollowerCount(count); });
+  }, [user?.id]); // eslint-disable-line
+  const toggleExpand = (id) => {
+    // Compute new set outside the setter so side-effects can run cleanly
+    const n = new Set(expandedWidgets);
+    n.has(id) ? n.delete(id) : n.add(id);
+    const arr = [...n];
+    setExpandedWidgets(n);
+    // Side-effects must live OUTSIDE the state-setter (React 18 StrictMode double-invokes
+    // state-setter functions to detect impurity, causing duplicate writes and crashes)
+    if (EXPAND_KEY) try { localStorage.setItem(EXPAND_KEY, JSON.stringify(arr)); } catch {}
+    if (user?.id) {
+      supabase.from('user_data')
+        .upsert({ user_id: user.id, key: 'widget_expanded', value: arr }, { onConflict: 'user_id,key' })
+        .catch(() => {});
+    }
+  };
   const fileInputRef = useRef(null);
 
   const [widgetData, setWidgetData] = useState(savedWidgetData);
@@ -3340,7 +3763,18 @@ const DashboardPage = ({ user: userProp, view, onNavigate, profilePic, setProfil
                     </div>
                   </div>
                   <div style={{ display: "flex", gap: 8 }}>
-                    <button onClick={() => { setBioLinks(draftBioLinks.filter(l => l.url.trim())); setBioEmail(draftBioEmail); setEditBioLink(false); }} style={{ background: P.lavender, border: "none", borderRadius: 8, padding: "6px 16px", cursor: "pointer", fontSize: 12, fontWeight: 600, color: P.ink }}>Save</button>
+                    <button onClick={async () => {
+                      const cleanLinks = draftBioLinks.filter(l => l.url.trim());
+                      setBioLinks(cleanLinks);
+                      setBioEmail(draftBioEmail);
+                      setEditBioLink(false);
+                      if (user?.id) {
+                        await supabase.from('user_data').upsert(
+                          { user_id: user.id, key: 'bio_links', value: { email: draftBioEmail, links: cleanLinks } },
+                          { onConflict: 'user_id,key' }
+                        );
+                      }
+                    }} style={{ background: P.lavender, border: "none", borderRadius: 8, padding: "6px 16px", cursor: "pointer", fontSize: 12, fontWeight: 600, color: P.ink }}>Save</button>
                     <button onClick={() => { setDraftBioLinks(bioLinks); setDraftBioEmail(bioEmail); setEditBioLink(false); }} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 12, color: P.inkFaint }}>Cancel</button>
                   </div>
                 </div>
@@ -3367,7 +3801,7 @@ const DashboardPage = ({ user: userProp, view, onNavigate, profilePic, setProfil
               )}
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 10 }}>
-              <p style={{ margin: 0, color: P.inkLight, fontSize: 12 }}>Member since March 2025 · {publicWidgets.length} public widget{publicWidgets.length !== 1 ? "s" : ""} · <span style={{ color: "#9B85D8", fontWeight: 600 }}>{following?.length || 0} following</span></p>
+              <p style={{ margin: 0, color: P.inkLight, fontSize: 12 }}>Member since March 2025 · {publicWidgets.length} public widget{publicWidgets.length !== 1 ? "s" : ""} · <span style={{ color: "#9B85D8", fontWeight: 600 }}>{following?.length || 0} following</span> · <span style={{ color: "#9B85D8", fontWeight: 600 }}>{followerCount} follower{followerCount !== 1 ? "s" : ""}</span></p>
               {!showPublic && <button onClick={() => fileInputRef.current?.click()} style={{ background: "none", border: "none", cursor: "pointer", fontFamily: FF_S, fontSize: 11, color: P.inkFaint, padding: 0 }}>Change photo ✎</button>}
             </div>
           </div>
@@ -3542,6 +3976,7 @@ const DashboardPage = ({ user: userProp, view, onNavigate, profilePic, setProfil
           <WidgetRequestModal
             onClose={() => setShowRequestModal(false)}
             onSubmit={(req) => { setWidgetRequests(rs => [req, ...rs]); }}
+            handle={displayHandle}
           />
         )}
       </div>
@@ -3549,11 +3984,11 @@ const DashboardPage = ({ user: userProp, view, onNavigate, profilePic, setProfil
   );
 };
 
-const MessagesPage = ({ requests, setRequests }) => {
+const MessagesPage = ({ requests, setRequests, pendingDmUserId, onPendingDmHandled }) => {
   const { user } = useAuth();
   const {
     conversations, activeConversation, messages, loading, messagesLoading,
-    selectConversation, sendMessage, startDM, startGroupChat,
+    selectConversation, sendMessage, deleteMessage, deleteConversation, startDM, startGroupChat, refresh,
     typingUsers, setTyping, totalUnread,
   } = useMessages();
 
@@ -3567,13 +4002,34 @@ const MessagesPage = ({ requests, setRequests }) => {
     setShowChat(true);
   };
 
+  // Auto-open or start a DM when arriving from the profile page Message button.
+  // We wait until loading=false so conversations[] is populated before checking for an existing DM.
+  useEffect(() => {
+    if (!pendingDmUserId || loading) return;
+    onPendingDmHandled?.();
+    const existing = conversations.find(c => !c.isGroup && c.otherMembers?.some(m => m?.id === pendingDmUserId));
+    if (existing) {
+      handleSelect(existing.id);
+    } else {
+      startDM(pendingDmUserId).then(({ conversationId, error }) => {
+        if (!error && conversationId) { handleSelect(conversationId); refresh(); }
+      });
+    }
+  }, [pendingDmUserId, loading]); // eslint-disable-line
+
   const startConvo = async ({ tab, selected, groupName }) => {
     if (tab === "dm") {
       const { conversationId, error } = await startDM(selected[0]);
       if (!error && conversationId) handleSelect(conversationId);
     } else {
       const { conversationId, error } = await startGroupChat(selected, groupName);
-      if (!error && conversationId) handleSelect(conversationId);
+      if (conversationId) {
+        // Call handleSelect directly — selectConversation only needs the ID to open the chat,
+        // it doesn't require the conversation to already be in the conversations list.
+        // refresh() then updates the sidebar in the background.
+        handleSelect(conversationId);
+        refresh();
+      }
     }
     setShowNew(false);
     setMsgTab("messages");
@@ -3625,7 +4081,7 @@ const MessagesPage = ({ requests, setRequests }) => {
                     <p style={{ fontFamily: FF_S, fontSize: 13, margin: 0 }}>No conversations yet</p>
                     <p style={{ fontFamily: FF_S, fontSize: 12, margin: "6px 0 0", color: P.inkFaint }}>Start one with the + New button</p>
                   </div>
-                : filtered.map(c => <ConvoItem key={c.id} convo={c} isActive={activeConversation?.id === c.id} onClick={() => handleSelect(c.id)} currentUserId={user?.id} />)
+                : filtered.map(c => <ConvoItem key={c.id} convo={c} isActive={activeConversation?.id === c.id} onClick={() => handleSelect(c.id)} onDelete={deleteConversation} currentUserId={user?.id} />)
           )}
           {msgTab === "requests" && (
             requests.length === 0
@@ -3650,6 +4106,7 @@ const MessagesPage = ({ requests, setRequests }) => {
               messages={messages}
               messagesLoading={messagesLoading}
               sendMessage={sendMessage}
+              deleteMessage={deleteMessage}
               setTyping={setTyping}
               typingUsers={typingUsers}
               currentUserId={user?.id}
@@ -3671,6 +4128,7 @@ const WORK_SECTIONS = [
   { id: "overview",  label: "Overview",   icon: "▦" },
   { id: "todos",     label: "To-Do",      icon: "✓" },
   { id: "notes",     label: "Notes",      icon: "✎" },
+  { id: "calendar",  label: "Calendar",   icon: "📆" },
   { id: "reminders", label: "Reminders",  icon: "🔔" },
   { id: "workflow",  label: "Workflow",   icon: "⬡" },
   { id: "focus",     label: "Focus",      icon: "◎" },
@@ -3680,14 +4138,18 @@ const WORK_SECTIONS = [
 const INIT_MASTER_TODOS = [];
 const INIT_DAILY_TODOS = [];
 const INIT_NOTES = [];
-const INIT_REMINDERS = [];
+const INIT_REMINDERS = [
+  { id: "r_ex1", text: "Add your first reminder here", date: "", done: false, _example: true },
+];
 const INIT_WORKFLOW_COLS = [
   { id: "wc1", title: "Backlog",     color: "#EDE8FB", dot: "#9B85D8", cards: [] },
   { id: "wc2", title: "In Progress", color: "#E4F8F2", dot: "#5DCAAA", cards: [] },
   { id: "wc3", title: "Review",      color: "#FEF0EA", dot: "#E8956A", cards: [] },
   { id: "wc4", title: "Done",        color: "#E8F3FC", dot: "#5AAADE", cards: [] },
 ];
-const INIT_MEETINGS = [];
+const INIT_MEETINGS = [
+  { id: "m_ex1", title: "Add your first meeting here", date: "", time: "", attendees: "", notes: "", done: false, _example: true },
+];
 
 // Reusable work-page input style
 const wi = (extra = {}) => ({
@@ -3789,31 +4251,95 @@ const WorkNotes = ({ notes, setNotes }) => {
   const [active, setActive]         = useState(notes[0]?.id ?? null);
   const [search, setSearch]         = useState("");
   const [creating, setCreating]     = useState(false);
-  const [newTitle, setNewTitle]     = useState("");
-  const textareaRef                 = useRef(null);
+  const [draftBody, setDraftBody]   = useState("");
+  const [unsaved, setUnsaved]       = useState(false);
+  const [savedFlash, setSavedFlash] = useState(false);
+  const textareaRef      = useRef(null);
+  const newTitleInputRef = useRef(null); // uncontrolled — value read/cleared via DOM
+  const pendingFocusRef  = useRef(false); // set true before state updates; layout effect focuses after commit
 
   const activeNote = notes.find(n => n.id === active);
   const filtered   = notes.filter(n => !search || n.title.toLowerCase().includes(search.toLowerCase()) || n.body.toLowerCase().includes(search.toLowerCase()));
   const pinned     = filtered.filter(n => n.pinned);
   const unpinned   = filtered.filter(n => !n.pinned);
 
-  const createNote = () => {
-    if (!newTitle.trim()) return;
-    const note = { id: `n${Date.now()}`, title: newTitle.trim(), body: "", pinned: false, color: Math.floor(Math.random() * NOTE_COLORS.length), ts: Date.now() };
-    setNotes(ns => [note, ...ns]); setActive(note.id); setNewTitle(""); setCreating(false);
-    setTimeout(() => textareaRef.current?.focus(), 50);
+  // When active note changes, load its body into draft
+  useEffect(() => {
+    if (activeNote) { setDraftBody(activeNote.body); setUnsaved(false); }
+  }, [active]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // After every render: if a focus was requested (pendingFocusRef), do it immediately.
+  // useLayoutEffect fires synchronously after React commits the DOM — the textarea is
+  // guaranteed to be mounted by then. No dependency array = runs after every render,
+  // but only acts when pendingFocusRef.current is true (set in createNote).
+  useLayoutEffect(() => {
+    if (pendingFocusRef.current && textareaRef.current) {
+      pendingFocusRef.current = false;
+      textareaRef.current.focus();
+    }
+  }); // intentionally no dependency array
+
+  const createNote = (e) => {
+    if (e) e.preventDefault(); // prevent any browser default (e.g. form-like Enter behaviour)
+    const title = newTitleInputRef.current?.value?.trim();
+    if (!title) return;
+    if (newTitleInputRef.current) newTitleInputRef.current.value = "";
+    const note = { id: `n${Date.now()}`, title, body: "", pinned: false, color: Math.floor(Math.random() * NOTE_COLORS.length), ts: Date.now() };
+    // Primary: useLayoutEffect watches pendingFocusRef and focuses immediately after commit
+    pendingFocusRef.current = true;
+    setNotes(ns => [note, ...ns]);
+    setActive(note.id);
+    setDraftBody("");
+    setUnsaved(false);
+    setCreating(false);
+    // Safety net: if something steals focus after the layout effect, reclaim it after 150ms
+    setTimeout(() => { textareaRef.current?.focus(); }, 150);
   };
   const updateNote = (id, field, val) => setNotes(ns => ns.map(n => n.id === id ? { ...n, [field]: val, ts: Date.now() } : n));
-  const deleteNote = (id) => { setNotes(ns => ns.filter(n => n.id !== id)); setActive(notes.find(n => n.id !== id)?.id ?? null); };
+  const saveBody = () => {
+    if (!activeNote) return;
+    updateNote(activeNote.id, "body", draftBody);
+    setUnsaved(false);
+    setSavedFlash(true);
+    setTimeout(() => setSavedFlash(false), 1800);
+  };
+  const deleteNote = (id) => { setNotes(ns => ns.filter(n => n.id !== id)); setActive(notes.find(n => n.id !== id)?.id ?? null); setUnsaved(false); };
   const togglePin  = (id) => setNotes(ns => ns.map(n => n.id === id ? { ...n, pinned: !n.pinned } : n));
+
+  const switchNote = (id) => {
+    if (unsaved && activeNote) {
+      // Auto-save draft before switching
+      setNotes(ns => ns.map(n => n.id === activeNote.id ? { ...n, body: draftBody, ts: Date.now() } : n));
+    }
+    setActive(id); setUnsaved(false);
+  };
+
+  const [hoveredNoteId, setHoveredNoteId] = useState(null);
 
   const NoteItem = ({ note }) => {
     const c = NOTE_COLORS[note.color];
+    const isHovered = hoveredNoteId === note.id;
     return (
-      <div onClick={() => setActive(note.id)} style={{ padding: "10px 12px", borderRadius: 12, marginBottom: 6, background: active === note.id ? c.bg : P.white, border: `1.5px solid ${active === note.id ? c.border : P.lavender + "44"}`, cursor: "pointer", transition: "all 0.15s" }}>
+      <div
+        onClick={() => switchNote(note.id)}
+        onMouseEnter={() => setHoveredNoteId(note.id)}
+        onMouseLeave={() => setHoveredNoteId(null)}
+        style={{ padding: "10px 12px", borderRadius: 12, marginBottom: 6, background: active === note.id ? c.bg : P.white, border: `1.5px solid ${active === note.id ? c.border : P.lavender + "44"}`, cursor: "pointer", transition: "all 0.15s", position: "relative" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-          <span style={{ fontFamily: FF_S, fontSize: 13, fontWeight: 600, color: P.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>{note.title || "Untitled"}</span>
-          <span onClick={e => { e.stopPropagation(); togglePin(note.id); }} style={{ fontSize: 13, cursor: "pointer", marginLeft: 6, opacity: note.pinned ? 1 : 0.3 }}>📌</span>
+          <span style={{ fontFamily: FF_S, fontSize: 13, fontWeight: 600, color: P.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1, paddingRight: 20 }}>{note.title || "Untitled"}</span>
+          {/* Pin — hidden behind delete on hover */}
+          {!isHovered && (
+            <span onClick={e => { e.stopPropagation(); togglePin(note.id); }} style={{ fontSize: 12, cursor: "pointer", marginLeft: 4, opacity: note.pinned ? 1 : 0.25, flexShrink: 0 }}>📌</span>
+          )}
+          {/* Delete button — visible on hover */}
+          {isHovered && (
+            <button
+              onClick={e => { e.stopPropagation(); deleteNote(note.id); }}
+              title="Delete note"
+              style={{ background: "none", border: "none", cursor: "pointer", color: "#D8708A", fontSize: 14, padding: 0, flexShrink: 0, lineHeight: 1 }}>
+              🗑
+            </button>
+          )}
         </div>
         <div style={{ fontFamily: FF_S, fontSize: 11.5, color: P.inkFaint, marginTop: 3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{note.body || "No content yet"}</div>
         <div style={{ fontFamily: FF_S, fontSize: 10, color: P.inkFaint, marginTop: 4 }}>{new Date(note.ts).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}</div>
@@ -3821,8 +4347,19 @@ const WorkNotes = ({ notes, setNotes }) => {
     );
   };
 
+  // Auto-grow the textarea to fit its content
+  const autoGrow = (el) => {
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = el.scrollHeight + "px";
+  };
+  // Re-run auto-grow whenever the active note or its body changes
+  useEffect(() => {
+    if (textareaRef.current) autoGrow(textareaRef.current);
+  }, [active, draftBody]);
+
   return (
-    <div style={{ display: "flex", gap: 20, height: 580 }}>
+    <div style={{ display: "flex", gap: 20, minHeight: 480 }}>
       {/* Sidebar */}
       <div style={{ width: 220, flexShrink: 0, display: "flex", flexDirection: "column", gap: 10 }}>
         <div style={{ display: "flex", gap: 6 }}>
@@ -3834,8 +4371,8 @@ const WorkNotes = ({ notes, setNotes }) => {
         </div>
         {creating && (
           <div style={{ display: "flex", gap: 5 }}>
-            <input autoFocus value={newTitle} onChange={e => setNewTitle(e.target.value)} onKeyDown={e => e.key === "Enter" && createNote()} placeholder="Note title…" style={wi({ flex: 1, fontSize: 12 })} />
-            <button onClick={createNote} style={{ background: P.lavender, border: "none", borderRadius: 8, padding: "0 10px", cursor: "pointer", fontSize: 13, fontWeight: 600, color: P.ink }}>✓</button>
+            <input ref={newTitleInputRef} autoFocus defaultValue="" onKeyDown={e => { if (e.key === "Enter") createNote(e); }} placeholder="Note title…" style={wi({ flex: 1, fontSize: 12 })} />
+            <button onMouseDown={(e) => e.preventDefault()} onClick={createNote} style={{ background: P.lavender, border: "none", borderRadius: 8, padding: "0 10px", cursor: "pointer", fontSize: 13, fontWeight: 600, color: P.ink }}>✓</button>
             <button onClick={() => setCreating(false)} style={{ background: "none", border: "none", cursor: "pointer", color: P.inkFaint, fontSize: 15 }}>✕</button>
           </div>
         )}
@@ -3852,7 +4389,7 @@ const WorkNotes = ({ notes, setNotes }) => {
       {activeNote ? (() => {
         const c = NOTE_COLORS[activeNote.color];
         return (
-          <div style={{ flex: 1, display: "flex", flexDirection: "column", background: c.bg, borderRadius: 18, border: `1.5px solid ${c.border}`, padding: "20px 24px", overflow: "hidden" }}>
+          <div style={{ flex: 1, display: "flex", flexDirection: "column", background: c.bg, borderRadius: 18, border: `1.5px solid ${unsaved ? c.dot + "88" : c.border}`, padding: "20px 24px", transition: "border-color 0.2s" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
               <input value={activeNote.title} onChange={e => updateNote(activeNote.id, "title", e.target.value)} style={{ flex: 1, background: "none", border: "none", outline: "none", fontFamily: FF_D, fontSize: 22, color: P.ink, fontWeight: 400 }} placeholder="Note title" />
               {/* Color picker */}
@@ -3865,10 +4402,26 @@ const WorkNotes = ({ notes, setNotes }) => {
               <button onClick={() => deleteNote(activeNote.id)} style={{ background: "none", border: "none", cursor: "pointer", color: P.inkFaint, fontSize: 16 }}>🗑</button>
             </div>
             <div style={{ width: "100%", height: 1, background: c.border + "88", marginBottom: 14 }} />
-            <textarea ref={textareaRef} value={activeNote.body} onChange={e => updateNote(activeNote.id, "body", e.target.value)} placeholder="Start writing…"
-              style={{ flex: 1, background: "none", border: "none", outline: "none", fontFamily: FF_S, fontSize: 14, color: P.ink, resize: "none", lineHeight: 1.75, overflowY: "auto" }} />
-            <div style={{ fontFamily: FF_S, fontSize: 10, color: P.inkFaint, marginTop: 8 }}>
-              {activeNote.body.split(/\s+/).filter(Boolean).length} words · edited {new Date(activeNote.ts).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}
+            <textarea ref={textareaRef} value={draftBody}
+              onChange={e => { setDraftBody(e.target.value); setUnsaved(true); autoGrow(e.target); }}
+              placeholder="Start writing…"
+              style={{ width: "100%", background: "none", border: "none", outline: "none", fontFamily: FF_S, fontSize: 14, color: P.ink, resize: "none", lineHeight: 1.75, overflow: "hidden", minHeight: 160, boxSizing: "border-box" }} />
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 10 }}>
+              <span style={{ fontFamily: FF_S, fontSize: 10, color: P.inkFaint }}>
+                {draftBody.split(/\s+/).filter(Boolean).length} words · edited {new Date(activeNote.ts).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}
+              </span>
+              <button
+                onClick={saveBody}
+                style={{
+                  background: savedFlash ? P.mint : unsaved ? c.dot : c.dot + "44",
+                  color: savedFlash ? "#2A8A6A" : unsaved ? "#fff" : P.inkFaint,
+                  border: "none", borderRadius: 10, padding: "6px 16px",
+                  cursor: unsaved ? "pointer" : "default",
+                  fontFamily: FF_S, fontSize: 12, fontWeight: 600,
+                  transition: "all 0.25s",
+                }}>
+                {savedFlash ? "✓ Saved" : unsaved ? "Save" : "Saved"}
+              </button>
             </div>
           </div>
         );
@@ -3895,8 +4448,9 @@ const WorkReminders = ({ reminders, setReminders }) => {
     setDraft({ text: "", date: "", time: "", priority: "medium" }); setAdding(false);
   };
 
-  const upcoming = reminders.filter(r => !r.done).sort((a, b) => a.date.localeCompare(b.date));
-  const done     = reminders.filter(r => r.done);
+  const upcoming = reminders.filter(r => !r.done && !r._example).sort((a, b) => (a.date || "").localeCompare(b.date || ""));
+  const done     = reminders.filter(r => r.done && !r._example);
+  const examples = reminders.filter(r => r._example);
   const today    = new Date().toISOString().slice(0, 10);
   const isOverdue = (r) => !r.done && r.date && r.date < today;
 
@@ -3922,18 +4476,35 @@ const WorkReminders = ({ reminders, setReminders }) => {
         </div>
       )}
 
-      {upcoming.map(r => (
-        <div key={r.id} style={{ display: "flex", alignItems: "flex-start", gap: 12, padding: "12px 14px", borderRadius: 14, marginBottom: 8, background: isOverdue(r) ? P.roseLight : P.white, border: `1.5px solid ${isOverdue(r) ? P.rose : P.lavender + "44"}`, transition: "all 0.2s" }}>
-          <div onClick={() => toggle(r.id)} style={{ width: 20, height: 20, borderRadius: 6, flexShrink: 0, marginTop: 2, background: "transparent", border: `2px solid ${isOverdue(r) ? "#D8708A" : P.lavender}`, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }} />
+      {upcoming.length === 0 && !adding && examples.length === 0 && (
+        <div style={{ textAlign: "center", padding: "32px 0 20px", color: P.inkFaint }}>
+          <div style={{ fontSize: 28, marginBottom: 8 }}>🔔</div>
+          <div style={{ fontFamily: FF_S, fontSize: 13 }}>No reminders yet — add one above</div>
+        </div>
+      )}
+      {/* Show placeholder example reminders when no real reminders exist */}
+      {upcoming.length === 0 && examples.map(r => (
+        <div key={r.id} style={{ display: "flex", alignItems: "flex-start", gap: 12, padding: "12px 14px", borderRadius: 14, marginBottom: 8, background: P.bg, border: `1.5px dashed ${P.lavender}55`, opacity: 0.65 }}>
+          <div style={{ width: 20, height: 20, borderRadius: 6, flexShrink: 0, marginTop: 2, background: "transparent", border: `2px dashed ${P.inkFaint}`, display: "flex", alignItems: "center", justifyContent: "center" }} />
           <div style={{ flex: 1 }}>
-            <div style={{ fontFamily: FF_S, fontSize: 13.5, color: P.ink, fontWeight: 500 }}>{r.text}</div>
-            <div style={{ fontFamily: FF_S, fontSize: 11.5, color: isOverdue(r) ? "#D8708A" : P.inkFaint, marginTop: 3 }}>
+            <div style={{ fontFamily: FF_S, fontSize: 13, color: P.inkFaint, fontStyle: "italic" }}>{r.text}</div>
+            <div style={{ fontFamily: FF_S, fontSize: 11, color: P.inkFaint, marginTop: 2 }}>placeholder — click + Reminder to add yours</div>
+          </div>
+        </div>
+      ))}
+      {upcoming.map(r => (
+        <div key={r.id} style={{ display: "flex", alignItems: "flex-start", gap: 12, padding: "12px 14px", borderRadius: 14, marginBottom: 8, background: r._example ? P.bg : isOverdue(r) ? P.roseLight : P.white, border: `1.5px solid ${r._example ? P.lavender + "33" : isOverdue(r) ? P.rose : P.lavender + "44"}`, transition: "all 0.2s", opacity: r._example ? 0.6 : 1 }}>
+          <div onClick={() => !r._example && toggle(r.id)} style={{ width: 20, height: 20, borderRadius: 6, flexShrink: 0, marginTop: 2, background: "transparent", border: `2px dashed ${r._example ? P.inkFaint : isOverdue(r) ? "#D8708A" : P.lavender}`, display: "flex", alignItems: "center", justifyContent: "center", cursor: r._example ? "default" : "pointer" }} />
+          <div style={{ flex: 1 }}>
+            <div style={{ fontFamily: FF_S, fontSize: 13.5, color: r._example ? P.inkFaint : P.ink, fontWeight: 400, fontStyle: r._example ? "italic" : "normal" }}>{r.text}</div>
+            {!r._example && <div style={{ fontFamily: FF_S, fontSize: 11.5, color: isOverdue(r) ? "#D8708A" : P.inkFaint, marginTop: 3 }}>
               {isOverdue(r) ? "⚠ Overdue · " : "📅 "}{r.date}{r.time ? ` at ${r.time}` : ""}
-            </div>
+            </div>}
+            {r._example && <div style={{ fontFamily: FF_S, fontSize: 11, color: P.inkFaint, marginTop: 2 }}>example — click + Reminder to add yours</div>}
           </div>
           <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
-            <span style={{ background: PRIORITY_STYLE[r.priority].bg, color: PRIORITY_STYLE[r.priority].text, borderRadius: 20, padding: "2px 8px", fontFamily: FF_S, fontSize: 10, fontWeight: 600 }}>{PRIORITY_STYLE[r.priority].label}</span>
-            <button onClick={() => remove(r.id)} style={{ background: "none", border: "none", cursor: "pointer", color: P.inkFaint, fontSize: 15, padding: 0 }}>×</button>
+            {!r._example && <span style={{ background: PRIORITY_STYLE[r.priority].bg, color: PRIORITY_STYLE[r.priority].text, borderRadius: 20, padding: "2px 8px", fontFamily: FF_S, fontSize: 10, fontWeight: 600 }}>{PRIORITY_STYLE[r.priority].label}</span>}
+            <button onClick={() => remove(r.id)} style={{ background: "none", border: "none", cursor: "pointer", color: r._example ? P.lavender + "88" : P.inkFaint, fontSize: 15, padding: 0 }}>×</button>
           </div>
         </div>
       ))}
@@ -3956,21 +4527,74 @@ const WorkReminders = ({ reminders, setReminders }) => {
   );
 };
 
-const WorkTodos = ({ masterTodos, setMasterTodos, dailyTodos, setDailyTodos }) => (
-  <div className="nook-work-grid">
-    <div style={{ background: P.white, borderRadius: 20, padding: "24px 26px", border: `1.5px solid ${P.lavender}44`, boxShadow: "0 4px 20px rgba(201,184,240,0.08)" }}>
-      <h3 style={{ fontFamily: FF_D, fontSize: 18, color: P.ink, margin: "0 0 18px", fontWeight: 400 }}>📋 Master List</h3>
-      <WorkTodoList items={masterTodos} setItems={setMasterTodos} placeholder="Add to master list…" showDate />
-    </div>
-    <div style={{ background: P.white, borderRadius: 20, padding: "24px 26px", border: `1.5px solid ${P.lavender}44`, boxShadow: "0 4px 20px rgba(201,184,240,0.08)" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18 }}>
-        <h3 style={{ fontFamily: FF_D, fontSize: 18, color: P.ink, margin: 0, fontWeight: 400 }}>☀ Today</h3>
-        <span style={{ fontFamily: FF_S, fontSize: 11, color: P.inkFaint }}>{new Date().toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "short" })}</span>
+const WorkTodos = ({ masterTodos, setMasterTodos, dailyTodos, setDailyTodos, customLists, setCustomLists }) => {
+  const [creatingList, setCreatingList] = useState(false);
+  const [newListName, setNewListName]   = useState("");
+
+  const addList = () => {
+    if (!newListName.trim()) return;
+    const newList = { id: `cl${Date.now()}`, name: newListName.trim(), items: [] };
+    setCustomLists(prev => [...prev, newList]);
+    setNewListName(""); setCreatingList(false);
+  };
+  const removeList = (id) => setCustomLists(prev => prev.filter(l => l.id !== id));
+  const renameList = (id, name) => setCustomLists(prev => prev.map(l => l.id === id ? { ...l, name } : l));
+  const setListItems = (id, itemsOrFn) => setCustomLists(prev => prev.map(l => {
+    if (l.id !== id) return l;
+    const next = typeof itemsOrFn === "function" ? itemsOrFn(l.items) : itemsOrFn;
+    return { ...l, items: next };
+  }));
+
+  return (
+    <div>
+      <div className="nook-work-grid">
+        {/* Master list */}
+        <div style={{ background: P.white, borderRadius: 20, padding: "24px 26px", border: `1.5px solid ${P.lavender}44`, boxShadow: "0 4px 20px rgba(201,184,240,0.08)" }}>
+          <h3 style={{ fontFamily: FF_D, fontSize: 18, color: P.ink, margin: "0 0 18px", fontWeight: 400 }}>📋 Master List</h3>
+          <WorkTodoList items={masterTodos} setItems={setMasterTodos} placeholder="Add to master list…" showDate />
+        </div>
+        {/* Today list */}
+        <div style={{ background: P.white, borderRadius: 20, padding: "24px 26px", border: `1.5px solid ${P.lavender}44`, boxShadow: "0 4px 20px rgba(201,184,240,0.08)" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18 }}>
+            <h3 style={{ fontFamily: FF_D, fontSize: 18, color: P.ink, margin: 0, fontWeight: 400 }}>☀ Today</h3>
+            <span style={{ fontFamily: FF_S, fontSize: 11, color: P.inkFaint }}>{new Date().toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "short" })}</span>
+          </div>
+          <WorkTodoList items={dailyTodos} setItems={setDailyTodos} placeholder="Add for today…" />
+        </div>
+        {/* Custom lists */}
+        {(customLists || []).map(list => (
+          <div key={list.id} style={{ background: P.white, borderRadius: 20, padding: "24px 26px", border: `1.5px solid ${P.lavender}44`, boxShadow: "0 4px 20px rgba(201,184,240,0.08)" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 18 }}>
+              <input
+                value={list.name}
+                onChange={e => renameList(list.id, e.target.value)}
+                style={{ flex: 1, background: "none", border: "none", outline: "none", fontFamily: FF_D, fontSize: 18, color: P.ink, fontWeight: 400 }}
+              />
+              <button onClick={() => removeList(list.id)} title="Delete list" style={{ background: "none", border: "none", cursor: "pointer", color: P.inkFaint, fontSize: 15, padding: "0 2px", opacity: 0.5 }}>🗑</button>
+            </div>
+            <WorkTodoList items={list.items} setItems={(val) => setListItems(list.id, val)} placeholder={`Add to ${list.name}…`} />
+          </div>
+        ))}
       </div>
-      <WorkTodoList items={dailyTodos} setItems={setDailyTodos} placeholder="Add for today…" />
+
+      {/* Add new list */}
+      <div style={{ marginTop: 18 }}>
+        {creatingList ? (
+          <div style={{ display: "flex", gap: 8, maxWidth: 400 }}>
+            <input autoFocus value={newListName} onChange={e => setNewListName(e.target.value)} onKeyDown={e => { if (e.key === "Enter") addList(); if (e.key === "Escape") setCreatingList(false); }} placeholder="List name…"
+              style={{ flex: 1, border: `1.5px solid ${P.lavender}`, borderRadius: 12, padding: "9px 14px", fontFamily: FF_S, fontSize: 13, background: P.lavenderLight, color: P.ink, outline: "none" }} />
+            <button onClick={addList} style={{ background: P.lavender, color: P.ink, border: "none", borderRadius: 12, padding: "9px 16px", cursor: "pointer", fontFamily: FF_S, fontSize: 13, fontWeight: 600 }}>Create</button>
+            <button onClick={() => setCreatingList(false)} style={{ background: "none", border: `1.5px solid ${P.lavender}44`, borderRadius: 12, padding: "9px 12px", cursor: "pointer", fontFamily: FF_S, fontSize: 13, color: P.inkLight }}>✕</button>
+          </div>
+        ) : (
+          <button onClick={() => setCreatingList(true)} style={{ background: P.lavenderLight, border: `1.5px dashed ${P.lavender}`, borderRadius: 14, padding: "10px 18px", cursor: "pointer", fontFamily: FF_S, fontSize: 13, color: "#9B85D8", fontWeight: 600, display: "flex", alignItems: "center", gap: 6 }}>
+            + New list
+          </button>
+        )}
+      </div>
     </div>
-  </div>
-);
+  );
+};
 
 const WorkFocus = () => (
   <div style={{ background: P.white, borderRadius: 20, padding: "32px 36px", border: `1.5px solid ${P.lavender}44`, maxWidth: 560, boxShadow: "0 4px 20px rgba(201,184,240,0.08)" }}>
@@ -4321,25 +4945,31 @@ const WorkMeetings = ({ meetings: init }) => {
         </div>
       )}
 
+      {sorted.length === 0 && !adding && (
+        <div style={{ textAlign: "center", padding: "32px 0 20px", color: P.inkFaint }}>
+          <div style={{ fontSize: 28, marginBottom: 8 }}>📅</div>
+          <div style={{ fontFamily: FF_S, fontSize: 13 }}>No meetings yet — add one above</div>
+        </div>
+      )}
       {sorted.map(m => {
         const isToday = m.date === today;
-        const isPast  = m.date < today && !m.done;
+        const isPast  = !m._example && m.date && m.date < today && !m.done;
         return (
-          <div key={m.id} style={{ marginBottom: 10, borderRadius: 14, border: `1.5px solid ${isToday ? P.lavender : P.lavender + "44"}`, background: isToday ? P.lavenderLight : P.white, overflow: "hidden", opacity: m.done ? 0.6 : 1, transition: "all 0.2s" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 14px", cursor: "pointer" }} onClick={() => setExpandId(expandId === m.id ? null : m.id)}>
-              <div onClick={e => { e.stopPropagation(); toggle(m.id); }} style={{ width: 20, height: 20, borderRadius: 6, flexShrink: 0, background: m.done ? P.lavender : "transparent", border: `2px solid ${P.lavender}`, display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <div key={m.id} style={{ marginBottom: 10, borderRadius: 14, border: `1.5px solid ${m._example ? P.lavender + "33" : isToday ? P.lavender : P.lavender + "44"}`, background: m._example ? P.bg : isToday ? P.lavenderLight : P.white, overflow: "hidden", opacity: m._example ? 0.6 : m.done ? 0.6 : 1, transition: "all 0.2s" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 14px", cursor: m._example ? "default" : "pointer" }} onClick={() => !m._example && setExpandId(expandId === m.id ? null : m.id)}>
+              <div onClick={e => { e.stopPropagation(); if (!m._example) toggle(m.id); }} style={{ width: 20, height: 20, borderRadius: 6, flexShrink: 0, background: m.done ? P.lavender : "transparent", border: `2px ${m._example ? "dashed" : "solid"} ${m._example ? P.inkFaint : P.lavender}`, display: "flex", alignItems: "center", justifyContent: "center", cursor: m._example ? "default" : "pointer" }}>
                 {m.done && <span style={{ fontSize: 11, fontWeight: 700, color: P.ink }}>✓</span>}
               </div>
               <div style={{ flex: 1 }}>
-                <div style={{ fontFamily: FF_S, fontSize: 14, fontWeight: 600, color: P.ink, textDecoration: m.done ? "line-through" : "none" }}>{m.title}</div>
-                <div style={{ fontFamily: FF_S, fontSize: 11.5, color: isPast ? "#D8708A" : P.inkFaint, marginTop: 2 }}>
-                  {isPast ? "⚠ Past · " : isToday ? "📅 Today · " : "📅 "}{m.date}{m.time ? ` ${m.time}` : ""}{m.attendees ? ` · ${m.attendees}` : ""}
+                <div style={{ fontFamily: FF_S, fontSize: 14, fontWeight: m._example ? 400 : 600, color: m._example ? P.inkFaint : P.ink, fontStyle: m._example ? "italic" : "normal", textDecoration: m.done ? "line-through" : "none" }}>{m.title}</div>
+                <div style={{ fontFamily: FF_S, fontSize: 11.5, color: P.inkFaint, marginTop: 2 }}>
+                  {m._example ? `example · ${m.time}${m.attendees ? ` · ${m.attendees}` : ""}` : `${isPast ? "⚠ Past · " : isToday ? "📅 Today · " : "📅 "}${m.date}${m.time ? ` ${m.time}` : ""}${m.attendees ? ` · ${m.attendees}` : ""}`}
                 </div>
               </div>
-              <span style={{ color: P.inkFaint, fontSize: 12 }}>{expandId === m.id ? "▲" : "▼"}</span>
-              <button onClick={e => { e.stopPropagation(); remove(m.id); }} style={{ background: "none", border: "none", cursor: "pointer", color: P.inkFaint, fontSize: 14, padding: 0 }}>×</button>
+              {!m._example && <span style={{ color: P.inkFaint, fontSize: 12 }}>{expandId === m.id ? "▲" : "▼"}</span>}
+              <button onClick={e => { e.stopPropagation(); remove(m.id); }} style={{ background: "none", border: "none", cursor: "pointer", color: m._example ? P.lavender + "88" : P.inkFaint, fontSize: 14, padding: 0 }}>×</button>
             </div>
-            {expandId === m.id && (
+            {expandId === m.id && !m._example && (
               <div style={{ padding: "0 14px 14px", borderTop: `1px solid ${P.lavender}33` }}>
                 <textarea value={m.notes} onChange={e => update(m.id, "notes", e.target.value)} placeholder="Agenda / notes…" rows={3}
                   style={{ ...wi({ width: "100%", resize: "none", marginTop: 10, boxSizing: "border-box", fontSize: 13 }) }} />
@@ -4354,11 +4984,15 @@ const WorkMeetings = ({ meetings: init }) => {
 
 const WorkOverview = ({ masterTodos, dailyTodos, reminders, meetings, onGoTo }) => {
   const today        = new Date().toISOString().slice(0, 10);
-  const dailyDone    = dailyTodos.filter(t => t.done).length;
-  const masterActive = masterTodos.filter(t => !t.done).length;
-  const overdueRem   = reminders.filter(r => !r.done && r.date < today).length;
-  const todayMtgs    = meetings.filter(m => m.date === today && !m.done);
-  const upNextRem    = reminders.filter(r => !r.done && r.date >= today).sort((a, b) => a.date.localeCompare(b.date)).slice(0, 3);
+  const realTodos    = dailyTodos.filter(t => !t._example);
+  const realMaster   = masterTodos.filter(t => !t._example);
+  const realRems     = reminders.filter(r => !r._example);
+  const realMtgs     = meetings.filter(m => !m._example);
+  const dailyDone    = realTodos.filter(t => t.done).length;
+  const masterActive = realMaster.filter(t => !t.done).length;
+  const overdueRem   = realRems.filter(r => !r.done && r.date && r.date < today).length;
+  const todayMtgs    = realMtgs.filter(m => m.date === today && !m.done);
+  const upNextRem    = realRems.filter(r => !r.done && r.date && r.date >= today).sort((a, b) => a.date.localeCompare(b.date)).slice(0, 3);
   const highPri      = masterTodos.filter(t => !t.done && t.priority === "high").slice(0, 3);
 
   const StatCard = ({ icon, label, value, sub, color, onClick }) => (
@@ -4376,7 +5010,7 @@ const WorkOverview = ({ masterTodos, dailyTodos, reminders, meetings, onGoTo }) 
     <div>
       {/* Stat row */}
       <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 28 }}>
-        <StatCard icon="✓"  label="Daily tasks"    value={`${dailyDone}/${dailyTodos.length}`} sub="done today"          color="#9B85D8" onClick={() => onGoTo("todos")} />
+        <StatCard icon="✓"  label="Daily tasks"    value={`${dailyDone}/${realTodos.length}`} sub="done today"          color="#9B85D8" onClick={() => onGoTo("todos")} />
         <StatCard icon="★"  label="Open tasks"     value={masterActive}                        sub="in master list"      color="#5DCAAA" onClick={() => onGoTo("todos")} />
         <StatCard icon="🔔" label="Overdue"         value={overdueRem}                          sub="reminders"           color={overdueRem > 0 ? "#D8708A" : "#5DCAAA"} onClick={() => onGoTo("reminders")} />
         <StatCard icon="📅" label="Meetings today"  value={todayMtgs.length}                    sub={todayMtgs[0]?.time ?? "—"} color="#5AAADE" onClick={() => onGoTo("meetings")} />
@@ -4431,21 +5065,851 @@ const WorkOverview = ({ masterTodos, dailyTodos, reminders, meetings, onGoTo }) 
   );
 };
 
+// ─────────────────────────────────────────────────────────────────────────────
+// WorkCalendar — full calendar with categories + user sharing
+// ─────────────────────────────────────────────────────────────────────────────
+
+const INIT_CAL_CATEGORIES = [
+  { id: "work",     name: "Work",     color: "#9B85D8", shared: [] },
+  { id: "personal", name: "Personal", color: "#5DCAAA", shared: [] },
+  { id: "home",     name: "Home",     color: "#E8956A", shared: [] },
+];
+
+const MONTH_NAMES = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+const DAY_NAMES   = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CalEventModal — defined OUTSIDE WorkCalendar so its reference is stable.
+// Stable reference = React can correctly unmount it when showEventModal→false.
+// ─────────────────────────────────────────────────────────────────────────────
+const CAL_COLOR_PALETTE = ["#9B85D8","#5DCAAA","#E8956A","#5AAADE","#E88A8A","#F5C842","#B8D8F0","#F0B8C8"];
+
+const CalEventModal = ({ ev, defaultDate, defaultCategoryId, categories, upsertEvent, deleteEvent, onAddCategory, sharedCalendarLabel, onClose }) => {
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const [title,      setTitle]      = useState(ev?.title      || "");
+  const [date,       setDate]       = useState(ev?.date       || defaultDate || todayStr);
+  const [endDate,    setEndDate]    = useState(ev?.endDate    || "");
+  const [time,       setTime]       = useState(ev?.time       || "");
+  const [endTime,    setEndTime]    = useState(ev?.endTime    || "");
+  const [categoryId, setCategoryId] = useState(ev?.categoryId || defaultCategoryId || categories[0]?.id || "");
+  const [note,       setNote]       = useState(ev?.note       || "");
+  const [showNewCal,    setShowNewCal]    = useState(false);
+  const [newCalName,    setNewCalName]    = useState("");
+  const [newCalColor,   setNewCalColor]   = useState(CAL_COLOR_PALETTE[0]);
+
+  const inp = { border: `1.5px solid ${P.lavender}`, borderRadius: 10, padding: "7px 12px", fontFamily: FF_S, fontSize: 13, background: P.lavenderLight, color: P.ink, outline: "none", width: "100%", boxSizing: "border-box" };
+
+  const submit = () => {
+    if (!title.trim() || !date) return;
+    const evData = { id: ev?.id, title: title.trim(), date, endDate, time, endTime, categoryId, note };
+    onClose();
+    upsertEvent(evData);
+  };
+
+  const confirmNewCal = () => {
+    if (!newCalName.trim()) return;
+    const id = `cat${Date.now()}`;
+    onAddCategory(id, newCalName.trim(), newCalColor);
+    setCategoryId(id);
+    setNewCalName("");
+    setShowNewCal(false);
+  };
+
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(61,53,80,0.35)", zIndex: 400, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }} onClick={onClose}>
+      <div onClick={e => e.stopPropagation()} style={{ background: P.white, borderRadius: 24, padding: "28px 28px", width: "100%", maxWidth: 420, boxShadow: "0 12px 48px rgba(61,53,80,0.2)", animation: "popIn 0.2s ease" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: sharedCalendarLabel ? 6 : 18 }}>
+          <h3 style={{ fontFamily: FF_D, fontSize: 20, color: P.ink, margin: 0, fontWeight: 400 }}>{ev ? "Edit event" : "New event"}</h3>
+          <button onClick={onClose} style={{ background: P.lavenderLight, border: "none", borderRadius: 8, width: 28, height: 28, cursor: "pointer", fontSize: 16, color: P.inkLight }}>×</button>
+        </div>
+        {sharedCalendarLabel && (
+          <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 14, padding: "5px 10px", background: "#5DCAAA18", borderRadius: 8, border: "1px solid #5DCAAA44" }}>
+            <span style={{ fontSize: 12 }}>↗</span>
+            <span style={{ fontFamily: FF_S, fontSize: 12, color: "#3a9a7a", fontWeight: 600 }}>{sharedCalendarLabel}</span>
+          </div>
+        )}
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          <input value={title} onChange={e => setTitle(e.target.value)} placeholder="Event title" autoFocus style={inp} />
+          {!sharedCalendarLabel && (
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+              {categories.map(c => (
+                <button key={c.id} onClick={() => setCategoryId(c.id)} style={{ background: categoryId === c.id ? c.color : c.color + "33", color: categoryId === c.id ? "#fff" : P.ink, border: "none", borderRadius: 20, padding: "4px 13px", cursor: "pointer", fontFamily: FF_S, fontSize: 12, fontWeight: 600, transition: "all 0.15s" }}>{c.name}</button>
+              ))}
+              <button onClick={() => setShowNewCal(v => !v)} title="Create new calendar" style={{ background: showNewCal ? P.lavender : P.lavenderLight, border: `1.5px dashed ${P.lavender}`, borderRadius: 20, padding: "3px 10px", cursor: "pointer", fontFamily: FF_S, fontSize: 12, color: P.inkFaint, fontWeight: 600 }}>+ New</button>
+            </div>
+          )}
+          {showNewCal && !sharedCalendarLabel && (
+            <div style={{ background: P.lavenderLight, borderRadius: 12, padding: "10px 12px", display: "flex", flexDirection: "column", gap: 8 }}>
+              <input value={newCalName} onChange={e => setNewCalName(e.target.value)} onKeyDown={e => e.key === "Enter" && confirmNewCal()} placeholder="Calendar name…" autoFocus style={{ ...inp, padding: "5px 10px", fontSize: 12 }} />
+              <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
+                {CAL_COLOR_PALETTE.map(col => (
+                  <div key={col} onClick={() => setNewCalColor(col)} style={{ width: 18, height: 18, borderRadius: "50%", background: col, cursor: "pointer", border: newCalColor === col ? `2.5px solid ${P.ink}` : "2px solid transparent", flexShrink: 0 }} />
+                ))}
+              </div>
+              <div style={{ display: "flex", gap: 6 }}>
+                <button onClick={confirmNewCal} style={{ flex: 1, background: P.lavender, color: P.ink, border: "none", borderRadius: 8, padding: "5px", cursor: "pointer", fontFamily: FF_S, fontSize: 12, fontWeight: 600 }}>Create</button>
+                <button onClick={() => { setShowNewCal(false); setNewCalName(""); }} style={{ background: "none", border: "none", cursor: "pointer", color: P.inkFaint, fontSize: 14, padding: "5px 8px" }}>✕</button>
+              </div>
+            </div>
+          )}
+          <div style={{ display: "flex", gap: 8 }}>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontFamily: FF_S, fontSize: 11, color: P.inkFaint, marginBottom: 3 }}>Start date</div>
+              <input type="date" value={date} onChange={e => setDate(e.target.value)} style={inp} />
+            </div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontFamily: FF_S, fontSize: 11, color: P.inkFaint, marginBottom: 3 }}>End date (opt.)</div>
+              <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} style={inp} />
+            </div>
+          </div>
+          <div style={{ display: "flex", gap: 8 }}>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontFamily: FF_S, fontSize: 11, color: P.inkFaint, marginBottom: 3 }}>Start time (opt.)</div>
+              <input type="time" value={time} onChange={e => setTime(e.target.value)} style={inp} />
+            </div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontFamily: FF_S, fontSize: 11, color: P.inkFaint, marginBottom: 3 }}>End time (opt.)</div>
+              <input type="time" value={endTime} onChange={e => setEndTime(e.target.value)} style={inp} />
+            </div>
+          </div>
+          <textarea value={note} onChange={e => setNote(e.target.value)} placeholder="Notes (optional)…" rows={2}
+            style={{ ...inp, resize: "none", lineHeight: 1.6 }} />
+          <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
+            <button onClick={submit} style={{ flex: 1, background: P.lavender, color: P.ink, border: "none", borderRadius: 12, padding: "10px", cursor: "pointer", fontFamily: FF_S, fontSize: 14, fontWeight: 600 }}>
+              {ev ? "Save changes" : "Add event"}
+            </button>
+            {ev && (
+              <button onClick={() => { const id = ev.id; onClose(); deleteEvent(id); }} style={{ background: "#F0B8C811", color: "#D8708A", border: "1.5px solid #F0B8C855", borderRadius: 12, padding: "10px 14px", cursor: "pointer", fontFamily: FF_S, fontSize: 13 }}>
+                Delete
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CalShareModal — defined OUTSIDE WorkCalendar for the same reason.
+// ─────────────────────────────────────────────────────────────────────────────
+const CalShareModal = ({ cat, currentUserId, events, updateCatShared, onClose }) => {
+  const [search,         setSearch]         = useState("");
+  const [results,        setResults]        = useState([]);
+  const [shared,         setShared]         = useState(cat.shared || []);
+  const [sharedProfiles, setSharedProfiles] = useState([]);
+
+  useEffect(() => {
+    if (!shared.length) return;
+    supabase.from("profiles").select("id, name, handle, avatar_color").in("id", shared)
+      .then(({ data }) => { if (data) setSharedProfiles(data); });
+  }, []); // eslint-disable-line
+
+  useEffect(() => {
+    if (!search.trim()) { setResults([]); return; }
+    const t = setTimeout(async () => {
+      const q = search.replace(/^@/, "");
+      const { data } = await supabase.from("profiles").select("id, name, handle, avatar_color")
+        .neq("id", currentUserId || "").or(`name.ilike.%${q}%,handle.ilike.%${q}%`).limit(8);
+      setResults(data || []);
+    }, 280);
+    return () => clearTimeout(t);
+  }, [search]); // eslint-disable-line
+
+  const addUser = (u) => {
+    if (shared.includes(u.id)) return;
+    setShared(s => [...s, u.id]);
+    setSharedProfiles(ps => [...ps, u]);
+    setSearch(""); setResults([]);
+  };
+  const removeUser = (id) => {
+    setShared(s => s.filter(x => x !== id));
+    setSharedProfiles(ps => ps.filter(p => p.id !== id));
+  };
+  const save = () => {
+    onClose();
+    updateCatShared(cat.id, shared);
+    if (currentUserId) {
+      const catEvents = events.filter(e => e.categoryId === cat.id);
+      const prevShared = cat.shared || [];
+      const removedIds = prevShared.filter(id => !shared.includes(id));
+      if (removedIds.length) {
+        supabase.from('calendar_shares').delete()
+          .eq('from_user_id', currentUserId).eq('cat_id', cat.id)
+          .in('to_user_id', removedIds).then(() => {}).catch(() => {});
+      }
+      for (const toId of shared) {
+        supabase.from('calendar_shares').upsert({
+          from_user_id: currentUserId, to_user_id: toId, cat_id: cat.id,
+          cat_name: cat.name, cat_color: cat.color, events: catEvents,
+          updated_at: new Date().toISOString()
+        }, { onConflict: 'from_user_id,to_user_id,cat_id' }).then(() => {}).catch(() => {});
+      }
+    }
+  };
+
+  const avatarStyle = (u) => ({ width: 30, height: 30, borderRadius: "50%", background: u.avatar_color || P.lavender, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: FF_S, fontSize: 12, fontWeight: 700, color: P.ink, flexShrink: 0 });
+
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(61,53,80,0.35)", zIndex: 400, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }} onClick={onClose}>
+      <div onClick={e => e.stopPropagation()} style={{ background: P.white, borderRadius: 24, padding: "28px 28px", width: "100%", maxWidth: 400, boxShadow: "0 12px 48px rgba(61,53,80,0.2)", animation: "popIn 0.2s ease" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+          <h3 style={{ fontFamily: FF_D, fontSize: 19, color: P.ink, margin: 0, fontWeight: 400 }}>Share <span style={{ color: cat.color, fontWeight: 600 }}>{cat.name}</span> calendar</h3>
+          <button onClick={onClose} style={{ background: P.lavenderLight, border: "none", borderRadius: 8, width: 28, height: 28, cursor: "pointer", fontSize: 16, color: P.inkLight }}>×</button>
+        </div>
+        <p style={{ fontFamily: FF_S, fontSize: 12, color: P.inkFaint, margin: "0 0 14px" }}>People you share with can view events in this calendar on your public profile.</p>
+        <div style={{ position: "relative", marginBottom: 10 }}>
+          <span style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", fontSize: 12, color: P.inkFaint }}>🔍</span>
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search by name or @handle…"
+            style={{ width: "100%", border: `1.5px solid ${P.lavender}`, borderRadius: 12, padding: "8px 12px 8px 30px", fontFamily: FF_S, fontSize: 13, background: P.lavenderLight, color: P.ink, outline: "none", boxSizing: "border-box" }} />
+        </div>
+        {results.length > 0 && (
+          <div style={{ background: P.white, border: `1px solid ${P.lavender}33`, borderRadius: 12, marginBottom: 10, maxHeight: 160, overflowY: "auto" }}>
+            {results.map(u => (
+              <div key={u.id} onClick={() => addUser(u)} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", cursor: "pointer", borderBottom: `1px solid ${P.lavender}22` }}
+                onMouseEnter={e => e.currentTarget.style.background = P.lavenderLight}
+                onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+                <div style={avatarStyle(u)}>{(u.name || u.handle || "?")[0].toUpperCase()}</div>
+                <div>
+                  <div style={{ fontFamily: FF_S, fontSize: 13, fontWeight: 600, color: P.ink }}>{u.name}</div>
+                  <div style={{ fontFamily: FF_S, fontSize: 11, color: P.inkFaint }}>@{u.handle}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+        {sharedProfiles.length > 0 && (
+          <div style={{ marginBottom: 14 }}>
+            <div style={{ fontFamily: FF_S, fontSize: 11, color: P.inkFaint, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 8 }}>Shared with</div>
+            {sharedProfiles.map(u => (
+              <div key={u.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "6px 0", borderBottom: `1px solid ${P.lavender}22` }}>
+                <div style={avatarStyle(u)}>{(u.name || u.handle || "?")[0].toUpperCase()}</div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontFamily: FF_S, fontSize: 13, fontWeight: 600, color: P.ink }}>{u.name}</div>
+                  <div style={{ fontFamily: FF_S, fontSize: 11, color: P.inkFaint }}>@{u.handle}</div>
+                </div>
+                <button onClick={() => removeUser(u.id)} style={{ background: "none", border: "none", cursor: "pointer", color: P.inkFaint, fontSize: 16 }}>×</button>
+              </div>
+            ))}
+          </div>
+        )}
+        {sharedProfiles.length === 0 && (
+          <p style={{ fontFamily: FF_S, fontSize: 12, color: P.inkFaint, fontStyle: "italic", textAlign: "center", padding: "12px 0" }}>Not shared with anyone yet</p>
+        )}
+        <button onClick={save} style={{ width: "100%", background: P.lavender, color: P.ink, border: "none", borderRadius: 12, padding: "10px", cursor: "pointer", fontFamily: FF_S, fontSize: 14, fontWeight: 600 }}>
+          Save sharing settings
+        </button>
+      </div>
+    </div>
+  );
+};
+
+const WorkCalendar = ({ calendarData, setCalendarData, currentUserId }) => {
+  const data = calendarData || { events: [], categories: INIT_CAL_CATEGORIES };
+  const events     = data.events     || [];
+  const categories = data.categories || INIT_CAL_CATEGORIES;
+
+  const save = (patch) => setCalendarData({ ...data, ...patch });
+  const saveEvents     = (evs)  => save({ events: evs });
+  const saveCategories = (cats) => save({ categories: cats });
+
+  const today  = new Date();
+  const [viewYear,  setViewYear]  = useState(today.getFullYear());
+  const [viewMonth, setViewMonth] = useState(today.getMonth());
+  const [view, setView] = useState("month"); // "month" | "week"
+  const [showEventModal, setShowEventModal] = useState(false);
+  const [editingEvent, setEditingEvent] = useState(null);
+  const [showShareModal, setShowShareModal] = useState(null); // category id
+  const [activeCatFilter, setActiveCatFilter] = useState("all");
+
+  // ── Shared-with-me state ─────────────────────────────────────────────────
+  const [sharedWithMe, setSharedWithMe] = useState([]);
+  const [sharedProfiles, setSharedProfiles] = useState({});
+  const [viewingSharedEvent, setViewingSharedEvent] = useState(null);
+  const syncCalSharesTimerRef = useRef(null);
+
+  // Load calendars that others have shared with me
+  useEffect(() => {
+    if (!currentUserId) return;
+    supabase.from('calendar_shares').select('*').eq('to_user_id', currentUserId)
+      .then(async ({ data: rows }) => {
+        if (!rows?.length) return;
+        setSharedWithMe(rows);
+        const ids = [...new Set(rows.map(r => r.from_user_id))];
+        const { data: profs } = await supabase.from('profiles').select('id, name, handle').in('id', ids);
+        if (profs) setSharedProfiles(Object.fromEntries(profs.map(p => [p.id, p])));
+      });
+  }, [currentUserId]); // eslint-disable-line
+
+  // Keep shared categories synced → calendar_shares table (debounced 2.5 s)
+  useEffect(() => {
+    if (!currentUserId) return;
+    const sharedCats = categories.filter(c => c.shared?.length > 0);
+    if (!sharedCats.length) return;
+    clearTimeout(syncCalSharesTimerRef.current);
+    syncCalSharesTimerRef.current = setTimeout(() => {
+      for (const cat of sharedCats) {
+        const catEvents = events.filter(e => e.categoryId === cat.id);
+        for (const toId of cat.shared) {
+          supabase.from('calendar_shares').upsert({
+            from_user_id: currentUserId, to_user_id: toId, cat_id: cat.id,
+            cat_name: cat.name, cat_color: cat.color, events: catEvents,
+            updated_at: new Date().toISOString()
+          }, { onConflict: 'from_user_id,to_user_id,cat_id' }).catch(() => {});
+        }
+      }
+    }, 2500);
+    return () => clearTimeout(syncCalSharesTimerRef.current);
+  }, [events, categories, currentUserId]); // eslint-disable-line
+
+  // ── helpers ─────────────────────────────────────────────────────────────
+  const catById = Object.fromEntries(categories.map(c => [c.id, c]));
+
+  const daysInMonth = (y, m) => new Date(y, m + 1, 0).getDate();
+  const firstDayOfMonth = (y, m) => { const d = new Date(y, m, 1).getDay(); return d === 0 ? 6 : d - 1; };
+
+  const prevMonth = () => { if (viewMonth === 0) { setViewMonth(11); setViewYear(y => y - 1); } else setViewMonth(m => m - 1); };
+  const nextMonth = () => { if (viewMonth === 11) { setViewMonth(0); setViewYear(y => y + 1); } else setViewMonth(m => m + 1); };
+
+  const todayStr = today.toISOString().slice(0, 10);
+
+  // Build a contrib event object tagged with display metadata
+  const _tagContrib = (c, color, fromId, catId) => ({
+    ...c.event_data,
+    _isOwn: false,
+    _isContribution: true,
+    _isMine: c.contributor_id === currentUserId,
+    _contribDbId: c.id,
+    _contribUserId: c.contributor_id,
+    _swmColor: color,
+    _swmFromId: fromId,
+    _swmCatId: catId,
+  });
+
+  const eventsForDay = (dateStr) => {
+    const isSwmFilter = activeCatFilter.startsWith("swm::");
+
+    // ── Own events (user's calendarData) ────────────────────────────────────
+    const own = !isSwmFilter
+      ? events.filter(e => e.date === dateStr && (activeCatFilter === "all" || e.categoryId === activeCatFilter))
+              .map(e => ({ ...e, _isOwn: true, _isContribution: false }))
+      : [];
+
+    // ── Contributions to MY OWN calendars (I am the sharer) ─────────────────
+    // These show up when a recipient adds events and I view my own calendar.
+    const ownCalContribs = !isSwmFilter
+      ? contributions
+          .filter(c => c.calendar_owner_id === currentUserId &&
+            c.event_data.date === dateStr &&
+            (activeCatFilter === "all" || c.cat_id === activeCatFilter))
+          .map(c => _tagContrib(c, catById[c.cat_id]?.color || P.lavender, currentUserId, c.cat_id))
+      : [];
+
+    // ── Shared-with-me: sharer's events + ALL participants' contributions ────
+    const contribsForShare = (s) =>
+      contributions
+        .filter(c => c.calendar_owner_id === s.from_user_id && c.cat_id === s.cat_id && c.event_data.date === dateStr)
+        .map(c => _tagContrib(c, s.cat_color, s.from_user_id, s.cat_id));
+
+    const swmEventsFromRow = (s) => [
+      ...(s.events || []).filter(e => e.date === dateStr)
+        .map(e => ({ ...e, _isOwn: false, _isContribution: false, _swmColor: s.cat_color, _swmFromId: s.from_user_id, _swmCatId: s.cat_id })),
+      ...contribsForShare(s),
+    ];
+
+    const swm = isSwmFilter
+      ? sharedWithMe
+          .filter(s => activeCatFilter === `swm::${s.from_user_id}::${s.cat_id}`)
+          .flatMap(swmEventsFromRow)
+      : activeCatFilter === "all"
+        ? sharedWithMe.flatMap(swmEventsFromRow)
+        : [];
+
+    return [...own, ...ownCalContribs, ...swm];
+  };
+
+  // ── Event CRUD ──────────────────────────────────────────────────────────
+  const deleteEvent = (id) => saveEvents(events.filter(e => e.id !== id));
+  const upsertEvent = (ev) => {
+    const next = ev.id && events.find(e => e.id === ev.id)
+      ? events.map(e => e.id === ev.id ? ev : e)
+      : [...events, { ...ev, id: `ev${Date.now()}` }];
+    saveEvents(next);
+  };
+
+  // ── Category CRUD ───────────────────────────────────────────────────────
+  const addCategory = (name, color) => {
+    const id = `cat${Date.now()}`;
+    saveCategories([...categories, { id, name, color, shared: [] }]);
+  };
+  const deleteCategory = (id) => {
+    saveCategories(categories.filter(c => c.id !== id));
+    saveEvents(events.filter(e => e.categoryId !== id));
+  };
+  const updateCatShared = (catId, userIds) => {
+    saveCategories(categories.map(c => c.id === catId ? { ...c, shared: userIds } : c));
+  };
+  const onAddCategory = (id, name, color) => {
+    saveCategories([...categories, { id, name, color, shared: [] }]);
+  };
+
+  // ── Contributions: events added by any participant to a shared calendar ──
+  // Stored in calendar_contributions table; RLS ensures ALL participants
+  // (calendar owner + every recipient) can read all rows for that calendar.
+  const [contributions,     setContributions]     = useState([]);
+  const [contributorProfiles, setContributorProfiles] = useState({}); // id → { name, handle }
+
+  useEffect(() => {
+    if (!currentUserId) return;
+    supabase.from('calendar_contributions').select('*')
+      .then(async ({ data }) => {
+        if (!data?.length) return;
+        setContributions(data);
+        // Load profiles for every unique contributor we don't already know
+        const ids = [...new Set(data.map(c => c.contributor_id).filter(id => id !== currentUserId))];
+        if (!ids.length) return;
+        const { data: profs } = await supabase.from('profiles').select('id, name, handle').in('id', ids);
+        if (profs) setContributorProfiles(Object.fromEntries(profs.map(p => [p.id, p])));
+      });
+  }, [currentUserId]); // eslint-disable-line
+
+  const addContribEvent = (ownerId, catId, evData) => {
+    const evWithId = { ...evData, id: evData.id || `ev${Date.now()}` };
+    const tempId = `tmp_${Date.now()}`;
+    const tempRow = { id: tempId, calendar_owner_id: ownerId, cat_id: catId, contributor_id: currentUserId, event_data: evWithId };
+    setContributions(prev => [...prev, tempRow]);
+    supabase.from('calendar_contributions')
+      .insert({ calendar_owner_id: ownerId, cat_id: catId, contributor_id: currentUserId, event_data: evWithId })
+      .select('id').single()
+      .then(({ data }) => {
+        if (data?.id) setContributions(prev => prev.map(c => c.id === tempId ? { ...c, id: data.id } : c));
+      })
+      .catch(() => setContributions(prev => prev.filter(c => c.id !== tempId)));
+  };
+  const upsertContribEvent = (contribDbId, ownerId, catId, evData) => {
+    setContributions(prev => prev.map(c => c.id === contribDbId ? { ...c, event_data: evData } : c));
+    supabase.from('calendar_contributions')
+      .update({ event_data: evData, updated_at: new Date().toISOString() })
+      .eq('id', contribDbId).then(() => {}).catch(() => {});
+  };
+  const deleteContribEvent = (contribDbId) => {
+    setContributions(prev => prev.filter(c => c.id !== contribDbId));
+    supabase.from('calendar_contributions').delete().eq('id', contribDbId).then(() => {}).catch(() => {});
+  };
+
+  // ── Month grid ──────────────────────────────────────────────────────────
+  const numDays   = daysInMonth(viewYear, viewMonth);
+  const startPad  = firstDayOfMonth(viewYear, viewMonth);
+  const totalCells = Math.ceil((startPad + numDays) / 7) * 7;
+
+  const [newCatName, setNewCatName]   = useState("");
+  const [newCatColor, setNewCatColor] = useState("#B8D8F0");
+  const [showAddCat, setShowAddCat]   = useState(false);
+  const [clickedDate, setClickedDate] = useState(null);
+
+
+  return (
+    <div style={{ display: "flex", gap: 20 }}>
+
+      {/* ── Left: Category sidebar ────────────────────────────────────── */}
+      <div style={{ width: 200, flexShrink: 0 }}>
+        <div style={{ fontFamily: FF_S, fontSize: 11, color: P.inkFaint, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 10 }}>Calendars</div>
+
+        {/* All filter */}
+        <button onClick={() => setActiveCatFilter("all")} style={{ width: "100%", display: "flex", alignItems: "center", gap: 8, padding: "7px 10px", background: activeCatFilter === "all" ? P.lavenderLight : "transparent", border: `1.5px solid ${activeCatFilter === "all" ? P.lavender : "transparent"}`, borderRadius: 10, cursor: "pointer", marginBottom: 4, textAlign: "left" }}>
+          <div style={{ width: 10, height: 10, borderRadius: "50%", background: P.lavender, flexShrink: 0 }} />
+          <span style={{ fontFamily: FF_S, fontSize: 13, color: P.ink, flex: 1 }}>All calendars</span>
+        </button>
+
+        {categories.map(cat => (
+          <div key={cat.id} style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 3 }}>
+            <button onClick={() => setActiveCatFilter(cat.id === activeCatFilter ? "all" : cat.id)}
+              style={{ flex: 1, display: "flex", alignItems: "center", gap: 8, padding: "7px 10px", background: activeCatFilter === cat.id ? cat.color + "22" : "transparent", border: `1.5px solid ${activeCatFilter === cat.id ? cat.color + "66" : "transparent"}`, borderRadius: 10, cursor: "pointer", textAlign: "left" }}>
+              <div style={{ width: 10, height: 10, borderRadius: "50%", background: cat.color, flexShrink: 0 }} />
+              <span style={{ fontFamily: FF_S, fontSize: 13, color: P.ink, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{cat.name}</span>
+              {cat.shared?.length > 0 && <span style={{ fontSize: 10 }} title={`Shared with ${cat.shared.length} person${cat.shared.length > 1 ? "s" : ""}`}>👥</span>}
+            </button>
+            {/* Share + delete icons */}
+            <button onClick={() => setShowShareModal(cat.id)} title="Share calendar" style={{ background: "none", border: "none", cursor: "pointer", color: P.inkFaint, fontSize: 13, padding: "2px 4px" }}>↗</button>
+            {!["work","personal","home"].includes(cat.id) && (
+              <button onClick={() => deleteCategory(cat.id)} style={{ background: "none", border: "none", cursor: "pointer", color: P.inkFaint, fontSize: 14, padding: "2px 4px" }}>×</button>
+            )}
+          </div>
+        ))}
+
+        {/* Add category */}
+        {showAddCat ? (
+          <div style={{ marginTop: 8, background: P.lavenderLight, borderRadius: 12, padding: 10 }}>
+            <input value={newCatName} onChange={e => setNewCatName(e.target.value)} placeholder="Category name" autoFocus
+              style={{ width: "100%", border: `1.5px solid ${P.lavender}`, borderRadius: 8, padding: "5px 9px", fontFamily: FF_S, fontSize: 12, background: P.white, color: P.ink, outline: "none", boxSizing: "border-box", marginBottom: 7 }} />
+            <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginBottom: 7 }}>
+              {CAL_COLOR_PALETTE.map(col => (
+                <div key={col} onClick={() => setNewCatColor(col)}
+                  style={{ width: 18, height: 18, borderRadius: "50%", background: col, cursor: "pointer", border: newCatColor === col ? "2.5px solid " + P.ink : "2px solid transparent", flexShrink: 0 }} />
+              ))}
+            </div>
+            <div style={{ display: "flex", gap: 5 }}>
+              <button onClick={() => { if (newCatName.trim()) { addCategory(newCatName.trim(), newCatColor); setNewCatName(""); setShowAddCat(false); } }} style={{ flex: 1, background: P.lavender, color: P.ink, border: "none", borderRadius: 8, padding: "5px", cursor: "pointer", fontFamily: FF_S, fontSize: 12, fontWeight: 600 }}>Add</button>
+              <button onClick={() => setShowAddCat(false)} style={{ background: "none", border: "none", cursor: "pointer", color: P.inkFaint, fontSize: 14 }}>✕</button>
+            </div>
+          </div>
+        ) : (
+          <button onClick={() => setShowAddCat(true)} style={{ width: "100%", marginTop: 8, background: "none", border: `1.5px dashed ${P.lavender}88`, borderRadius: 10, padding: "6px 10px", cursor: "pointer", fontFamily: FF_S, fontSize: 12, color: P.inkFaint, textAlign: "left" }}>+ New calendar</button>
+        )}
+
+        {/* Mini note about sharing */}
+        <div style={{ marginTop: 16, padding: "10px", background: P.lavenderLight, borderRadius: 10, fontFamily: FF_S, fontSize: 11, color: P.inkFaint, lineHeight: 1.5 }}>
+          💡 Use ↗ to share a calendar with other Nook users. They'll see your events on your profile.
+        </div>
+
+        {/* Shared with me section */}
+        {sharedWithMe.length > 0 && (
+          <div style={{ marginTop: 18, paddingTop: 14, borderTop: `1px solid ${P.lavender}33` }}>
+            <div style={{ fontFamily: FF_S, fontSize: 11, color: P.inkFaint, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 8 }}>Shared with me</div>
+            {sharedWithMe.map(share => {
+              const filterId = `swm::${share.from_user_id}::${share.cat_id}`;
+              const prof = sharedProfiles[share.from_user_id];
+              return (
+                <button key={filterId}
+                  onClick={() => setActiveCatFilter(activeCatFilter === filterId ? "all" : filterId)}
+                  style={{ width: "100%", display: "flex", alignItems: "center", gap: 8, padding: "7px 10px", background: activeCatFilter === filterId ? share.cat_color + "22" : "transparent", border: `1.5px solid ${activeCatFilter === filterId ? share.cat_color + "66" : "transparent"}`, borderRadius: 10, cursor: "pointer", textAlign: "left", marginBottom: 3 }}>
+                  <div style={{ width: 10, height: 10, borderRadius: "50%", background: share.cat_color, flexShrink: 0 }} />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontFamily: FF_S, fontSize: 12, color: P.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{share.cat_name}</div>
+                    <div style={{ fontFamily: FF_S, fontSize: 10, color: P.inkFaint }}>from {prof?.name || prof?.handle || "someone"}</div>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* ── Right: Calendar grid ──────────────────────────────────────── */}
+      <div style={{ flex: 1, minWidth: 0 }}>
+        {/* Nav header */}
+        <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
+          <button onClick={prevMonth} style={{ background: P.lavenderLight, border: "none", borderRadius: 8, width: 32, height: 32, cursor: "pointer", fontSize: 16, color: P.ink }}>‹</button>
+          <h3 style={{ fontFamily: FF_D, fontSize: 20, color: P.ink, margin: 0, fontWeight: 400, flex: 1 }}>
+            {MONTH_NAMES[viewMonth]} {viewYear}
+          </h3>
+          <button onClick={nextMonth} style={{ background: P.lavenderLight, border: "none", borderRadius: 8, width: 32, height: 32, cursor: "pointer", fontSize: 16, color: P.ink }}>›</button>
+          {/* Today button */}
+          <button onClick={() => { setViewYear(today.getFullYear()); setViewMonth(today.getMonth()); }}
+            style={{ background: P.lavender, color: P.ink, border: "none", borderRadius: 8, padding: "5px 14px", cursor: "pointer", fontFamily: FF_S, fontSize: 12, fontWeight: 600 }}>Today</button>
+          {/* Add event */}
+          <button onClick={() => { setEditingEvent(null); setClickedDate(todayStr); setShowEventModal(true); }}
+            style={{ background: P.lavender, color: P.ink, border: "none", borderRadius: 8, padding: "5px 14px", cursor: "pointer", fontFamily: FF_S, fontSize: 12, fontWeight: 600 }}>+ Event</button>
+        </div>
+
+        {/* Day-of-week headers */}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 2, marginBottom: 4 }}>
+          {DAY_NAMES.map(d => (
+            <div key={d} style={{ fontFamily: FF_S, fontSize: 11, fontWeight: 700, color: P.inkFaint, textAlign: "center", padding: "4px 0", textTransform: "uppercase", letterSpacing: 0.5 }}>{d}</div>
+          ))}
+        </div>
+
+        {/* Calendar cells */}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 2 }}>
+          {Array.from({ length: totalCells }).map((_, i) => {
+            const dayNum = i - startPad + 1;
+            const isValid = dayNum >= 1 && dayNum <= numDays;
+            const dateStr = isValid ? `${viewYear}-${String(viewMonth + 1).padStart(2, "0")}-${String(dayNum).padStart(2, "0")}` : null;
+            const isToday = dateStr === todayStr;
+            const dayEvents = dateStr ? eventsForDay(dateStr) : [];
+
+            return (
+              <div key={i}
+                onClick={() => { if (!isValid) return; setClickedDate(dateStr); setEditingEvent(null); setShowEventModal(true); }}
+                style={{ minHeight: 80, borderRadius: 10, background: isToday ? P.lavenderLight : P.white, border: `1.5px solid ${isToday ? P.lavender : P.lavender + "22"}`, padding: "6px 6px 4px", cursor: isValid ? "pointer" : "default", transition: "background 0.1s", boxSizing: "border-box", opacity: isValid ? 1 : 0.2 }}
+                onMouseEnter={e => { if (isValid) e.currentTarget.style.background = P.lavenderLight; }}
+                onMouseLeave={e => { e.currentTarget.style.background = isToday ? P.lavenderLight : P.white; }}>
+                {isValid && (
+                  <>
+                    <div style={{ fontFamily: FF_S, fontSize: 12, fontWeight: isToday ? 700 : 400, color: isToday ? "#9B85D8" : P.ink, textAlign: "right", marginBottom: 3 }}>{dayNum}</div>
+                    {dayEvents.slice(0, 3).map(ev => {
+                      // _isOwn: from my calendarData  |  _isContribution+_isMine: I contributed it
+                      // _isContribution+!_isMine: someone else contributed  |  neither: sharer's event
+                      const editable = ev._isOwn || (ev._isContribution && ev._isMine);
+                      const dotColor = ev._isOwn ? (catById[ev.categoryId]?.color || P.lavender) : ev._swmColor;
+                      const evKey = ev._isOwn ? ev.id : `${ev._isContribution ? 'c' : 's'}_${ev._swmFromId}_${ev._swmCatId}_${ev._contribDbId || ev.id}`;
+                      return (
+                        <div key={evKey}
+                          onClick={e => {
+                            e.stopPropagation();
+                            if (editable) { setEditingEvent(ev); setClickedDate(ev.date); setShowEventModal(true); }
+                            else { setViewingSharedEvent(ev); }
+                          }}
+                          style={{ background: dotColor + "22", borderLeft: `3px solid ${dotColor}`, borderRadius: 4, padding: "2px 5px", marginBottom: 2, fontFamily: FF_S, fontSize: 10.5, color: P.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", cursor: "pointer", opacity: editable ? 1 : 0.85 }}
+                          title={ev._isContribution && !ev._isMine ? `Added by ${contributorProfiles[ev._contribUserId]?.name || contributorProfiles[ev._contribUserId]?.handle || "a participant"}` : ev._isOwn ? undefined : `Shared by ${sharedProfiles[ev._swmFromId]?.name || sharedProfiles[ev._swmFromId]?.handle || "someone"}`}>
+                          {ev._isContribution && ev._isMine && <span style={{ opacity: 0.7, marginRight: 2, fontSize: 9 }}>✎</span>}
+                          {ev._isContribution && !ev._isMine && <span style={{ opacity: 0.6, marginRight: 2, fontSize: 9 }}>+</span>}
+                          {!ev._isOwn && !ev._isContribution && <span style={{ opacity: 0.6, marginRight: 2, fontSize: 9 }}>↗</span>}
+                          {ev.time && <span style={{ opacity: 0.7, marginRight: 3 }}>{ev.time}</span>}{ev.title}
+                        </div>
+                      );
+                    })}
+                    {dayEvents.length > 3 && (
+                      <div style={{ fontFamily: FF_S, fontSize: 10, color: P.inkFaint, paddingLeft: 4 }}>+{dayEvents.length - 3} more</div>
+                    )}
+                  </>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Modals */}
+      {showEventModal && (() => {
+        const isSwmActive = activeCatFilter.startsWith("swm::");
+        const isEditingContrib = editingEvent?._isContribution;
+        // Determine owner/cat for the target shared calendar
+        const [, filterFromId, filterCatId] = isSwmActive ? activeCatFilter.split("::") : [];
+        const targetOwnerId = isEditingContrib ? editingEvent._swmFromId : filterFromId;
+        const targetCatId   = isEditingContrib ? editingEvent._swmCatId  : filterCatId;
+        // Is this a shared-calendar operation at all?
+        const isSharedOp = !!(targetOwnerId && targetCatId);
+        const shareRow = isSharedOp
+          ? sharedWithMe.find(s => s.from_user_id === targetOwnerId && s.cat_id === targetCatId)
+          : null;
+        // Use contribution CRUD when targeting a shared calendar
+        const modalUpsert = isSharedOp
+          ? (ev) => {
+              if (isEditingContrib && editingEvent._contribDbId) {
+                upsertContribEvent(editingEvent._contribDbId, targetOwnerId, targetCatId, ev);
+              } else {
+                addContribEvent(targetOwnerId, targetCatId, ev);
+              }
+            }
+          : upsertEvent;
+        const modalDelete = isSharedOp
+          ? (id) => deleteContribEvent(editingEvent._contribDbId)
+          : deleteEvent;
+        const swmProf    = shareRow ? sharedProfiles[shareRow.from_user_id] : null;
+        const swmCatName = shareRow?.cat_name;
+        // Label: shown when adding/editing in a shared calendar
+        const sharedLabel = isSharedOp
+          ? `${swmProf?.name || swmProf?.handle || "Shared"} · ${swmCatName || targetCatId}`
+          : null;
+        return (
+          <CalEventModal
+            ev={editingEvent}
+            defaultDate={clickedDate}
+            defaultCategoryId={!isSwmActive && !isEditingContrib && activeCatFilter !== "all" ? activeCatFilter : undefined}
+            categories={categories}
+            upsertEvent={modalUpsert}
+            deleteEvent={modalDelete}
+            onAddCategory={onAddCategory}
+            sharedCalendarLabel={sharedLabel}
+            onClose={() => { setShowEventModal(false); setEditingEvent(null); }}
+          />
+        );
+      })()}
+      {showShareModal && (() => {
+        const cat = categories.find(c => c.id === showShareModal);
+        return cat ? <CalShareModal cat={cat} currentUserId={currentUserId} events={events} updateCatShared={updateCatShared} onClose={() => setShowShareModal(null)} /> : null;
+      })()}
+      {/* Read-only view for shared-with-me events */}
+      {viewingSharedEvent && (() => {
+        const ev = viewingSharedEvent;
+        const isContrib = ev._isContribution && !ev._isMine;
+        const contribProf = isContrib ? contributorProfiles[ev._contribUserId] : null;
+        const sharerProf  = sharedProfiles[ev._swmFromId];
+        const authorName  = isContrib
+          ? (contribProf?.name || contribProf?.handle || "a participant")
+          : (sharerProf?.name  || sharerProf?.handle  || "the calendar owner");
+        const calendarOwnerName = sharerProf?.name || sharerProf?.handle || "the calendar owner";
+        return (
+          <div style={{ position: "fixed", inset: 0, background: "rgba(61,53,80,0.35)", zIndex: 400, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}
+            onClick={() => setViewingSharedEvent(null)}>
+            <div onClick={e => e.stopPropagation()} style={{ background: P.white, borderRadius: 24, padding: "28px 28px", width: "100%", maxWidth: 380, boxShadow: "0 12px 48px rgba(61,53,80,0.2)", animation: "popIn 0.2s ease" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 14 }}>
+                <div>
+                  <h3 style={{ fontFamily: FF_D, fontSize: 20, color: P.ink, margin: "0 0 4px", fontWeight: 400 }}>{ev.title}</h3>
+                  <div style={{ fontFamily: FF_S, fontSize: 11, color: P.inkFaint }}>
+                    {isContrib ? `Added by ${authorName}` : `Shared by ${authorName}`}
+                  </div>
+                </div>
+                <button onClick={() => setViewingSharedEvent(null)} style={{ background: P.lavenderLight, border: "none", borderRadius: 8, width: 28, height: 28, cursor: "pointer", fontSize: 16, color: P.inkLight, flexShrink: 0, marginLeft: 10 }}>×</button>
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8, fontFamily: FF_S, fontSize: 13, color: P.ink }}>
+                <div><span style={{ color: P.inkFaint, marginRight: 8 }}>📅</span>{ev.date}{ev.endDate && ` → ${ev.endDate}`}</div>
+                {ev.time && <div><span style={{ color: P.inkFaint, marginRight: 8 }}>🕐</span>{ev.time}{ev.endTime && ` – ${ev.endTime}`}</div>}
+                {ev.note && <div style={{ background: P.lavenderLight, borderRadius: 10, padding: "8px 12px", color: P.inkLight, fontStyle: "italic", lineHeight: 1.5 }}>{ev.note}</div>}
+              </div>
+              <div style={{ marginTop: 14, padding: "8px 12px", background: "#5DCAAA11", borderRadius: 10, border: "1px solid #5DCAAA44", fontFamily: FF_S, fontSize: 11, color: "#3a9a7a" }}>
+                {isContrib
+                  ? `👀 Read-only · added by ${authorName} to ${calendarOwnerName}'s calendar`
+                  : `👀 Read-only · shared by ${authorName}`}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+    </div>
+  );
+};
+
 const WorkPage = () => {
   const { user, profile } = useAuth();
-  const [section, setSection]       = useState("overview");
-  const [masterTodos, setMasterTodos] = useState(INIT_MASTER_TODOS);
-  const [dailyTodos, setDailyTodos]   = useState(INIT_DAILY_TODOS);
-  const [reminders, setReminders]     = useState(INIT_REMINDERS);
-  const [meetings]                    = useState(INIT_MEETINGS);
-  const [notes, setNotes]             = useState(INIT_NOTES);
+  const [section, setSection] = useState(() => {
+    try { const s = localStorage.getItem(`nook_work_section`); if (s && WORK_SECTIONS.find(w => w.id === s)) return s; } catch {}
+    return "overview";
+  });
+  const goToSection = (s) => {
+    setSection(s);
+    try { localStorage.setItem(`nook_work_section`, s); } catch {}
+  };
+
+  // ── Persistence keys (localStorage cache) ────────────────────────────────
+  const WORK_MASTER_KEY    = user ? `nook_work_master_${user.id}`    : null;
+  const WORK_DAILY_KEY     = user ? `nook_work_daily_${user.id}`     : null;
+  const WORK_NOTES_KEY     = user ? `nook_work_notes_${user.id}`     : null;
+  const WORK_CUSTOM_KEY    = user ? `nook_work_custom_${user.id}`    : null;
+  const WORK_CALENDAR_KEY  = user ? `nook_work_calendar_${user.id}`  : null;
+
+  const loadLS = (key, fallback) => {
+    if (!key) return fallback;
+    try { const s = localStorage.getItem(key); if (s) return JSON.parse(s); } catch {}
+    return fallback;
+  };
+
+  // Initialise with defaults only — user.id is null at first render so localStorage
+  // keys are also null and can't be read here.  Data loads in the useEffect below.
+  const [masterTodos,   setMasterTodosRaw]  = useState(INIT_MASTER_TODOS);
+  const [dailyTodos,    setDailyTodosRaw]   = useState(INIT_DAILY_TODOS);
+  const [notes,         setNotesRaw]        = useState(INIT_NOTES);
+  const [customLists,   setCustomListsRaw]  = useState([]);
+  const [reminders,     setReminders]       = useState(INIT_REMINDERS);
+  const [meetings]                          = useState(INIT_MEETINGS);
+  const [calendarData,  setCalendarDataRaw] = useState(null);
+
+  // Refs that mirror state — updated synchronously in each setter so we can compute
+  // "next" immediately (without relying on the functional-updater trick, which is
+  // unreliable in React 18: updater functions run during the render phase, so the
+  // "let next" capture approach leaves next=undefined when saveWorkData is called).
+  const notesRef    = useRef(notes);
+  const masterRef   = useRef(masterTodos);
+  const dailyRef    = useRef(dailyTodos);
+  const customRef   = useRef(customLists);
+  const calendarRef = useRef(null);
+
+  // ── Save helper ───────────────────────────────────────────────────────────
+  const saveWorkData = useCallback((sbKey, lsKey, value) => {
+    if (lsKey) try { localStorage.setItem(lsKey, JSON.stringify(value)); } catch {}
+    if (user?.id) {
+      supabase.from('user_data')
+        .upsert({ user_id: user.id, key: sbKey, value }, { onConflict: 'user_id,key' })
+        .then(({ error }) => { if (error) console.error('[WorkPage] save error for', sbKey, error); })
+        .catch(err => console.error('[WorkPage] save network error for', sbKey, err));
+    }
+  }, [user?.id]); // eslint-disable-line
+
+  // ── Persistent setters (update state + localStorage + Supabase) ───────────
+  // Use a ref to compute next synchronously (avoids the "let next" anti-pattern where
+  // React 18 queues functional updaters for the render phase — leaving next=undefined).
+  // We update the ref immediately so chained calls within the same event handler
+  // always see the latest value without waiting for a re-render.
+  const setMasterTodos = useCallback((val) => {
+    const next = typeof val === "function" ? val(masterRef.current) : val;
+    masterRef.current = next;
+    setMasterTodosRaw(next);
+    saveWorkData('work_todos_master', WORK_MASTER_KEY, next);
+  }, [saveWorkData, WORK_MASTER_KEY]); // eslint-disable-line
+
+  const setDailyTodos = useCallback((val) => {
+    const next = typeof val === "function" ? val(dailyRef.current) : val;
+    dailyRef.current = next;
+    setDailyTodosRaw(next);
+    saveWorkData('work_todos_daily', WORK_DAILY_KEY, next);
+  }, [saveWorkData, WORK_DAILY_KEY]); // eslint-disable-line
+
+  const setNotes = useCallback((val) => {
+    const next = typeof val === "function" ? val(notesRef.current) : val;
+    notesRef.current = next;
+    setNotesRaw(next);
+    saveWorkData('work_notes', WORK_NOTES_KEY, next);
+  }, [saveWorkData, WORK_NOTES_KEY]); // eslint-disable-line
+
+  const setCustomLists = useCallback((val) => {
+    const next = typeof val === "function" ? val(customRef.current) : val;
+    customRef.current = next;
+    setCustomListsRaw(next);
+    saveWorkData('work_todos_custom', WORK_CUSTOM_KEY, next);
+  }, [saveWorkData, WORK_CUSTOM_KEY]); // eslint-disable-line
+
+  const setCalendarData = useCallback((val) => {
+    const next = typeof val === "function" ? val(calendarRef.current) : val;
+    calendarRef.current = next;
+    setCalendarDataRaw(next);
+    saveWorkData('work_calendar', WORK_CALENDAR_KEY, next);
+  }, [saveWorkData, WORK_CALENDAR_KEY]); // eslint-disable-line
+
+  // ── Load data on login ────────────────────────────────────────────────────
+  // Step 1 (sync): pull from localStorage — user.id is now available so keys are valid.
+  //   This gives instant data without waiting for the network.
+  // Step 2 (async): pull from Supabase — authoritative cross-device source of truth.
+  //   Overrides localStorage if the server has newer/different data.
+  useEffect(() => {
+    if (!user?.id) return;
+
+    // Step 1 — localStorage (instant)
+    const lsMaster   = loadLS(WORK_MASTER_KEY,   null);
+    const lsDaily    = loadLS(WORK_DAILY_KEY,    null);
+    const lsNotes    = loadLS(WORK_NOTES_KEY,    null);
+    const lsCustom   = loadLS(WORK_CUSTOM_KEY,   null);
+    const lsCalendar = loadLS(WORK_CALENDAR_KEY, null);
+    if (lsMaster)   { masterRef.current   = lsMaster;   setMasterTodosRaw(lsMaster); }
+    if (lsDaily)    { dailyRef.current    = lsDaily;    setDailyTodosRaw(lsDaily); }
+    if (lsNotes)    { notesRef.current    = lsNotes;    setNotesRaw(lsNotes); }
+    if (lsCustom)   { customRef.current   = lsCustom;   setCustomListsRaw(lsCustom); }
+    if (lsCalendar) { calendarRef.current = lsCalendar; setCalendarDataRaw(lsCalendar); }
+
+    // Step 2 — Supabase (authoritative, async)
+    const sbKeys = ['work_notes', 'work_todos_master', 'work_todos_daily', 'work_todos_custom', 'work_calendar'];
+    // safeParse: handles jsonb objects (returned as-is) and any JSON strings (legacy format)
+    const safeParse = (v) => {
+      if (v === null || v === undefined) return null;
+      if (typeof v === 'string') { try { return JSON.parse(v); } catch { return null; } }
+      return v;
+    };
+    supabase.from('user_data').select('key, value').eq('user_id', user.id).in('key', sbKeys)
+      .then(({ data, error }) => {
+        if (error) { console.error('[WorkPage] Supabase load error:', error); return; }
+        if (!data) return;
+        const map = Object.fromEntries(data.map(d => [d.key, safeParse(d.value)]));
+        const keysInDb = new Set(data.map(d => d.key));
+
+        // Apply Supabase data (overrides localStorage — it is the cross-device source of truth)
+        if (map.work_todos_master) { masterRef.current   = map.work_todos_master; setMasterTodosRaw(map.work_todos_master);   if (WORK_MASTER_KEY)   try { localStorage.setItem(WORK_MASTER_KEY,   JSON.stringify(map.work_todos_master)); }   catch {} }
+        if (map.work_todos_daily)  { dailyRef.current    = map.work_todos_daily;  setDailyTodosRaw(map.work_todos_daily);     if (WORK_DAILY_KEY)    try { localStorage.setItem(WORK_DAILY_KEY,    JSON.stringify(map.work_todos_daily)); }    catch {} }
+        if (map.work_notes)        { notesRef.current    = map.work_notes;        setNotesRaw(map.work_notes);                 if (WORK_NOTES_KEY)    try { localStorage.setItem(WORK_NOTES_KEY,    JSON.stringify(map.work_notes)); }          catch {} }
+        if (map.work_todos_custom) { customRef.current   = map.work_todos_custom; setCustomListsRaw(map.work_todos_custom);   if (WORK_CUSTOM_KEY)   try { localStorage.setItem(WORK_CUSTOM_KEY,   JSON.stringify(map.work_todos_custom)); }   catch {} }
+        if (map.work_calendar)     { calendarRef.current = map.work_calendar;     setCalendarDataRaw(map.work_calendar);       if (WORK_CALENDAR_KEY) try { localStorage.setItem(WORK_CALENDAR_KEY, JSON.stringify(map.work_calendar)); }       catch {} }
+
+        // Migration: if localStorage has data for a key that doesn't exist in Supabase yet,
+        // push it now so it's available from any browser going forward.
+        const toMigrate = [
+          !keysInDb.has('work_todos_master') && lsMaster   ? { user_id: user.id, key: 'work_todos_master', value: lsMaster }   : null,
+          !keysInDb.has('work_todos_daily')  && lsDaily    ? { user_id: user.id, key: 'work_todos_daily',  value: lsDaily }    : null,
+          !keysInDb.has('work_notes')        && lsNotes    ? { user_id: user.id, key: 'work_notes',        value: lsNotes }    : null,
+          !keysInDb.has('work_todos_custom') && lsCustom   ? { user_id: user.id, key: 'work_todos_custom', value: lsCustom }   : null,
+          !keysInDb.has('work_calendar')     && lsCalendar ? { user_id: user.id, key: 'work_calendar',     value: lsCalendar } : null,
+        ].filter(Boolean);
+        if (toMigrate.length > 0) {
+          supabase.from('user_data').upsert(toMigrate, { onConflict: 'user_id,key' })
+            .then(({ error: mErr }) => { if (mErr) console.error('[WorkPage] migration error:', mErr); })
+            .catch(err => console.error('[WorkPage] migration network error:', err));
+        }
+      });
+  }, [user?.id]); // eslint-disable-line
 
   const displayName = profile?.name || user?.email?.split('@')[0] || 'there';
-  const goTo = (s) => setSection(s);
   const active = WORK_SECTIONS.find(s => s.id === section);
 
   return (
-    <div className="nook-sidebar-layout" style={{ background: P.bg, minHeight: "calc(100vh - 61px)" }}>
+    <div className="nook-sidebar-layout" style={{ background: P.bg }}>
       {/* Sidebar nav */}
       <div className="nook-sidebar" style={{ background: P.white, borderRight: `1px solid ${P.lavender}22` }}>
         <div className="nook-sidebar-title" style={{ display: "flex", alignItems: "center", gap: 8, padding: "20px 14px 6px", paddingLeft: "22px" }}>
@@ -4455,7 +5919,7 @@ const WorkPage = () => {
         <p className="nook-sidebar-footer" style={{ fontFamily: FF_S, fontSize: 11, color: P.inkFaint, margin: "0 0 12px", paddingLeft: 22, lineHeight: 1.5 }}>Only visible to you</p>
         <div className="nook-sidebar-nav-inner" style={{ padding: "0 10px 16px" }}>
           {WORK_SECTIONS.map(s => (
-            <button key={s.id} onClick={() => setSection(s.id)} style={{ width: "100%", display: "flex", alignItems: "center", gap: 10, padding: "9px 12px", background: section === s.id ? P.lavenderLight : "transparent", border: `1.5px solid ${section === s.id ? P.lavender : "transparent"}`, borderRadius: 12, cursor: "pointer", marginBottom: 3, textAlign: "left", transition: "all 0.15s" }}>
+            <button key={s.id} onClick={() => goToSection(s.id)} style={{ width: "100%", display: "flex", alignItems: "center", gap: 10, padding: "9px 12px", background: section === s.id ? P.lavenderLight : "transparent", border: `1.5px solid ${section === s.id ? P.lavender : "transparent"}`, borderRadius: 12, cursor: "pointer", marginBottom: 3, textAlign: "left", transition: "all 0.15s" }}>
               <span style={{ fontSize: 14, width: 20, textAlign: "center" }}>{s.icon}</span>
               <span style={{ fontFamily: FF_S, fontSize: 13.5, fontWeight: section === s.id ? 600 : 400, color: section === s.id ? P.ink : P.inkLight }}>{s.label}</span>
             </button>
@@ -4473,25 +5937,26 @@ const WorkPage = () => {
           {section === "overview" && <span style={{ fontFamily: FF_S, fontSize: 13, color: P.inkFaint }}>{new Date().toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" })}</span>}
         </div>
         <div className="nook-page-pad">
-          {section === "overview"  && <WorkOverview masterTodos={masterTodos} dailyTodos={dailyTodos} reminders={reminders} meetings={meetings} onGoTo={goTo} />}
-          {section === "todos"     && <WorkTodos masterTodos={masterTodos} setMasterTodos={setMasterTodos} dailyTodos={dailyTodos} setDailyTodos={setDailyTodos} />}
+          {section === "overview"  && <WorkOverview masterTodos={masterTodos} dailyTodos={dailyTodos} reminders={reminders} meetings={meetings} onGoTo={goToSection} />}
+          {section === "todos"     && <WorkTodos masterTodos={masterTodos} setMasterTodos={setMasterTodos} dailyTodos={dailyTodos} setDailyTodos={setDailyTodos} customLists={customLists} setCustomLists={setCustomLists} />}
           {section === "notes"     && <WorkNotes notes={notes} setNotes={setNotes} />}
           {section === "reminders" && <WorkReminders reminders={reminders} setReminders={setReminders} />}
           {section === "kanban" || section === "workflow" ? <WorkKanban /> : null}
           {section === "focus"     && <WorkFocus />}
           {section === "meetings"  && <WorkMeetings meetings={meetings} />}
+          {section === "calendar"  && <WorkCalendar calendarData={calendarData} setCalendarData={setCalendarData} currentUserId={user?.id} />}
         </div>
       </div>
     </div>
   );
 };
-const WidgetRequestModal = ({ onClose, onSubmit }) => {
+const WidgetRequestModal = ({ onClose, onSubmit, handle }) => {
   const [name, setName] = useState("");
   const [desc, setDesc] = useState("");
   const [submitted, setSubmitted] = useState(false);
   const submit = () => {
     if (!name.trim()) return;
-    onSubmit({ id: `wr${Date.now()}`, name: name.trim(), desc: desc.trim(), user: ME_BASE.handle, ts: Date.now(), status: "new" });
+    onSubmit({ id: `wr${Date.now()}`, name: name.trim(), desc: desc.trim(), user: handle || ME_BASE.handle, ts: Date.now(), status: "new" });
     setSubmitted(true);
     setTimeout(onClose, 1800);
   };
@@ -4527,48 +5992,13 @@ const WidgetRequestModal = ({ onClose, onSubmit }) => {
   );
 };
 
-const ADMIN_USERS = [
-  { id: "u1", name: "Cleo Hartwell",  handle: "@cleo",  color: P.mint,    status: "active",    joined: "2025-01-14", lastSeen: "today",     widgets: 8,  posts: 12, flagged: false, suspended: false },
-  { id: "u2", name: "Soren Vale",     handle: "@soren", color: P.sky,     status: "active",    joined: "2025-02-03", lastSeen: "today",     widgets: 6,  posts: 7,  flagged: false, suspended: false },
-  { id: "u3", name: "Iris Nakamura",  handle: "@iris",  color: P.rose,    status: "active",    joined: "2025-02-21", lastSeen: "2 days ago",widgets: 10, posts: 5,  flagged: false, suspended: false },
-  { id: "u4", name: "Felix Oduya",    handle: "@felix", color: P.peach,   status: "inactive",  joined: "2025-03-08", lastSeen: "12 days ago",widgets: 3, posts: 1,  flagged: false, suspended: false },
-  { id: "u5", name: "Ada Kowalski",   handle: "@ada",   color: P.butter,  status: "active",    joined: "2025-03-15", lastSeen: "today",     widgets: 7,  posts: 9,  flagged: true,  suspended: false },
-  { id: "u6", name: "Theo Marsh",     handle: "@theo",  color: P.lavender,status: "inactive",  joined: "2025-04-02", lastSeen: "8 days ago",widgets: 5,  posts: 3,  flagged: false, suspended: false },
-  { id: "me", name: "Margot Ellison", handle: "@margot",color: P.lavender,status: "active",    joined: "2025-01-01", lastSeen: "now",       widgets: 12, posts: 14, flagged: false, suspended: false },
-];
 
-const DAU_DATA = [
-  { day: "Mon", visitors: 84,  signups: 3  },
-  { day: "Tue", visitors: 112, signups: 7  },
-  { day: "Wed", visitors: 97,  signups: 4  },
-  { day: "Thu", visitors: 143, signups: 11 },
-  { day: "Fri", visitors: 168, signups: 9  },
-  { day: "Sat", visitors: 201, signups: 14 },
-  { day: "Sun", visitors: 188, signups: 12 },
-];
-
-const WIDGET_POPULARITY = [
-  { id: "todo",       title: "To-Do List",      icon: "✓",  count: 7, pct: 100 },
-  { id: "reading",    title: "Reading List",     icon: "📖", count: 6, pct: 86 },
-  { id: "goals",      title: "Goals",            icon: "★",  count: 6, pct: 86 },
-  { id: "mood",       title: "Mood Tracker",     icon: "☀", count: 5, pct: 71 },
-  { id: "gallery",    title: "Gallery",          icon: "🖼", count: 5, pct: 71 },
-  { id: "blog",       title: "Blog",             icon: "✍", count: 4, pct: 57 },
-  { id: "habitstreak",title: "Habit Tracker",    icon: "🔥", count: 4, pct: 57 },
-  { id: "bookmarks",  title: "Bookmarks",        icon: "🔖", count: 3, pct: 43 },
-  { id: "exercise",   title: "Exercise Log",     icon: "🏃", count: 3, pct: 43 },
-  { id: "projects",   title: "Projects",         icon: "🚀", count: 2, pct: 29 },
-];
-
-const FLAGGED_CONTENT = [];
-const FEEDBACK_SEED = [];
-const ANNOUNCEMENTS_SEED = [];
 
 const AdminPage = ({ widgetRequests, setWidgetRequests }) => {
   const { user } = useAuth();
   const {
     users: adminUsers, setUsers: setAdminUsers,
-    signupsByDay, loading: adminLoading, error: adminError,
+    signupsByDay, widgetUsage, loading: adminLoading, error: adminError,
     totalUsers, activeUsers, weekSignups, todayVisitors, todaySignups,
     suspendUser, deleteUser, refresh,
   } = useAdminData();
@@ -4579,10 +6009,32 @@ const AdminPage = ({ widgetRequests, setWidgetRequests }) => {
   const [selectedUser, setSelectedUser] = useState(null);
   const [flagged, setFlagged] = useState([]);
   const [feedback, setFeedback] = useState([]);
-  const [announcements, setAnnouncements] = useState(ANNOUNCEMENTS_SEED);
+  const [announcements, setAnnouncements] = useState([]);
   const [newAnn, setNewAnn] = useState({ title: "", body: "" });
   const [annSent, setAnnSent] = useState(false);
   const [wqFilter, setWqFilter] = useState("all");
+  // Track which request IDs have been "seen" — persisted to localStorage so badge stays
+  // cleared after logout/login (only reappears if new requests arrive)
+  const { user: adminUser } = useAuth();
+  const SEEN_KEY = adminUser?.id ? `nook_seen_requests_${adminUser.id}` : null;
+  const [seenRequestIds, setSeenRequestIds] = useState(new Set());
+  // Load from localStorage once adminUser is available (useState initializer runs before
+  // useAuth resolves, so SEEN_KEY would be null on first render — useEffect is correct here)
+  useEffect(() => {
+    if (!SEEN_KEY) return;
+    try { const s = localStorage.getItem(SEEN_KEY); if (s) setSeenRequestIds(new Set(JSON.parse(s))); } catch {}
+  }, [SEEN_KEY]); // eslint-disable-line
+
+  useEffect(() => {
+    if (section === "requests") {
+      setSeenRequestIds(prev => {
+        const next = new Set(prev);
+        widgetRequests.forEach(r => next.add(r.id));
+        if (SEEN_KEY) try { localStorage.setItem(SEEN_KEY, JSON.stringify([...next])); } catch {}
+        return next;
+      });
+    }
+  }, [section]); // eslint-disable-line
 
   const STATUS_CFG = {
     new:        { label: "New",       bg: P.lavenderLight, text: "#9B85D8", dot: "#9B85D8" },
@@ -4599,7 +6051,7 @@ const AdminPage = ({ widgetRequests, setWidgetRequests }) => {
     { id: "analytics",     icon: "↗",  label: "Analytics"      },
     { id: "users",         icon: "⊙",  label: "Users"          },
     { id: "widgets",       icon: "⊞",  label: "Widget Usage"   },
-    { id: "requests",      icon: "✦",  label: "Widget Requests", badge: widgetRequests.filter(r => r.status === "new").length },
+    { id: "requests",      icon: "✦",  label: "Widget Requests", badge: widgetRequests.filter(r => r.status === "new" && !seenRequestIds.has(r.id)).length },
     { id: "moderation",    icon: "⚑",  label: "Moderation",    badge: openFlags },
     { id: "feedback",      icon: "✉",  label: "Feedback",      badge: openFeedback },
     { id: "announcements", icon: "📢", label: "Announcements"  },
@@ -4827,38 +6279,49 @@ const AdminPage = ({ widgetRequests, setWidgetRequests }) => {
     );
   };
 
-  const WidgetUsageSection = () => (
-    <div>
-      {sectionHead("Widget Usage", "Which widgets are most popular across all users")}
-      {card(
-        <div>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
-            <span style={{ fontFamily: FF_S, fontSize: 13, color: P.inkFaint }}>{totalUsers} registered users</span>
-          </div>
-          <p style={{ fontFamily: FF_S, fontSize: 13, color: P.inkFaint, margin: "0 0 20px", padding: "12px 16px", background: P.lavenderLight, borderRadius: 12 }}>
-            Widget usage analytics will populate as users enable widgets on their dashboards.
-          </p>
-          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-            {INITIAL_WIDGETS.slice(0, 10).map((w, i) => (
-              <div key={w.id} style={{ display: "flex", alignItems: "center", gap: 14 }}>
-                <div style={{ width: 22, fontFamily: FF_S, fontSize: 12, color: P.inkFaint, textAlign: "right", flexShrink: 0 }}>#{i+1}</div>
-                <div style={{ width: 28, height: 28, borderRadius: 8, background: WIDGET_COLORS[i % WIDGET_COLORS.length].bg, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, flexShrink: 0 }}>{w.icon}</div>
-                <div style={{ flex: 1 }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}>
-                    <span style={{ fontFamily: FF_S, fontSize: 13, fontWeight: 600, color: P.ink }}>{w.title}</span>
-                    <span style={{ fontFamily: FF_S, fontSize: 12, color: P.inkFaint }}>—</span>
+  const WidgetUsageSection = () => {
+    // Sort widgets by enabled count descending, using real widgetUsage data
+    const maxCount = Math.max(1, ...Object.values(widgetUsage));
+    const sorted = [...INITIAL_WIDGETS]
+      .map(w => ({ ...w, count: widgetUsage[w.id] || 0 }))
+      .sort((a, b) => b.count - a.count);
+    const hasAnyData = Object.keys(widgetUsage).length > 0;
+    return (
+      <div>
+        {sectionHead("Widget Usage", "Which widgets are most popular across all users")}
+        {card(
+          <div>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+              <span style={{ fontFamily: FF_S, fontSize: 13, color: P.inkFaint }}>{totalUsers} registered users</span>
+              {!hasAnyData && <span style={{ fontFamily: FF_S, fontSize: 12, color: P.inkFaint, background: P.lavenderLight, borderRadius: 20, padding: "3px 12px" }}>No widget data yet</span>}
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              {sorted.slice(0, 12).map((w, i) => {
+                const pct = hasAnyData ? Math.round((w.count / maxCount) * 100) : 0;
+                return (
+                  <div key={w.id} style={{ display: "flex", alignItems: "center", gap: 14 }}>
+                    <div style={{ width: 22, fontFamily: FF_S, fontSize: 12, color: P.inkFaint, textAlign: "right", flexShrink: 0 }}>#{i+1}</div>
+                    <div style={{ width: 28, height: 28, borderRadius: 8, background: WIDGET_COLORS[i % WIDGET_COLORS.length].bg, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, flexShrink: 0 }}>{w.icon}</div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}>
+                        <span style={{ fontFamily: FF_S, fontSize: 13, fontWeight: 600, color: P.ink }}>{w.title}</span>
+                        <span style={{ fontFamily: FF_S, fontSize: 12, color: w.count > 0 ? P.ink : P.inkFaint, fontWeight: w.count > 0 ? 600 : 400 }}>
+                          {w.count > 0 ? `${w.count} user${w.count !== 1 ? "s" : ""}` : "—"}
+                        </span>
+                      </div>
+                      <div style={{ background: P.lavenderLight, borderRadius: 20, height: 7, overflow: "hidden" }}>
+                        <div style={{ width: `${pct}%`, height: "100%", background: WIDGET_COLORS[i % WIDGET_COLORS.length].dot, borderRadius: 20, transition: "width 0.6s ease" }} />
+                      </div>
+                    </div>
                   </div>
-                  <div style={{ background: P.lavenderLight, borderRadius: 20, height: 7, overflow: "hidden" }}>
-                    <div style={{ width: `0%`, height: "100%", background: WIDGET_COLORS[i % WIDGET_COLORS.length].dot, borderRadius: 20 }} />
-                  </div>
-                </div>
-              </div>
-            ))}
+                );
+              })}
+            </div>
           </div>
-        </div>
-      )}
-    </div>
-  );
+        )}
+      </div>
+    );
+  };
 
   const RequestsSection = () => {
     const statuses = ["all","new","reviewing","planned","declined"];
@@ -4896,7 +6359,7 @@ const AdminPage = ({ widgetRequests, setWidgetRequests }) => {
                       <span style={{ background: STATUS_CFG[r.status].bg, color: STATUS_CFG[r.status].text, borderRadius: 20, padding: "2px 10px", fontFamily: FF_S, fontSize: 11, fontWeight: 600 }}>{STATUS_CFG[r.status].label}</span>
                     </div>
                     {r.desc && <p style={{ fontFamily: FF_S, fontSize: 13, color: P.inkLight, margin: "0 0 8px", lineHeight: 1.6 }}>{r.desc}</p>}
-                    <div style={{ fontFamily: FF_S, fontSize: 11, color: P.inkFaint }}>from <span style={{ color: "#9B85D8", fontWeight: 600 }}>{r.user}</span> · {new Date(r.ts).toLocaleDateString("en-IE", { day: "numeric", month: "short", year: "numeric" })}</div>
+                    <div style={{ fontFamily: FF_S, fontSize: 11, color: P.inkFaint }}>from <HandleBadge handle={r.user} /> · {new Date(r.ts).toLocaleDateString("en-IE", { day: "numeric", month: "short", year: "numeric" })}</div>
                   </div>
                   <div style={{ display: "flex", flexDirection: "column", gap: 6, flexShrink: 0 }}>
                     <select value={r.status} onChange={e => updateStatus(r.id, e.target.value)} style={{ border: `1.5px solid ${P.lavender}`, borderRadius: 10, padding: "6px 10px", fontFamily: FF_S, fontSize: 12, background: P.lavenderLight, color: P.ink, outline: "none", cursor: "pointer" }}>
@@ -5281,7 +6744,7 @@ const RealFeedCard = ({ item, currentUserId, onLike, onComment, onDelete, onView
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
             <div>
               <span style={{ fontFamily: FF_S, fontSize: 14, fontWeight: 600, color: P.ink }}>{poster?.name}</span>
-              <span style={{ fontFamily: FF_S, fontSize: 12, color: P.inkFaint, marginLeft: 8 }}>{poster?.handle}</span>
+              <HandleBadge handle={poster?.handle} style={{ fontSize: 12, marginLeft: 8, fontWeight: 400, color: P.inkFaint }} />
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <span style={{ fontFamily: FF_S, fontSize: 11, color: P.inkFaint }}>{fmtTime(new Date(item.created_at).getTime())}</span>
@@ -5333,6 +6796,8 @@ const FeedSidebar = ({ onNavigate, toggleFollow, following = [], onViewUser, cur
   const [searching, setSearching] = useState(false);
   const [suggestedUsers, setSuggestedUsers] = useState([]);
   const [followedProfiles, setFollowedProfiles] = useState([]);
+  const [followerProfiles, setFollowerProfiles] = useState([]);
+  const [peopleTab, setPeopleTab] = useState("following"); // "following" | "followers"
 
   // Load suggested users (real profiles from Supabase, excluding self)
   useEffect(() => {
@@ -5363,6 +6828,26 @@ const FeedSidebar = ({ onNavigate, toggleFollow, following = [], onViewUser, cur
     };
     load();
   }, [following]);
+
+  // Load profiles of people who follow the current user
+  useEffect(() => {
+    if (!currentUserId) { setFollowerProfiles([]); return; }
+    const load = async () => {
+      try {
+        const { data: followData } = await supabase
+          .from('follows')
+          .select('follower_id')
+          .eq('following_id', currentUserId);
+        if (!followData?.length) { setFollowerProfiles([]); return; }
+        const { data } = await supabase
+          .from('profiles')
+          .select('id, name, handle, avatar_color, bio')
+          .in('id', followData.map(f => f.follower_id));
+        if (data) setFollowerProfiles(data);
+      } catch {}
+    };
+    load();
+  }, [currentUserId]);
 
   // Debounced search against real profiles
   useEffect(() => {
@@ -5427,16 +6912,31 @@ const FeedSidebar = ({ onNavigate, toggleFollow, following = [], onViewUser, cur
           )
         )}
 
-        {/* Following list when not searching */}
+        {/* Following / Followers tabs when not searching */}
         {query.trim().length === 0 && (
           <>
-            {followedProfiles.length > 0 && (
+            {(followedProfiles.length > 0 || followerProfiles.length > 0) && (
               <>
-                <div style={{ fontFamily: FF_S, fontSize: 11, color: P.inkFaint, fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 10 }}>Following</div>
+                <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
+                  {[["following", `Following (${followedProfiles.length})`], ["followers", `Followers (${followerProfiles.length})`]].map(([tab, label]) => (
+                    <button key={tab} onClick={() => setPeopleTab(tab)} style={{ flex: 1, background: peopleTab === tab ? P.lavender : P.lavenderLight, border: "none", borderRadius: 20, padding: "5px 10px", cursor: "pointer", fontFamily: FF_S, fontSize: 11, fontWeight: peopleTab === tab ? 700 : 400, color: P.ink }}>
+                      {label}
+                    </button>
+                  ))}
+                </div>
                 <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                  {followedProfiles.map(u => (
+                  {peopleTab === "following" && followedProfiles.map(u => (
                     <UserRow key={u.id} u={norm(u)} isFollowing={true} onToggle={() => toggleFollow(u.id)} onView={() => onViewUser(norm(u))} />
                   ))}
+                  {peopleTab === "following" && followedProfiles.length === 0 && (
+                    <p style={{ fontFamily: FF_S, fontSize: 12, color: P.inkFaint, margin: 0, textAlign: "center", padding: "8px 0" }}>You're not following anyone yet</p>
+                  )}
+                  {peopleTab === "followers" && followerProfiles.map(u => (
+                    <UserRow key={u.id} u={norm(u)} isFollowing={following.includes(u.id)} onToggle={() => toggleFollow(u.id)} onView={() => onViewUser(norm(u))} />
+                  ))}
+                  {peopleTab === "followers" && followerProfiles.length === 0 && (
+                    <p style={{ fontFamily: FF_S, fontSize: 12, color: P.inkFaint, margin: 0, textAlign: "center", padding: "8px 0" }}>No followers yet</p>
+                  )}
                 </div>
                 <div style={{ borderTop: `1px solid ${P.lavender}22`, margin: "14px 0 10px" }} />
               </>
@@ -5604,10 +7104,10 @@ const FeedPage = ({ onNavigate, onViewUser, following, toggleFollowApp }) => {
 
 const NOTIF_SEED = [];
 
-const NOTIF_ICONS = { follow: "👤", like: "♥", comment: "💬", mention: "✦" };
-const NOTIF_COLORS = { follow: P.lavender, like: "#F0B8C8", comment: P.sky, mention: P.butter };
+const NOTIF_ICONS  = { follow: "👤", like: "♥", comment: "💬", mention: "✦", calendar_share: "📆" };
+const NOTIF_COLORS = { follow: P.lavender, like: "#F0B8C8", comment: P.sky, mention: P.butter, calendar_share: "#5DCAAA" };
 
-const NotificationsDropdown = ({ notifs, onMarkRead, onMarkAllRead, onNavigate, onClose }) => {
+const NotificationsDropdown = ({ notifs, onMarkRead, onMarkAllRead, onNavigate, onOpenProfile, onClose }) => {
   const unread = notifs.filter(n => !n.read).length;
   return (
     <div style={{ position: "absolute", top: "calc(100% + 10px)", right: 0, width: 340, background: P.white, borderRadius: 20, boxShadow: "0 8px 40px rgba(61,53,80,0.18)", border: `1px solid ${P.lavender}44`, zIndex: 300, overflow: "hidden", animation: "popIn 0.15s ease" }}>
@@ -5620,6 +7120,20 @@ const NotificationsDropdown = ({ notifs, onMarkRead, onMarkAllRead, onNavigate, 
           <div style={{ padding: "36px 20px", textAlign: "center", color: P.inkFaint, fontFamily: FF_S, fontSize: 13 }}>All caught up ✦</div>
         ) : notifs.map(n => {
           const user = USERS.find(u => u.id === n.uid);
+          // For follow notifications, render the name as a clickable link to the follower's profile.
+          // n.name holds the display name; n.uid holds the follower's user ID.
+          const textNode = (n.type === 'follow' && n.name && n.uid && onOpenProfile) ? (
+            <p style={{ fontFamily: FF_S, fontSize: 13, color: P.ink, margin: "0 0 2px", lineHeight: 1.4 }}>
+              <span
+                onClick={e => { e.stopPropagation(); onMarkRead(n.id); onClose(); onOpenProfile(n.uid); }}
+                style={{ fontWeight: 600, color: "#7C5CDB", cursor: "pointer", textDecoration: "underline", textDecorationColor: "#7C5CDB55" }}>
+                {n.name}
+              </span>
+              {" started following you"}
+            </p>
+          ) : (
+            <p style={{ fontFamily: FF_S, fontSize: 13, color: P.ink, margin: "0 0 2px", lineHeight: 1.4 }}>{n.text}</p>
+          );
           return (
             <div key={n.id} onClick={() => { onMarkRead(n.id); onClose(); }} style={{ display: "flex", alignItems: "flex-start", gap: 12, padding: "12px 20px", background: n.read ? "transparent" : P.lavenderLight, cursor: "pointer", borderBottom: `1px solid ${P.lavender}11`, transition: "background 0.15s" }}
               onMouseEnter={e => e.currentTarget.style.background = P.lavenderLight}
@@ -5629,7 +7143,7 @@ const NotificationsDropdown = ({ notifs, onMarkRead, onMarkAllRead, onNavigate, 
                 <div style={{ position: "absolute", bottom: -2, right: -2, width: 16, height: 16, borderRadius: "50%", background: NOTIF_COLORS[n.type], display: "flex", alignItems: "center", justifyContent: "center", fontSize: 8, border: `2px solid ${P.white}` }}>{NOTIF_ICONS[n.type]}</div>
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <p style={{ fontFamily: FF_S, fontSize: 13, color: P.ink, margin: "0 0 2px", lineHeight: 1.4 }}>{n.text}</p>
+                {textNode}
                 <span style={{ fontFamily: FF_S, fontSize: 11, color: P.inkFaint }}>{timeAgo(n.ts)}</span>
               </div>
               {!n.read && <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#9B85D8", flexShrink: 0, marginTop: 4 }} />}
@@ -5664,6 +7178,123 @@ const USER_PROFILE_WIDGETS = {
     { id: "reading", title: "Reading List", icon: "📖", colorIdx: 5, data: { items: [{ id: "r1", title: "Middlemarch", author: "George Eliot", status: "reading", rating: 0 }, { id: "r2", title: "Ways of Seeing", author: "John Berger", status: "read", rating: 5 }] } },
     { id: "travel",  title: "Travel",       icon: "✈",  colorIdx: 3, data: { trips: [{ id: "t1", place: "Edinburgh, Scotland", date: "August 2024", note: "Fringe Festival was wild", emoji: "🏴󠁧󠁢󠁳󠁣󠁴󠁿", photo: null }] } },
   ],
+};
+
+const PublicProfilePage = ({ userId, onBack, following, toggleFollow, onMessage }) => {
+  const [profile, setProfile] = useState(null);
+  const [widgets, setWidgets] = useState([]);
+  const [followerCount, setFollowerCount] = useState(0);
+  const [followingCount, setFollowingCount] = useState(0);
+  const [bioEmail, setBioEmail] = useState("");
+  const [bioLinks, setBioLinks] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!userId) return;
+    setLoading(true);
+    Promise.all([
+      supabase.from('profiles').select('*').eq('id', userId).maybeSingle(),
+      supabase.from('widget_configs').select('widget_id, color_idx, sort_order, data').eq('user_id', userId).eq('enabled', true).eq('public', true).order('sort_order', { ascending: true }),
+      supabase.from('follows').select('follower_id', { count: 'exact', head: true }).eq('following_id', userId),
+      supabase.from('follows').select('following_id', { count: 'exact', head: true }).eq('follower_id', userId),
+      supabase.from('user_data').select('value').eq('user_id', userId).eq('key', 'bio_links').maybeSingle(),
+    ]).then(([{ data: prof }, { data: wConfigs }, { count: fCount }, { count: ingCount }, { data: bioData }]) => {
+      setProfile(prof || null);
+      setFollowerCount(fCount || 0);
+      setFollowingCount(ingCount || 0);
+      if (bioData?.value) {
+        if (bioData.value.email) setBioEmail(bioData.value.email);
+        if (bioData.value.links) setBioLinks(bioData.value.links);
+      }
+      if (wConfigs && wConfigs.length > 0) {
+        const built = wConfigs.map(wc => {
+          const base = INITIAL_WIDGETS.find(w => w.id === wc.widget_id) || { id: wc.widget_id, title: wc.widget_id, icon: "◈", colorIdx: 0, data: {} };
+          return { ...base, enabled: true, isPublic: true, colorIdx: wc.color_idx ?? base.colorIdx ?? 0, data: wc.data ? { ...base.data, ...wc.data } : base.data };
+        });
+        setWidgets(built);
+      } else {
+        setWidgets([]);
+      }
+      setLoading(false);
+    }).catch(() => setLoading(false));
+  }, [userId]); // eslint-disable-line
+
+  const isFollowingUser = following.includes(userId);
+  const displayName = profile?.name || profile?.handle || 'Nook User';
+  const displayHandle = profile?.handle ? (profile.handle.startsWith('@') ? profile.handle : '@' + profile.handle) : '';
+  const initials = (displayName.trim().split(' ').map(p => p[0] || '').join('').slice(0, 2) || '??').toUpperCase();
+
+  return (
+    <div style={{ background: P.bg, minHeight: "calc(100vh - 61px)" }}>
+      <div style={{ maxWidth: 900, margin: "0 auto", padding: "clamp(20px, 4vw, 40px) clamp(16px, 4vw, 32px)" }}>
+        <button onClick={onBack} style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "none", border: "none", cursor: "pointer", fontFamily: FF_S, fontSize: 13, color: P.inkLight, marginBottom: 20, padding: 0 }}>
+          ← Back
+        </button>
+
+        {loading ? (
+          <div style={{ textAlign: "center", padding: "80px 0", color: P.inkFaint, fontFamily: FF_S }}>Loading profile…</div>
+        ) : !profile ? (
+          <div style={{ textAlign: "center", padding: "80px 0", color: P.inkFaint, fontFamily: FF_S }}>User not found.</div>
+        ) : (
+          <>
+            {/* Profile header */}
+            <div style={{ background: P.white, borderRadius: 24, padding: "28px 32px", border: `1.5px solid ${P.lavender}55`, boxShadow: "0 4px 24px rgba(201,184,240,0.15)", marginBottom: 32, display: "flex", alignItems: "flex-start", gap: 20, flexWrap: "wrap" }}>
+              <UserAvatar user={{ ...profile, color: profile.avatar_color }} size={80} />
+              <div style={{ flex: 1, minWidth: 200 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 4 }}>
+                  <h2 style={{ fontFamily: FF_D, fontSize: 26, margin: 0, color: P.ink, fontWeight: 400 }}>{displayName}</h2>
+                  {displayHandle && <span style={{ fontFamily: FF_S, fontSize: 12, color: P.inkLight, background: P.lavenderLight, borderRadius: 20, padding: "2px 10px" }}>{displayHandle}</span>}
+                </div>
+                {profile.bio && <p style={{ margin: "0 0 10px", color: P.inkLight, fontSize: 14, lineHeight: 1.65, maxWidth: 500 }}>{profile.bio}</p>}
+                {(bioEmail || bioLinks.filter(l => l.url).length > 0) && (
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", marginBottom: 14 }}>
+                    {bioEmail && (
+                      <a href={`mailto:${bioEmail}`} style={{ display: "inline-flex", alignItems: "center", gap: 4, fontFamily: FF_S, fontSize: 12, color: P.inkLight, textDecoration: "none", background: P.lavenderLight, borderRadius: 20, padding: "3px 11px" }}>
+                        ✉ {bioEmail}
+                      </a>
+                    )}
+                    {bioLinks.filter(l => l.url).map((lnk, i) => (
+                      <a key={i} href={lnk.url} target="_blank" rel="noreferrer" style={{ display: "inline-flex", alignItems: "center", gap: 4, fontFamily: FF_S, fontSize: 12, color: "#9B85D8", textDecoration: "none", fontWeight: 500, background: P.lavenderLight, borderRadius: 20, padding: "3px 11px" }}>
+                        🔗 {lnk.label || lnk.url}
+                      </a>
+                    ))}
+                  </div>
+                )}
+                <div style={{ display: "flex", gap: 24, marginBottom: 16 }}>
+                  <div><span style={{ fontFamily: FF_D, fontSize: 18, color: P.ink, fontWeight: 600 }}>{followerCount}</span><span style={{ fontFamily: FF_S, fontSize: 12, color: P.inkFaint, marginLeft: 5 }}>followers</span></div>
+                  <div><span style={{ fontFamily: FF_D, fontSize: 18, color: P.ink, fontWeight: 600 }}>{followingCount}</span><span style={{ fontFamily: FF_S, fontSize: 12, color: P.inkFaint, marginLeft: 5 }}>following</span></div>
+                  <div><span style={{ fontFamily: FF_D, fontSize: 18, color: P.ink, fontWeight: 600 }}>{widgets.length}</span><span style={{ fontFamily: FF_S, fontSize: 12, color: P.inkFaint, marginLeft: 5 }}>public widget{widgets.length !== 1 ? "s" : ""}</span></div>
+                </div>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <button onClick={() => toggleFollow(userId)} style={{ background: isFollowingUser ? P.lavenderLight : P.lavender, border: `1.5px solid ${P.lavender}`, borderRadius: 12, padding: "8px 22px", cursor: "pointer", fontFamily: FF_S, fontSize: 13, fontWeight: 600, color: isFollowingUser ? P.inkFaint : P.ink, transition: "all 0.2s" }}>
+                    {isFollowingUser ? "✓ Following" : "+ Follow"}
+                  </button>
+                  <button onClick={() => onMessage(userId)} style={{ background: P.white, border: `1.5px solid ${P.lavender}`, borderRadius: 12, padding: "8px 18px", cursor: "pointer", fontFamily: FF_S, fontSize: 13, color: P.inkLight, transition: "all 0.2s" }}>
+                    ✉ Message
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Their Nook */}
+            <h3 style={{ fontFamily: FF_D, fontSize: 20, color: P.ink, margin: "0 0 18px", fontWeight: 400 }}>Their Nook</h3>
+            {widgets.length === 0 ? (
+              <div style={{ textAlign: "center", padding: "60px 0", color: P.inkFaint, fontFamily: FF_S, fontSize: 14 }}>
+                <p style={{ fontSize: 32, margin: "0 0 12px" }}>🌿</p>
+                <p>This user hasn't added any widgets to their Nook yet.</p>
+              </div>
+            ) : (
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 20 }}>
+                {widgets.filter(w => w.id !== "archive").map(w => (
+                  <WidgetCard key={w.id} widget={w} isOwnDashboard={false} />
+                ))}
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    </div>
+  );
 };
 
 const UserProfileModal = ({ user, following, toggleFollow, onClose, onMessage }) => {
@@ -5731,14 +7362,22 @@ const UserProfileModal = ({ user, following, toggleFollow, onClose, onMessage })
   );
 };
 
-const SettingsPage = ({ profilePic, setProfilePic, onLogout }) => {
+const SettingsPage = ({ profilePic, setProfilePic, onLogout, accent = "#C9B8F0", onAccentChange }) => {
   const { user, profile, updateProfile } = useAuth();
   const [section, setSection] = useState("account");
   const [name, setName]       = useState(profile?.name || "");
   const [email, setEmail]     = useState(user?.email || "");
   const [handle, setHandle]   = useState(profile?.handle || "");
+
+  // Sync fields when profile loads (it may arrive after component mounts)
+  useEffect(() => {
+    if (profile?.name)   setName(profile.name);
+    if (profile?.handle) setHandle(profile.handle);
+  }, [profile?.name, profile?.handle]);
+  useEffect(() => {
+    if (user?.email) setEmail(user.email);
+  }, [user?.email]);
   const [saved, setSaved]     = useState(false);
-  const [accent, setAccent]   = useState("#C9B8F0");
   const [notifPrefs, setNotifPrefs] = useState(() => {
     try { const s = localStorage.getItem(`nook_notif_${user?.id}`); if (s) return JSON.parse(s); } catch {}
     return { follows: true, likes: true, comments: true, mentions: true, announcements: false };
@@ -5753,7 +7392,10 @@ const SettingsPage = ({ profilePic, setProfilePic, onLogout }) => {
   const fileRef = useRef();
 
   const save = async () => {
-    try { await updateProfile({ name, handle }); } catch {}
+    const cleanHandle = handle.trim()
+      ? (handle.trim().startsWith('@') ? handle.trim() : '@' + handle.trim())
+      : handle;
+    try { await updateProfile({ name, handle: cleanHandle }); setHandle(cleanHandle); } catch {}
     setSaved(true); setTimeout(() => setSaved(false), 2500);
   };
 
@@ -5819,10 +7461,11 @@ const SettingsPage = ({ profilePic, setProfilePic, onLogout }) => {
             </div>
 
             <div style={{ display: "flex", flexDirection: "column", gap: 16, marginBottom: 28 }}>
-              {[["Display name", name, setName], ["Handle", handle, setHandle], ["Email", email, setEmail]].map(([label, val, setter]) => (
+              {[["Display name", name, setName, ""], ["Handle", handle, setHandle, "@yourhandle"], ["Email", email, setEmail, ""]].map(([label, val, setter, ph]) => (
                 <div key={label}>
                   <label style={{ display: "block", fontFamily: FF_S, fontSize: 12, color: P.inkFaint, fontWeight: 600, marginBottom: 6, textTransform: "uppercase", letterSpacing: 0.5 }}>{label}</label>
-                  <input value={val} onChange={e => setter(e.target.value)} style={inp} />
+                  <input value={val} onChange={e => setter(e.target.value)} placeholder={ph} style={{ ...inp, border: label === "Handle" && !val ? `1.5px solid ${P.peach}` : inp.border }} />
+                  {label === "Handle" && !val && <div style={{ fontFamily: FF_S, fontSize: 11, color: "#E8956A", marginTop: 4 }}>⚠ Set a handle so others can find you</div>}
                 </div>
               ))}
               <div>
@@ -5845,10 +7488,18 @@ const SettingsPage = ({ profilePic, setProfilePic, onLogout }) => {
               <label style={{ display: "block", fontFamily: FF_S, fontSize: 12, color: P.inkFaint, fontWeight: 600, marginBottom: 12, textTransform: "uppercase", letterSpacing: 0.5 }}>Accent colour</label>
               <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
                 {ACCENTS.map(c => (
-                  <div key={c} onClick={() => setAccent(c)} style={{ width: 40, height: 40, borderRadius: 12, background: c, cursor: "pointer", border: accent === c ? `3px solid ${P.ink}` : "3px solid transparent", transition: "all 0.15s", boxShadow: accent === c ? "0 2px 12px rgba(61,53,80,0.2)" : "none" }} />
+                  <div key={c} onClick={() => onAccentChange && onAccentChange(c)} style={{ width: 40, height: 40, borderRadius: 12, background: c, cursor: "pointer", border: accent === c ? `3px solid ${P.ink}` : "3px solid transparent", transition: "all 0.15s", boxShadow: accent === c ? "0 2px 12px rgba(61,53,80,0.2)" : "none" }} />
                 ))}
               </div>
-              <p style={{ fontFamily: FF_S, fontSize: 12, color: P.inkFaint, marginTop: 10 }}>Full theme customisation coming soon ✦</p>
+              <p style={{ fontFamily: FF_S, fontSize: 12, color: P.inkFaint, marginTop: 10 }}>Selected accent is used for highlights across your dashboard.</p>
+              <div style={{ marginTop: 14, background: accent + "33", border: `2px solid ${accent}`, borderRadius: 14, padding: "14px 18px", display: "flex", alignItems: "center", gap: 14 }}>
+                <div style={{ width: 36, height: 36, borderRadius: 10, background: accent }} />
+                <div>
+                  <div style={{ fontFamily: FF_S, fontSize: 13, fontWeight: 600, color: P.ink }}>Preview</div>
+                  <div style={{ fontFamily: FF_S, fontSize: 12, color: P.inkFaint }}>Your chosen accent colour looks like this</div>
+                </div>
+                <div style={{ marginLeft: "auto", background: accent, borderRadius: 10, padding: "6px 14px", fontFamily: FF_S, fontSize: 12, fontWeight: 600, color: P.ink }}>Button</div>
+              </div>
             </div>
             <div style={{ background: P.white, borderRadius: 16, padding: "20px 22px", border: `1px solid ${P.lavender}33` }}>
               <div style={{ fontFamily: FF_S, fontSize: 13, fontWeight: 600, color: P.ink, marginBottom: 4 }}>Dark mode</div>
@@ -5903,6 +7554,7 @@ const SettingsPage = ({ profilePic, setProfilePic, onLogout }) => {
 const OnboardingWizard = ({ onComplete, profilePic, setProfilePic }) => {
   const [step, setStep]     = useState(0);
   const [name, setName]     = useState("");
+  const [handle, setHandle] = useState("");
   const [bio, setBio]       = useState("");
   const [chosen, setChosen] = useState([]);
   const fileRef = useRef();
@@ -5928,7 +7580,7 @@ const OnboardingWizard = ({ onComplete, profilePic, setProfilePic }) => {
   ];
 
   const toggle = (id) => setChosen(cs => cs.includes(id) ? cs.filter(c => c !== id) : [...cs, id]);
-  const next = () => step < 3 ? setStep(s => s + 1) : onComplete(name, bio, chosen);
+  const next = () => step < 3 ? setStep(s => s + 1) : onComplete(name, handle, bio, chosen);
 
   const progressPct = (step / 3) * 100;
 
@@ -5970,7 +7622,7 @@ const OnboardingWizard = ({ onComplete, profilePic, setProfilePic }) => {
                 </div>
                 <div style={{ fontFamily: FF_S, fontSize: 13, color: P.inkFaint }}>Click to upload a profile photo <span style={{ color: P.inkFaint }}>(optional)</span></div>
               </div>
-              {[["Your name", name, setName, "Margot Ellison"], ["A short bio", bio, setBio, "Designer & dreamer 🌿"]].map(([label, val, setter, ph]) => (
+              {[["Your name", name, setName, "Margot Ellison"], ["Your @handle", handle, setHandle, "@margot"], ["A short bio", bio, setBio, "Designer & dreamer 🌿"]].map(([label, val, setter, ph]) => (
                 <div key={label}>
                   <label style={{ display: "block", fontFamily: FF_S, fontSize: 12, color: P.inkFaint, fontWeight: 600, marginBottom: 6 }}>{label}</label>
                   <input value={val} onChange={e => setter(e.target.value)} placeholder={ph} style={{ border: `1.5px solid ${P.lavender}`, borderRadius: 12, padding: "10px 14px", fontFamily: FF_S, fontSize: 14, background: P.lavenderLight, color: P.ink, outline: "none", width: "100%", boxSizing: "border-box" }} />
@@ -6154,6 +7806,8 @@ export default function App() {
   const [page, setPage] = useState(() => {
     try { return sessionStorage.getItem("nook_page") || "home"; } catch { return "home"; }
   });
+  const pageRef = useRef(page);
+  useEffect(() => { pageRef.current = page; }, [page]);
   const [convos, setConvos] = useState(INITIAL_CONVOS);
   const [requests, setRequests] = useState(INITIAL_REQUESTS);
   const [profilePic, setProfilePic] = useState(null);
@@ -6161,7 +7815,33 @@ export default function App() {
   const [notifications, setNotifications] = useState(NOTIF_SEED);
   const [showNotifs, setShowNotifs] = useState(false);
   const [viewingUser, setViewingUser] = useState(null);
+  const [profileViewId, setProfileViewId] = useState(null);
+  const [prevPage, setPrevPage] = useState("feed");
+  const [pendingDmUserId, setPendingDmUserId] = useState(null);
   const [showOnboarding, setShowOnboarding] = useState(false);
+  const [accent, setAccent] = useState("#C9B8F0");
+
+  // Read accent from localStorage once user id is known
+  useEffect(() => {
+    if (!user?.id) return;
+    try {
+      const s = localStorage.getItem(`nook_accent_${user.id}`);
+      if (s) setAccent(s);
+    } catch {}
+  }, [user?.id]);
+
+  // Apply accent as CSS variables so anything using var(--nook-accent) picks it up
+  useEffect(() => {
+    document.documentElement.style.setProperty('--nook-accent', accent);
+    document.documentElement.style.setProperty('--nook-accent-light', accent + '33');
+  }, [accent]);
+
+  const updateAccent = (newAccent) => {
+    setAccent(newAccent);
+    if (user?.id) {
+      try { localStorage.setItem(`nook_accent_${user.id}`, newAccent); } catch {}
+    }
+  };
   const [hasOnboarded, setHasOnboarded] = useState(false);
   const [widgetRequests, setWidgetRequests] = useState([
     { id: "wr1", name: "Spotify now playing", desc: "Show my current or recently played Spotify track on my profile.", user: "@cleo", ts: Date.now() - 86400000 * 3, status: "reviewing" },
@@ -6222,7 +7902,7 @@ export default function App() {
     // Persist to Supabase if logged in
     if (user) {
       try {
-                if (isNowFollowing) {
+        if (isNowFollowing) {
           await supabase.from('follows').upsert({ follower_id: user.id, following_id: uid }, { onConflict: 'follower_id,following_id' });
         } else {
           await supabase.from('follows').delete().eq('follower_id', user.id).eq('following_id', uid);
@@ -6230,6 +7910,138 @@ export default function App() {
       } catch {}
     }
   };
+
+  // ── Realtime notification subscriptions ───────────────────────────────────
+  // Notify current user when someone follows them, or comments on their post
+  useEffect(() => {
+    if (!user?.id) return;
+    const addNotif = (notif) => setNotifications(ns => [{ ...notif, id: `n${Date.now()}${Math.random()}`, ts: Date.now(), read: false }, ...ns]);
+
+    // ── Login-diff approach for new-follower notifications ─────────────────
+    // This runs every time the user logs in. It compares the current follower
+    // list against the last-known list stored in user_data and fires notifications
+    // for any followers gained since the last login.
+    // This is the primary mechanism — it works with zero Realtime/SQL configuration.
+    (async () => {
+      try {
+        // Fetch all current followers for this user
+        const { data: followerRows } = await supabase
+          .from('follows')
+          .select('follower_id')
+          .eq('following_id', user.id);
+        const currentFollowerIds = (followerRows || []).map(r => r.follower_id);
+
+        // Fetch the known-followers list we stored on the last login
+        const { data: stored } = await supabase
+          .from('user_data')
+          .select('value')
+          .eq('user_id', user.id)
+          .eq('key', 'known_followers')
+          .maybeSingle();
+        const knownIds = stored?.value ? JSON.parse(stored.value) : null;
+
+        if (knownIds !== null) {
+          // Find followers who are new since last login
+          const newIds = currentFollowerIds.filter(id => !knownIds.includes(id));
+          for (const followerId of newIds) {
+            try {
+              const { data: p } = await supabase.from('profiles').select('name, handle').eq('id', followerId).maybeSingle();
+              const name = p?.name || p?.handle || 'Someone';
+              addNotif({ type: 'follow', uid: followerId, name, text: `${name} started following you` });
+            } catch {
+              addNotif({ type: 'follow', uid: followerId, name: 'Someone', text: 'Someone started following you' });
+            }
+          }
+        }
+
+        // Always update known_followers to the current list so next login diffs correctly
+        await supabase.from('user_data').upsert(
+          { user_id: user.id, key: 'known_followers', value: JSON.stringify(currentFollowerIds) },
+          { onConflict: 'user_id,key' }
+        );
+      } catch {}
+    })();
+
+    // Subscribe to follows table changes via postgres_changes.
+    // No server-side filter used (avoids REPLICA IDENTITY FULL requirement for INSERT events).
+    // The follows table must be in the supabase_realtime publication — run supabase-follows-realtime.sql once.
+    // This provides within-session real-time notifications as a bonus on top of the login-diff above.
+    const followCh = supabase
+      .channel(`notif-follows-${user.id}`)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'follows' },
+        async (payload) => {
+          const followingId = payload.new?.following_id;
+          const followerId  = payload.new?.follower_id;
+          // Only process follows where the current user is being followed
+          if (!followingId || followingId !== user.id) return;
+          if (!followerId || followerId === user.id) return;
+          try {
+            const { data: p } = await supabase.from('profiles').select('name, handle').eq('id', followerId).maybeSingle();
+            const name = p?.name || p?.handle || 'Someone';
+            addNotif({ type: 'follow', uid: followerId, name, text: `${name} started following you` });
+          } catch {
+            addNotif({ type: 'follow', uid: followerId, name: 'Someone', text: 'Someone started following you' });
+          }
+        }
+      )
+      .subscribe();
+
+    // Subscribe to new comments on posts owned by the current user
+    const commentCh = supabase
+      .channel(`notif-comments-${user.id}`)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'comments' },
+        async (payload) => {
+          const commenterId = payload.new?.user_id;
+          const postId = payload.new?.post_id;
+          if (!commenterId || commenterId === user.id || !postId) return;
+          // Check if the post belongs to the current user
+          try {
+            const { data: post } = await supabase.from('posts').select('user_id, content').eq('id', postId).eq('user_id', user.id).maybeSingle();
+            if (!post) return; // Post doesn't belong to current user
+            const { data: p } = await supabase.from('profiles').select('name, handle').eq('id', commenterId).maybeSingle();
+            const name = p?.name || p?.handle || 'Someone';
+            const preview = (post.content || '').slice(0, 40);
+            addNotif({ type: 'comment', uid: commenterId, text: `${name} commented on your post${preview ? `: "${preview}${post.content?.length > 40 ? '…' : ''}"` : ''}` });
+          } catch {}
+        }
+      )
+      .subscribe();
+
+    // ── Calendar-share notifications (login-diff) ──────────────────────────
+    // Detect new calendar shares since last login and fire notifications.
+    (async () => {
+      try {
+        const { data: shareRows } = await supabase.from('calendar_shares')
+          .select('id, from_user_id, cat_name').eq('to_user_id', user.id);
+        const currentShareIds = (shareRows || []).map(r => r.id);
+
+        const { data: stored } = await supabase.from('user_data')
+          .select('value').eq('user_id', user.id).eq('key', 'known_cal_share_ids').maybeSingle();
+        const knownIds = stored?.value ? JSON.parse(stored.value) : null;
+
+        if (knownIds !== null) {
+          const newShares = (shareRows || []).filter(r => !knownIds.includes(r.id));
+          for (const share of newShares) {
+            try {
+              const { data: p } = await supabase.from('profiles').select('name, handle').eq('id', share.from_user_id).maybeSingle();
+              const name = p?.name || p?.handle || 'Someone';
+              addNotif({ type: 'calendar_share', uid: share.from_user_id, name,
+                text: `${name} shared their ${share.cat_name} calendar with you` });
+            } catch {}
+          }
+        }
+        await supabase.from('user_data').upsert(
+          { user_id: user.id, key: 'known_cal_share_ids', value: JSON.stringify(currentShareIds) },
+          { onConflict: 'user_id,key' }
+        );
+      } catch {}
+    })();
+
+    return () => {
+      supabase.removeChannel(followCh);
+      supabase.removeChannel(commentCh);
+    };
+  }, [user?.id]); // eslint-disable-line
 
   const unreadNotifs = notifications.filter(n => !n.read).length;
   const totalUnread = convos.reduce((a, c) => a + c.messages.filter(m => m.from !== "me" && !m.read).length, 0);
@@ -6241,6 +8053,7 @@ export default function App() {
     // Guard: redirect to login if not authenticated and trying to access protected pages
     const publicPages = ["home", "login", "signup"];
     if (!user && !publicPages.includes(p)) { setPage("login"); return; }
+    setPrevPage(prev => page !== p ? page : prev);
     setPage(p);
     setShowNotifs(false);
   };
@@ -6271,10 +8084,13 @@ export default function App() {
     }
     return { error };
   };
-  const completeOnboarding = async (name, bio, chosenIds) => {
+  const completeOnboarding = async (name, handle, bio, chosenIds) => {
     try {
-            if (user && (name || bio)) {
-        await supabase.from('profiles').update({ name, bio }).eq('id', user.id);
+      if (user && (name || bio || handle)) {
+        const cleanHandle = handle.trim()
+          ? (handle.trim().startsWith('@') ? handle.trim() : '@' + handle.trim())
+          : ('@' + (user.email?.split('@')[0] || 'user'));
+        await supabase.from('profiles').update({ name, bio, handle: cleanHandle }).eq('id', user.id);
       }
       // Save initial widget choices to Supabase right away
       if (user) {
@@ -6296,7 +8112,39 @@ export default function App() {
     setPage("dashboard");
   };
 
-  const openUserProfile = (uid) => { const u = USERS.find(u => u.id === uid); if (u) setViewingUser(u); };
+  const openUserProfile = useCallback(async (handleOrId) => {
+    if (!handleOrId) return;
+    const goToProfile = (id) => {
+      setProfileViewId(id);
+      setPrevPage(pageRef.current || 'feed');
+      setPage('profile');
+      setShowNotifs(false);
+    };
+    // Full user object → use id directly
+    if (typeof handleOrId === 'object' && handleOrId.id) { goToProfile(handleOrId.id); return; }
+    if (typeof handleOrId !== 'string') return;
+
+    // UUID detected → navigate directly. No need to validate first;
+    // PublicProfilePage does its own profile lookup and handles not-found gracefully.
+    const looksLikeUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(handleOrId);
+    if (looksLikeUUID) { goToProfile(handleOrId); return; }
+
+    // Handle lookup: strip leading @ and try BOTH with and without it,
+    // because different code paths may store or pass handles in either format.
+    const bare   = handleOrId.startsWith('@') ? handleOrId.slice(1) : handleOrId;
+    const withAt = '@' + bare;
+    try {
+      // Try exact match with @
+      const { data: d1 } = await supabase.from('profiles').select('id').eq('handle', withAt).maybeSingle();
+      if (d1?.id) { goToProfile(d1.id); return; }
+      // Try exact match without @
+      const { data: d2 } = await supabase.from('profiles').select('id').eq('handle', bare).maybeSingle();
+      if (d2?.id) { goToProfile(d2.id); return; }
+      // Partial ilike fallback (in case handle is stored differently)
+      const { data: d3 } = await supabase.from('profiles').select('id').ilike('handle', `%${bare}%`).limit(1);
+      if (d3?.[0]?.id) { goToProfile(d3[0].id); return; }
+    } catch {}
+  }, []); // eslint-disable-line
 
   // Redirect unauthenticated users away from protected pages
   // Only trigger onboarding for brand new signups
@@ -6307,7 +8155,7 @@ export default function App() {
     }
   }, [justSignedUp, user]);
 
-  const protectedPages = ["dashboard","customize","messages","feed","work","admin","settings"];
+  const protectedPages = ["dashboard","customize","messages","feed","work","admin","settings","profile"];
   useEffect(() => {
     if (authLoading) return;
     if (showOnboarding) return;
@@ -6326,6 +8174,7 @@ export default function App() {
   );
 
   return (
+    <ProfileViewContext.Provider value={openUserProfile}>
     <>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@400;500;600;700&display=swap');
@@ -6342,9 +8191,9 @@ export default function App() {
         .nook-nav-mobile-menu { display: none; }
         .nook-mobile-menu-open { display: flex; }
 
-        .nook-sidebar-layout { display: flex; }
-        .nook-sidebar { width: 220px; flex-shrink: 0; }
-        .nook-sidebar-content { flex: 1; min-width: 0; overflow-y: auto; }
+        .nook-sidebar-layout { display: flex; height: calc(100vh - 61px); overflow: hidden; }
+        .nook-sidebar { width: 220px; flex-shrink: 0; overflow-y: auto; position: sticky; top: 0; align-self: flex-start; height: 100%; }
+        .nook-sidebar-content { flex: 1; min-width: 0; overflow-y: auto; height: 100%; }
 
         .nook-msg-layout { display: flex; height: calc(100vh - 61px); overflow: hidden; }
         .nook-msg-sidebar { width: 310px; flex-shrink: 0; }
@@ -6402,8 +8251,8 @@ export default function App() {
             flex-shrink: unset;
             overflow: visible;
           }
-          .nook-sidebar-nav-inner { display: flex; flex-wrap: nowrap; overflow-x: auto; padding: 8px 12px; gap: 6px; }
-          .nook-sidebar-nav-inner button { flex-shrink: 0; }
+          .nook-sidebar-nav-inner { display: grid; grid-template-columns: repeat(4, 1fr); overflow-x: visible; padding: 8px 10px; gap: 5px; }
+          .nook-sidebar-nav-inner button { width: 100% !important; margin-bottom: 0 !important; padding: 8px 6px !important; justify-content: center; }
           .nook-sidebar-title { padding: 14px 16px 0 !important; }
           .nook-sidebar-footer { display: none; }
 
@@ -6467,6 +8316,8 @@ export default function App() {
         notifications={notifications}
         onMarkRead={(id) => setNotifications(ns => ns.map(n => n.id === id ? { ...n, read: true } : n))}
         onMarkAllRead={() => setNotifications(ns => ns.map(n => ({ ...n, read: true })))}
+        onOpenProfile={openUserProfile}
+        accent={accent}
       />
 
       {page === "home"    && <HomePageNew onNavigate={navigate} profilePic={profilePic} />}
@@ -6497,11 +8348,12 @@ export default function App() {
           <DashboardPage user={user} view={page} onNavigate={navigate} profilePic={profilePic} setProfilePic={setProfilePic} widgetRequests={widgetRequests} setWidgetRequests={setWidgetRequests} following={following} toggleFollow={toggleFollow} onViewUser={openUserProfile} />
         </div>
       )}
-      {page === "messages" && user && <MessagesPage requests={requests} setRequests={setRequests} />}
+      {page === "messages" && user && <MessagesPage requests={requests} setRequests={setRequests} pendingDmUserId={pendingDmUserId} onPendingDmHandled={() => setPendingDmUserId(null)} />}
       {page === "feed"     && user && <FeedPage onNavigate={navigate} onViewUser={openUserProfile} following={following} toggleFollowApp={toggleFollow} />}
       {page === "work"     && user && <WorkPage />}
       {page === "admin"    && isAdmin && <AdminPage widgetRequests={widgetRequests} setWidgetRequests={setWidgetRequests} />}
-      {page === "settings" && user && <SettingsPage profilePic={profilePic} setProfilePic={setProfilePic} onLogout={logout} />}
+      {page === "settings" && user && <SettingsPage profilePic={profilePic} setProfilePic={setProfilePic} onLogout={logout} accent={accent} onAccentChange={updateAccent} />}
+      {page === "profile"  && user && profileViewId && <PublicProfilePage userId={profileViewId} onBack={() => navigate(prevPage || "feed")} following={following} toggleFollow={toggleFollow} onMessage={(userId) => { setPendingDmUserId(userId); navigate("messages"); }} />}
 
       {/* User profile modal */}
       {viewingUser && (
@@ -6517,5 +8369,6 @@ export default function App() {
       {/* Onboarding wizard */}
       {showOnboarding && <OnboardingWizard onComplete={completeOnboarding} profilePic={profilePic} setProfilePic={setProfilePic} />}
     </>
+    </ProfileViewContext.Provider>
   );
 }
