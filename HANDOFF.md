@@ -179,6 +179,8 @@ The local `useState` declarations for `notifPrefs`/`privPrefs` and their `useEff
 
 **Privacy `allowMessages`:** wiring to the Message button on public profiles requires fetching the target user's `priv_prefs` at profile-view time — not yet implemented. Noted in Known Issues.
 
+**⚠️ Settings props are a temporary arrangement:** `notifPrefs`, `setNotifPrefs`, `privPrefs`, and `setPrivPrefs` are currently passed into `SettingsPage` as plain props from App. This works but is not scalable — as the settings surface grows, the prop chain will become unwieldy. The proper long-term fix is to move these (and other cross-cutting user preferences) into a dedicated React context (e.g. `UserPrefsContext`) or a lightweight global store, so any component can read or update prefs without threading props through the tree. This refactor should be done before adding more settings sections.
+
 ---
 
 ### 50. Note auto-focus — definitive fix (attempt 13, `editorKey` + native `autoFocus`)
@@ -950,6 +952,7 @@ Fixed: was using `convo.conversation_members?.length` (nested array no longer pr
 - **Push notifications**: Not implemented.
 - **Mobile responsiveness of messages**: The two-panel layout uses CSS classes `nook-msg-layout`, `nook-msg-sidebar`, `nook-msg-hidden` — check these are defined.
 - **Settings page**: Accent colour, bio links, notification prefs, and privacy prefs now all persist cross-device. Remaining stub: `allowMessages` controls the Message button on public profiles, but requires fetching the target user's `priv_prefs` at profile-view time — not yet implemented.
+- **Settings props need a proper home**: `notifPrefs`/`privPrefs` (and setters) are currently passed as props from App → SettingsPage. This is a temporary arrangement — before adding more settings sections, these should be moved into a `UserPrefsContext` (or similar global store) so any component can read/write prefs without prop-drilling.
 - **Widget reordering**: Drag-and-drop exists but persistence may need verification.
 - **Admin panel**: Restored and wired to real data. **Action required: run `supabase-admin-columns.sql`** in Supabase SQL Editor to add `suspended` + `flagged` columns — until then, suspend/flag actions will silently fail.
 - **`lastSeen`, `widgets`, `posts` counts** in admin Users table: no data source in schema; currently show blank/zero for real users. Decide whether to track these.
