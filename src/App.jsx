@@ -4256,7 +4256,9 @@ const WorkNotes = ({ notes, setNotes }) => {
   const [savedFlash, setSavedFlash] = useState(false);
   const textareaRef      = useRef(null);
   const newTitleInputRef = useRef(null); // uncontrolled — value read/cleared via DOM
-  const pendingFocusRef  = useRef(false); // set true before state updates; layout effect focuses after commit
+  // editorKey: incrementing on note creation forces React to unmount+remount the editor
+  // panel, so the browser's native autoFocus fires fresh — bypassing StrictMode entirely.
+  const [editorKey, setEditorKey] = useState(0);
 
   const activeNote = notes.find(n => n.id === active);
   const filtered   = notes.filter(n => !search || n.title.toLowerCase().includes(search.toLowerCase()) || n.body.toLowerCase().includes(search.toLowerCase()));
@@ -4268,32 +4270,21 @@ const WorkNotes = ({ notes, setNotes }) => {
     if (activeNote) { setDraftBody(activeNote.body); setUnsaved(false); }
   }, [active]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // After every render: if a focus was requested (pendingFocusRef), do it immediately.
-  // useLayoutEffect fires synchronously after React commits the DOM — the textarea is
-  // guaranteed to be mounted by then. No dependency array = runs after every render,
-  // but only acts when pendingFocusRef.current is true (set in createNote).
-  useLayoutEffect(() => {
-    if (pendingFocusRef.current && textareaRef.current) {
-      pendingFocusRef.current = false;
-      textareaRef.current.focus();
-    }
-  }); // intentionally no dependency array
-
+  // createNote: uses editorKey to force a full remount of the editor panel so the
+  // browser's native autoFocus fires. This bypasses React.StrictMode (which
+  // double-invokes effects/layout-effects and broke every timing-based approach).
   const createNote = (e) => {
-    if (e) e.preventDefault(); // prevent any browser default (e.g. form-like Enter behaviour)
+    if (e) e.preventDefault();
     const title = newTitleInputRef.current?.value?.trim();
     if (!title) return;
     if (newTitleInputRef.current) newTitleInputRef.current.value = "";
     const note = { id: `n${Date.now()}`, title, body: "", pinned: false, color: Math.floor(Math.random() * NOTE_COLORS.length), ts: Date.now() };
-    // Primary: useLayoutEffect watches pendingFocusRef and focuses immediately after commit
-    pendingFocusRef.current = true;
     setNotes(ns => [note, ...ns]);
     setActive(note.id);
     setDraftBody("");
     setUnsaved(false);
     setCreating(false);
-    // Safety net: if something steals focus after the layout effect, reclaim it after 150ms
-    setTimeout(() => { textareaRef.current?.focus(); }, 150);
+    setEditorKey(k => k + 1); // triggers editor remount → native autoFocus fires
   };
   const updateNote = (id, field, val) => setNotes(ns => ns.map(n => n.id === id ? { ...n, [field]: val, ts: Date.now() } : n));
   const saveBody = () => {
@@ -4389,7 +4380,7 @@ const WorkNotes = ({ notes, setNotes }) => {
       {activeNote ? (() => {
         const c = NOTE_COLORS[activeNote.color];
         return (
-          <div style={{ flex: 1, display: "flex", flexDirection: "column", background: c.bg, borderRadius: 18, border: `1.5px solid ${unsaved ? c.dot + "88" : c.border}`, padding: "20px 24px", transition: "border-color 0.2s" }}>
+          <div key={editorKey} style={{ flex: 1, display: "flex", flexDirection: "column", background: c.bg, borderRadius: 18, border: `1.5px solid ${unsaved ? c.dot + "88" : c.border}`, padding: "20px 24px", transition: "border-color 0.2s" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
               <input value={activeNote.title} onChange={e => updateNote(activeNote.id, "title", e.target.value)} style={{ flex: 1, background: "none", border: "none", outline: "none", fontFamily: FF_D, fontSize: 22, color: P.ink, fontWeight: 400 }} placeholder="Note title" />
               {/* Color picker */}
@@ -4405,6 +4396,7 @@ const WorkNotes = ({ notes, setNotes }) => {
             <textarea ref={textareaRef} value={draftBody}
               onChange={e => { setDraftBody(e.target.value); setUnsaved(true); autoGrow(e.target); }}
               placeholder="Start writing…"
+              autoFocus={editorKey > 0}
               style={{ width: "100%", background: "none", border: "none", outline: "none", fontFamily: FF_S, fontSize: 14, color: P.ink, resize: "none", lineHeight: 1.75, overflow: "hidden", minHeight: 160, boxSizing: "border-box" }} />
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 10 }}>
               <span style={{ fontFamily: FF_S, fontSize: 10, color: P.inkFaint }}>
@@ -7362,7 +7354,7 @@ const UserProfileModal = ({ user, following, toggleFollow, onClose, onMessage })
   );
 };
 
-const SettingsPage = ({ profilePic, setProfilePic, onLogout, accent = "#C9B8F0", onAccentChange }) => {
+const SettingsPage = ({ profilePic, setProfilePic, onLogout, accent = "#C9B8F0", onAccentChange, notifPrefs, setNotifPrefs, privPrefs, setPrivPrefs }) => {
   const { user, profile, updateProfile } = useAuth();
   const [section, setSection] = useState("account");
   const [name, setName]       = useState(profile?.name || "");
@@ -7378,16 +7370,8 @@ const SettingsPage = ({ profilePic, setProfilePic, onLogout, accent = "#C9B8F0",
     if (user?.email) setEmail(user.email);
   }, [user?.email]);
   const [saved, setSaved]     = useState(false);
-  const [notifPrefs, setNotifPrefs] = useState(() => {
-    try { const s = localStorage.getItem(`nook_notif_${user?.id}`); if (s) return JSON.parse(s); } catch {}
-    return { follows: true, likes: true, comments: true, mentions: true, announcements: false };
-  });
-  const [privPrefs, setPrivPrefs] = useState(() => {
-    try { const s = localStorage.getItem(`nook_priv_${user?.id}`); if (s) return JSON.parse(s); } catch {}
-    return { defaultPublic: false, showOnline: true, allowMessages: true };
-  });
-  useEffect(() => { if (user?.id) try { localStorage.setItem(`nook_notif_${user.id}`, JSON.stringify(notifPrefs)); } catch {} }, [notifPrefs, user?.id]);
-  useEffect(() => { if (user?.id) try { localStorage.setItem(`nook_priv_${user.id}`, JSON.stringify(privPrefs)); } catch {} }, [privPrefs, user?.id]);
+  // notifPrefs / privPrefs are now owned by App and passed in as props
+  // — they persist to Supabase cross-device. Defaults are provided as prop defaults above.
   const [deleteConfirm, setDeleteConfirm] = useState("");
   const fileRef = useRef();
 
@@ -7814,6 +7798,14 @@ export default function App() {
   const [following, setFollowing] = useState([]);
   const [notifications, setNotifications] = useState(NOTIF_SEED);
   const [showNotifs, setShowNotifs] = useState(false);
+
+  // ── Notification & privacy prefs (lifted here so addNotif can read them) ──
+  const [notifPrefs, setNotifPrefs] = useState({ follows: true, likes: true, comments: true, mentions: true, announcements: false });
+  const [privPrefs,  setPrivPrefs]  = useState({ defaultPublic: false, showOnline: true, allowMessages: true });
+  // Stable ref so the async realtime closure always sees the latest prefs without re-subscribing
+  const notifPrefsRef = useRef({ follows: true, likes: true, comments: true, mentions: true, announcements: false });
+  useEffect(() => { notifPrefsRef.current = notifPrefs; }, [notifPrefs]);
+
   const [viewingUser, setViewingUser] = useState(null);
   const [profileViewId, setProfileViewId] = useState(null);
   const [prevPage, setPrevPage] = useState("feed");
@@ -7891,6 +7883,64 @@ export default function App() {
     load();
   }, [user?.id]);
 
+  // ── Load settings prefs + past notifications from Supabase on login ─────
+  useEffect(() => {
+    if (!user?.id) {
+      setNotifPrefs({ follows: true, likes: true, comments: true, mentions: true, announcements: false });
+      setPrivPrefs({ defaultPublic: false, showOnline: true, allowMessages: true });
+      setNotifications([]);
+      return;
+    }
+    (async () => {
+      // ── Settings prefs ──────────────────────────────────────────────────
+      const { data: settingsData } = await supabase.from('user_data').select('key, value')
+        .eq('user_id', user.id).in('key', ['notif_prefs', 'priv_prefs']);
+      if (settingsData) {
+        const byKey = Object.fromEntries(settingsData.map(r => [r.key, r.value]));
+        if (byKey.notif_prefs) {
+          setNotifPrefs(p => ({ ...p, ...byKey.notif_prefs }));
+          try { localStorage.setItem(`nook_notif_${user.id}`, JSON.stringify(byKey.notif_prefs)); } catch {}
+        } else {
+          try { const s = localStorage.getItem(`nook_notif_${user.id}`); if (s) setNotifPrefs(p => ({ ...p, ...JSON.parse(s) })); } catch {}
+        }
+        if (byKey.priv_prefs) {
+          setPrivPrefs(p => ({ ...p, ...byKey.priv_prefs }));
+          try { localStorage.setItem(`nook_priv_${user.id}`, JSON.stringify(byKey.priv_prefs)); } catch {}
+        } else {
+          try { const s = localStorage.getItem(`nook_priv_${user.id}`); if (s) setPrivPrefs(p => ({ ...p, ...JSON.parse(s) })); } catch {}
+        }
+      }
+      // ── Persistent notifications ────────────────────────────────────────
+      const { data: notifData, error: notifErr } = await supabase
+        .from('notifications').select('*').eq('user_id', user.id)
+        .order('created_at', { ascending: false }).limit(50);
+      if (!notifErr && notifData) {
+        setNotifications(notifData.map(r => ({
+          id: r.id, type: r.type, uid: r.uid, name: r.name,
+          text: r.text, read: r.read, ts: new Date(r.created_at).getTime(),
+        })));
+      }
+    })();
+  }, [user?.id]); // eslint-disable-line
+
+  // Save notif prefs to Supabase + localStorage whenever they change
+  useEffect(() => {
+    if (!user?.id) return;
+    try { localStorage.setItem(`nook_notif_${user.id}`, JSON.stringify(notifPrefs)); } catch {}
+    supabase.from('user_data')
+      .upsert({ user_id: user.id, key: 'notif_prefs', value: notifPrefs }, { onConflict: 'user_id,key' })
+      .then(({ error }) => { if (error) console.error('[Settings] notif_prefs save error', error); });
+  }, [notifPrefs, user?.id]); // eslint-disable-line
+
+  // Save privacy prefs to Supabase + localStorage whenever they change
+  useEffect(() => {
+    if (!user?.id) return;
+    try { localStorage.setItem(`nook_priv_${user.id}`, JSON.stringify(privPrefs)); } catch {}
+    supabase.from('user_data')
+      .upsert({ user_id: user.id, key: 'priv_prefs', value: privPrefs }, { onConflict: 'user_id,key' })
+      .then(({ error }) => { if (error) console.error('[Settings] priv_prefs save error', error); });
+  }, [privPrefs, user?.id]); // eslint-disable-line
+
   useEffect(() => {
     try { sessionStorage.setItem("nook_page", page); } catch {}
   }, [page]);
@@ -7915,7 +7965,26 @@ export default function App() {
   // Notify current user when someone follows them, or comments on their post
   useEffect(() => {
     if (!user?.id) return;
-    const addNotif = (notif) => setNotifications(ns => [{ ...notif, id: `n${Date.now()}${Math.random()}`, ts: Date.now(), read: false }, ...ns]);
+    const addNotif = (notif) => {
+      // Respect the user's notification preferences
+      const prefs = notifPrefsRef.current;
+      if (notif.type === 'follow'   && !prefs.follows)       return;
+      if (notif.type === 'comment'  && !prefs.comments)      return;
+      if (notif.type === 'like'     && !prefs.likes)         return;
+      if (notif.type === 'mention'  && !prefs.mentions)      return;
+      const id = crypto.randomUUID();
+      const ts = Date.now();
+      setNotifications(ns => [{ ...notif, id, ts, read: false }, ...ns]);
+      // Persist to Supabase so notifications survive refresh
+      if (user?.id) {
+        supabase.from('notifications').insert({
+          id, user_id: user.id, type: notif.type,
+          uid: notif.uid || null, name: notif.name || null,
+          text: notif.text, read: false,
+          created_at: new Date(ts).toISOString(),
+        }).then(({ error }) => { if (error) console.error('[Notif] insert error', error); });
+      }
+    };
 
     // ── Login-diff approach for new-follower notifications ─────────────────
     // This runs every time the user logs in. It compares the current follower
@@ -8314,8 +8383,16 @@ export default function App() {
       <Nav page={page} onNavigate={navigate} onLogout={logout} unreadCount={totalUnread} isLoggedIn={isLoggedIn} isAdmin={isAdmin} me={profile || ME_BASE} profilePic={profilePic} following={following}
         unreadNotifs={unreadNotifs} showNotifs={showNotifs} setShowNotifs={setShowNotifs}
         notifications={notifications}
-        onMarkRead={(id) => setNotifications(ns => ns.map(n => n.id === id ? { ...n, read: true } : n))}
-        onMarkAllRead={() => setNotifications(ns => ns.map(n => ({ ...n, read: true })))}
+        onMarkRead={(id) => {
+          setNotifications(ns => ns.map(n => n.id === id ? { ...n, read: true } : n));
+          if (user?.id) supabase.from('notifications').update({ read: true }).eq('id', id).eq('user_id', user.id)
+            .then(({ error }) => { if (error) console.error('[Notif] mark read error', error); });
+        }}
+        onMarkAllRead={() => {
+          setNotifications(ns => ns.map(n => ({ ...n, read: true })));
+          if (user?.id) supabase.from('notifications').update({ read: true }).eq('user_id', user.id).eq('read', false)
+            .then(({ error }) => { if (error) console.error('[Notif] mark all read error', error); });
+        }}
         onOpenProfile={openUserProfile}
         accent={accent}
       />
@@ -8352,7 +8429,7 @@ export default function App() {
       {page === "feed"     && user && <FeedPage onNavigate={navigate} onViewUser={openUserProfile} following={following} toggleFollowApp={toggleFollow} />}
       {page === "work"     && user && <WorkPage />}
       {page === "admin"    && isAdmin && <AdminPage widgetRequests={widgetRequests} setWidgetRequests={setWidgetRequests} />}
-      {page === "settings" && user && <SettingsPage profilePic={profilePic} setProfilePic={setProfilePic} onLogout={logout} accent={accent} onAccentChange={updateAccent} />}
+      {page === "settings" && user && <SettingsPage profilePic={profilePic} setProfilePic={setProfilePic} onLogout={logout} accent={accent} onAccentChange={updateAccent} notifPrefs={notifPrefs} setNotifPrefs={setNotifPrefs} privPrefs={privPrefs} setPrivPrefs={setPrivPrefs} />}
       {page === "profile"  && user && profileViewId && <PublicProfilePage userId={profileViewId} onBack={() => navigate(prevPage || "feed")} following={following} toggleFollow={toggleFollow} onMessage={(userId) => { setPendingDmUserId(userId); navigate("messages"); }} />}
 
       {/* User profile modal */}

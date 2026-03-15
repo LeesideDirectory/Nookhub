@@ -1,5 +1,5 @@
 # Nook — Developer Handoff Document
-*Last updated: 2026-03-15 (session 14)*
+*Last updated: 2026-03-15 (session 16)*
 
 ---
 
@@ -8,7 +8,7 @@
 **Nook** is a pastel-themed personal dashboard SPA. Users get a public-facing profile page with customisable widgets (to-dos, reading list, goals, notes, etc.), a private settings area, and a real-time messaging system (DMs + group chats).
 
 **Stack:**
-- React 18 + Vite, all inline styles (no CSS files), single file `src/App.jsx` (~7200 lines)
+- React 18 + Vite, all inline styles (no CSS files), single file `src/App.jsx` (~8200 lines)
 - Supabase (Postgres + Auth + Realtime)
 - Row Level Security (RLS) on all tables
 - `src/hooks/useAuth.js` — auth + profile state
@@ -113,6 +113,225 @@ CREATE POLICY "chat_messages_member_insert" ON public.chat_messages
 CREATE POLICY "chat_messages_member_delete" ON public.chat_messages
   FOR DELETE USING (auth.uid() = sender_id);
 ```
+
+---
+
+## Changes Made This Session (session 16)
+
+### 48. Persistent notifications — Supabase table + pref-aware filtering
+
+**Problem:** All notifications (new follower, comment, calendar share) were held in React state only — they vanished on every page refresh. There was also no enforcement of the user's notification preference toggles.
+
+**New SQL migration — `supabase-notifications.sql`:**
+```sql
+CREATE TABLE notifications (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  type TEXT NOT NULL,   -- 'follow' | 'like' | 'comment' | 'mention' | 'calendar_share'
+  uid TEXT,             -- UUID of the triggering user
+  name TEXT,
+  text TEXT NOT NULL,
+  read BOOLEAN DEFAULT FALSE,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+```
+RLS: SELECT / INSERT (own rows only) / UPDATE / DELETE — all scoped to `auth.uid() = user_id`.
+Index on `(user_id, created_at DESC)` for fast per-user queries.
+**Action required: run `supabase-notifications.sql` in Supabase SQL Editor once.**
+
+**Code changes in App.jsx:**
+
+1. **`addNotif` enhanced** — now checks `notifPrefsRef.current` before firing (respects the user's toggles for follows, comments, likes, mentions), generates a UUID with `crypto.randomUUID()`, and saves to the `notifications` table via `supabase.from('notifications').insert(...)`. State update still happens synchronously; DB write is fire-and-forget.
+
+2. **Load on login** — new combined `useEffect([user?.id])` loads the last 50 notifications from Supabase on login and maps them to the existing UI shape `{ id, type, uid, name, text, read, ts }`. Clears notifications on logout.
+
+3. **`onMarkRead` / `onMarkAllRead`** — both now also update the `notifications` table:
+   - `onMarkRead(id)` → `.update({ read: true }).eq('id', id).eq('user_id', user.id)`
+   - `onMarkAllRead()` → `.update({ read: true }).eq('user_id', user.id).eq('read', false)`
+
+---
+
+### 49. Settings page — notification & privacy prefs now cross-device persistent
+
+**Problem:** `notifPrefs` and `privPrefs` were local state inside `SettingsPage`, saved only to `localStorage`. Switching devices or browsers lost all toggle settings.
+
+**Fix:**
+
+1. **Lifted to App** — `notifPrefs` and `privPrefs` `useState` declarations moved from `SettingsPage` into the App component (around line 7803). `SettingsPage` now receives both as props + setters.
+
+2. **Supabase persistence via `user_data`** — two new save effects in App:
+   - `notifPrefs` changes → upsert `{ key: 'notif_prefs', value: notifPrefs }` into `user_data`
+   - `privPrefs` changes → upsert `{ key: 'priv_prefs', value: privPrefs }` into `user_data`
+   Both also write to `localStorage` as a cache for instant rehydration.
+
+3. **Load on login** — the combined settings/notif load effect (same `useEffect` as #48) fetches `notif_prefs` and `priv_prefs` from `user_data` and calls the setters. Falls back to `localStorage` if no Supabase row exists yet (first login on new device).
+
+4. **`notifPrefsRef`** — stable `useRef` always pointing at the latest `notifPrefs`. Kept in sync by a `useEffect([notifPrefs])`. The async realtime subscription closure reads from this ref so it always uses current prefs without needing to re-subscribe.
+
+**SettingsPage signature change:**
+```js
+// Before:
+const SettingsPage = ({ profilePic, setProfilePic, onLogout, accent, onAccentChange }) => {
+// After:
+const SettingsPage = ({ profilePic, setProfilePic, onLogout, accent, onAccentChange, notifPrefs, setNotifPrefs, privPrefs, setPrivPrefs }) => {
+```
+The local `useState` declarations for `notifPrefs`/`privPrefs` and their `useEffect` save hooks were removed from `SettingsPage`. The toggles in the Notifications and Privacy sections are unchanged — they call `setNotifPrefs`/`setPrivPrefs` as before, now correctly pointing at the App-level setters.
+
+**Privacy `allowMessages`:** wiring to the Message button on public profiles requires fetching the target user's `priv_prefs` at profile-view time — not yet implemented. Noted in Known Issues.
+
+---
+
+### 50. Note auto-focus — definitive fix (attempt 13, `editorKey` + native `autoFocus`)
+
+**Root cause (confirmed in session 12, re-applied here):** `React.StrictMode` (active in `main.jsx`) double-invokes effects and layout-effects in development. Every `useEffect`, `useLayoutEffect`, `setTimeout`, `requestAnimationFrame`, `flushSync`, and ref-based approach tried across 12 attempts all ultimately fail because StrictMode invalidates the timing window or runs cleanup between the focus call and the browser processing it.
+
+**Fix (bypasses React scheduler entirely):**
+
+1. `const [editorKey, setEditorKey] = useState(0)` added to `WorkNotes`.
+2. `createNote` calls `setEditorKey(k => k + 1)` instead of any focus/ref logic.
+3. The editor's outer `<div>` receives `key={editorKey}`. When `editorKey` changes, React **fully unmounts and remounts** the editor as a new DOM subtree.
+4. The `<textarea>` receives `autoFocus={editorKey > 0}`. The browser applies native autofocus when the element is inserted into the DOM — this happens outside React's scheduler and is completely immune to StrictMode.
+5. `pendingFocusRef`, the `useLayoutEffect` with no deps, and the `setTimeout(150)` safety net are all removed.
+6. Switching between existing notes does **not** change `editorKey`, so no remount or focus steal occurs on note switching.
+7. `editorKey > 0` prevents autofocus when the component first mounts with pre-existing notes loaded from storage.
+
+**Note:** `textareaRef` is retained for the `autoGrow` height calculation — it does not affect focus behaviour.
+
+---
+
+## Changes Made This Session (session 15)
+
+### 45. Supabase persistence — root cause corrected and full fix applied
+
+**Problem (carried over from session 14):** Work page data (todos, notes, calendar) disappeared when logging in from a new browser. Session 14 had diagnosed the `user_data.value` column as `text` and applied `JSON.stringify()` before saving. This diagnosis was wrong.
+
+**Root cause (corrected):** The column type is `value jsonb NOT NULL DEFAULT '{}'` (confirmed by reading `supabase-schema.sql`). Passing `JSON.stringify(value)` to a `jsonb` column causes Postgres to store a JSON-encoded string inside JSON, creating double-encoding. Additionally, Supabase JS v2 API errors (RLS violations, type mismatches, etc.) arrive in the resolved `{ data, error }` object — not as thrown exceptions — so `.catch(() => {})` silently swallowed all save failures without any indication.
+
+A third issue: users who had only ever used the app on one browser had all their data in `localStorage` but nothing in Supabase (no save had ever succeeded due to the above bugs). Those users' new-browser logins loaded from Supabase and found nothing.
+
+**Three-part fix in `saveWorkData` and the load `useEffect`:**
+
+1. **Correct save format** — reverted `JSON.stringify(value)` back to `value` (raw JS object, correct for `jsonb`):
+```js
+const saveWorkData = useCallback((sbKey, lsKey, value) => {
+  if (lsKey) try { localStorage.setItem(lsKey, JSON.stringify(value)); } catch {}
+  if (user?.id) {
+    supabase.from('user_data')
+      .upsert({ user_id: user.id, key: sbKey, value }, { onConflict: 'user_id,key' })
+      .then(({ error }) => { if (error) console.error('[WorkPage] save error for', sbKey, error); })
+      .catch(err => console.error('[WorkPage] save network error for', sbKey, err));
+  }
+}, [user?.id]);
+```
+
+2. **Error visibility** — replaced `.catch(() => {})` with `.then(({ error }) => ...)` so Supabase API errors are logged to console.
+
+3. **localStorage → Supabase migration** — after the Supabase load resolves, any key present in `localStorage` but absent from Supabase is upserted in a single batch. This runs once per browser on first login, permanently migrating historical data:
+```js
+const toMigrate = [
+  !keysInDb.has('work_todos_master') && lsMaster   ? { user_id, key: 'work_todos_master', value: lsMaster }   : null,
+  !keysInDb.has('work_todos_daily')  && lsDaily    ? { user_id, key: 'work_todos_daily',  value: lsDaily }    : null,
+  !keysInDb.has('work_notes')        && lsNotes    ? { user_id, key: 'work_notes',        value: lsNotes }    : null,
+  !keysInDb.has('work_todos_custom') && lsCustom   ? { user_id, key: 'work_todos_custom', value: lsCustom }   : null,
+  !keysInDb.has('work_calendar')     && lsCalendar ? { user_id, key: 'work_calendar',     value: lsCalendar } : null,
+].filter(Boolean);
+if (toMigrate.length > 0) {
+  supabase.from('user_data').upsert(toMigrate, { onConflict: 'user_id,key' }) ...
+}
+```
+
+**`safeParse` helper added** to the load effect to handle values that may be stored as jsonb objects (normal) or JSON strings (from the brief session-14 window when double-encoding was active):
+```js
+const safeParse = (v) => {
+  if (v === null || v === undefined) return null;
+  if (typeof v === 'string') { try { return JSON.parse(v); } catch { return null; } }
+  return v;
+};
+```
+
+---
+
+### 46. Work sidebar — Calendar section missing from live site and in-session
+
+**Problem:** Calendar did not appear in the Work sidebar nav, either on nook-hub.com or after closing/reopening the tab in the same browser.
+
+**Root causes (two separate bugs):**
+
+1. **Live site ran old code** — all code changes across sessions 14–15 (including the addition of `'calendar'` to `WORK_SECTIONS`) had never been committed to git, so Netlify was deploying a version of `src/App.jsx` that predated the Calendar feature entirely. Confirmed with `git status`: 2491 insertions unstaged across 17 files.
+
+2. **Section state was ephemeral** — `WorkPage` used `useState("overview")` with no persistence. Closing and reopening the tab always reset to Overview, hiding the Calendar section unless the user manually re-navigated.
+
+**Fix for #1 — git commit:**
+Resolved a stale `.git/index.lock` file (required `mcp__cowork__allow_cowork_file_delete` permission), set git author identity (`git config user.email/user.name`), staged all 17 modified files, and committed as:
+> `fix: persist work data to Supabase, add calendar section, improve sidebar layout`
+> Commit `1860501` — 17 files changed, 3863 insertions.
+
+**Note: VM cannot push to GitHub** — the sandbox has no GitHub credentials and hits a 403 proxy error on `git push`. **The user must run `git push origin main` from their own machine** to trigger a Netlify rebuild.
+
+**Fix for #2 — section persistence via `localStorage`:**
+Replaced `useState("overview")` with a lazy initializer that reads `localStorage`:
+```js
+const [section, setSection] = useState(() => {
+  try {
+    const s = localStorage.getItem('nook_work_section');
+    if (s && WORK_SECTIONS.find(w => w.id === s)) return s;
+  } catch {}
+  return 'overview';
+});
+```
+Added `goToSection()` that writes back on every navigation:
+```js
+const goToSection = (s) => {
+  setSection(s);
+  try { localStorage.setItem('nook_work_section', s); } catch {}
+};
+```
+All `goTo(...)` and `setSection(s.id)` call sites updated to `goToSection(...)`. Key `nook_work_section` is shared across user sessions (UI preference only, no user-ID suffix needed).
+
+---
+
+### 47. Work sidebar layout — full-height desktop, 4-column mobile grid
+
+**Problem (desktop):** The sidebar used `minHeight: calc(100vh - 61px)` on the layout container, which allowed the sidebar to shrink to its content height on short pages. This caused the sidebar to appear truncated and not fill the viewport.
+
+**Problem (mobile):** The sidebar nav used `flex-wrap: nowrap; overflow-x: auto`, rendering as a horizontal scroll strip. With 8 sections, Calendar was off-screen and required swiping to discover.
+
+**Fix — desktop CSS** (global styles block in `App.jsx`):
+```css
+/* Before */
+.nook-sidebar-layout { display: flex; }
+.nook-sidebar { width: 220px; flex-shrink: 0; }
+.nook-sidebar-content { flex: 1; min-width: 0; overflow-y: auto; }
+
+/* After */
+.nook-sidebar-layout { display: flex; height: calc(100vh - 61px); overflow: hidden; }
+.nook-sidebar { width: 220px; flex-shrink: 0; overflow-y: auto; position: sticky; top: 0; align-self: flex-start; height: 100%; }
+.nook-sidebar-content { flex: 1; min-width: 0; overflow-y: auto; height: 100%; }
+```
+The `minHeight` inline style was also removed from the layout's JSX `style` prop (the CSS class now handles it).
+
+**Fix — mobile CSS** (inside `@media (max-width: 640px)`):
+```css
+/* Before */
+.nook-sidebar-nav-inner { display: flex; flex-wrap: nowrap; overflow-x: auto; padding: 8px 12px; gap: 6px; }
+.nook-sidebar-nav-inner button { flex-shrink: 0; }
+
+/* After */
+.nook-sidebar-nav-inner { display: grid; grid-template-columns: repeat(4, 1fr); overflow-x: visible; padding: 8px 10px; gap: 5px; }
+.nook-sidebar-nav-inner button { width: 100% !important; margin-bottom: 0 !important; padding: 8px 6px !important; justify-content: center; }
+```
+8 sections now display in two compact rows of 4, fully visible without scrolling.
+
+---
+
+### Deployment status after session 15
+
+| Item | Status |
+|------|--------|
+| All session 14–15 code changes | ✅ Committed (`1860501`) |
+| Push to GitHub | ⏳ **Pending — user must run `git push origin main`** |
+| Netlify rebuild | ⏳ Triggers automatically once push lands |
+| localStorage → Supabase migration | ✅ Fires automatically on next login |
 
 ---
 
@@ -715,11 +934,14 @@ Fixed: was using `convo.conversation_members?.length` (nested array no longer pr
 | `supabase-follows-realtime.sql`   | **Pending** | Adds `follows` table to `supabase_realtime` publication — required for follower notifications |
 | `supabase-widget-configs-fix.sql` | **Pending** | Creates `widget_configs` table with RLS: public SELECT, owner-only write — required for public profiles to show widgets |
 | `supabase-bio-links-public-read.sql` | **Pending** | Adds SELECT policy on `user_data` for `key = 'bio_links'` — required for bio links/email to appear on public profiles |
+| `supabase-calendar-contributions-v2.sql` | **Pending** | Creates `calendar_contributions` table with RLS policies for shared calendar events (session 14) |
+| `supabase-notifications.sql` | **Pending** | Creates `notifications` table with RLS — required for bell-icon notifications to persist across refreshes (session 16) |
 
 ---
 
 ## Known Remaining Issues / Next Steps
 
+- **⚠️ DEPLOY PENDING — run `git push origin main`** from your Windows machine to push commit `1860501` to GitHub and trigger a Netlify rebuild. Until this is done, nook-hub.com is running old code without Calendar, the sidebar fixes, or the Supabase persistence fix.
 - **Realtime for deleted messages**: If user A deletes a message, user B's view doesn't update until refresh. Need to subscribe to DELETE events on `chat_messages` in the realtime channel handler.
 - **Realtime for deleted conversations**: Same — deletion not broadcast to other participants.
 - **Unread count accuracy**: Current unread count counts ALL messages not from the current user since the beginning of time, not since last read. Should store a `last_read_at` per user per conversation.
@@ -727,16 +949,20 @@ Fixed: was using `convo.conversation_members?.length` (nested array no longer pr
 - **Image/file attachments in messages**: Not implemented.
 - **Push notifications**: Not implemented.
 - **Mobile responsiveness of messages**: The two-panel layout uses CSS classes `nook-msg-layout`, `nook-msg-sidebar`, `nook-msg-hidden` — check these are defined.
-- **Settings page**: Accent colour and bio links now persist. Other settings (notifications, privacy) are UI-only stubs.
+- **Settings page**: Accent colour, bio links, notification prefs, and privacy prefs now all persist cross-device. Remaining stub: `allowMessages` controls the Message button on public profiles, but requires fetching the target user's `priv_prefs` at profile-view time — not yet implemented.
 - **Widget reordering**: Drag-and-drop exists but persistence may need verification.
 - **Admin panel**: Restored and wired to real data. **Action required: run `supabase-admin-columns.sql`** in Supabase SQL Editor to add `suspended` + `flagged` columns — until then, suspend/flag actions will silently fail.
 - **`lastSeen`, `widgets`, `posts` counts** in admin Users table: no data source in schema; currently show blank/zero for real users. Decide whether to track these.
-- **In-session notifications only**: Follow and comment notifications are held in React state — they disappear on page refresh. A `notifications` DB table would be needed for persistence.
+- **Action required — run `supabase-notifications.sql`** to create the `notifications` table + RLS. Until this is run, the bell icon will load no past notifications and `addNotif` inserts will silently fail.
 - **New follower notification** — code is fixed (session 12 second pass). **Action required: run `supabase-follows-realtime.sql`** in Supabase SQL Editor to add `follows` to the Realtime publication. Without this one SQL line, `postgres_changes` on `follows` will never fire.
-- **Note auto-focus after create — STILL UNRESOLVED (12 failed attempts across sessions 7–13).** Current code uses `useLayoutEffect` (no deps) + `pendingFocusRef` + `setTimeout(150)` safety net. See session 13 entry (#44) for full history and next steps to investigate.
+- ~~**In-session notifications only**~~ **FIXED (session 16)** — see #48 above. Notifications now persist to Supabase and survive refresh.
+- ~~**Note auto-focus after create — STILL UNRESOLVED**~~ **FIXED (session 16)** — see #50 above. `editorKey` + native `autoFocus` bypasses StrictMode entirely.
 - **Public profile page widget data**: `PublicProfilePage` reads widget data from the `data` column of `widget_configs`. Widget configs are now auto-saved to Supabase on dashboard load if missing, but the `data` field (widget content) is only saved via `onDataChange` (triggered by user edits). If a user has never edited a widget's content, `data` will be null and the widget renders empty on their public profile.
 - **Action required — run `supabase-widget-configs-fix.sql`** for public profiles to show widgets (RLS fix).
 - **Action required — run `supabase-bio-links-public-read.sql`** for bio links/email to appear on public profiles.
+- **Action required — run `supabase-calendar-contributions-v2.sql`** for shared calendar events to work (session 14).
+- ~~**Work data lost on new-browser login**~~ **FIXED (session 15)** — `saveWorkData` now passes raw objects (correct for `jsonb`); load effect migrates `localStorage` data to Supabase on first login from any new browser.
+- ~~**Calendar section missing from Work sidebar**~~ **FIXED (session 15)** — was caused by uncommitted code; committed as `1860501`. Push required (see above).
 - ~~**Signup chart always zero**~~ **FIXED (session 3)** — see `supabase-signup-fix.sql`. Action required: run that file in Supabase SQL Editor.
 - ~~**Handle clicks opened popup with fake data**~~ **FIXED (session 6)** — now navigates to `PublicProfilePage` with real Supabase data.
 - ~~**No follower visibility**~~ **FIXED (session 6)** — Feed sidebar has Following/Followers tabs; Dashboard bio shows follower count.
