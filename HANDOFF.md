@@ -1,5 +1,5 @@
 # Nook — Developer Handoff Document
-*Last updated: 2026-03-15 (session 16)*
+*Last updated: 2026-03-17 (session 21)*
 
 ---
 
@@ -8,7 +8,7 @@
 **Nook** is a pastel-themed personal dashboard SPA. Users get a public-facing profile page with customisable widgets (to-dos, reading list, goals, notes, etc.), a private settings area, and a real-time messaging system (DMs + group chats).
 
 **Stack:**
-- React 18 + Vite, all inline styles (no CSS files), single file `src/App.jsx` (~8200 lines)
+- React 18 + Vite, all inline styles (no CSS files), single file `src/App.jsx` (~9118 lines)
 - Supabase (Postgres + Auth + Realtime)
 - Row Level Security (RLS) on all tables
 - `src/hooks/useAuth.js` — auth + profile state
@@ -555,6 +555,136 @@ The Supabase load effect now also syncs the refs (`notesRef.current = map.work_n
 
 ---
 
+## Changes Made This Session (session 18)
+
+### Bug fixes — 3 issues resolved
+
+**1. Widget data temporarily disappearing on navigation + slow initial load (Fix 1)**
+
+Root cause (two-part):
+- `widgets` state was initialised with all widgets `enabled: false` (blank slate). Supabase load is async — so there's always a flash of a blank dashboard before data arrives.
+- When `onDataChange` saved widget content, it only updated `widgetData` state and Supabase, NOT the `widgets` array. So `widget.data` was stale. If the DashboardPage ever remounted (e.g. due to Supabase auth token refresh briefly setting `user` to null), widgets would reinitialise from `widget.data` — showing old data until the next Supabase fetch.
+
+**Fix 1a — instant localStorage-first load:**
+Changed `widgets` `useState` initializer from a hard-coded "all disabled" array to reading from `localStorage` synchronously:
+```js
+const [widgets, setWidgets] = useState(() => {
+  if (STORAGE_KEY) {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) {
+        const ws = JSON.parse(saved);
+        return ws.map(w => {
+          const wd = savedWidgetData[w.id];
+          return wd ? { ...w, data: { ...w.data, ...wd } } : w;
+        });
+      }
+    } catch {}
+  }
+  return INITIAL_WIDGETS.map(w => ({ ...w, enabled: false, isPublic: false }));
+});
+```
+Widgets now render immediately from localStorage before Supabase responds. Supabase load still runs and overrides with the authoritative data once it arrives.
+
+**Fix 1b — keep `widgets` array data in sync with `onDataChange`:**
+```js
+const onDataChange = useCallback((widgetId, newData) => {
+  setWidgetData(prev => ({ ...prev, [widgetId]: newData }));
+  // Also keep widgets array in sync so widget.data stays fresh
+  setWidgets(prev => prev.map(w =>
+    w.id === widgetId ? { ...w, data: { ...w.data, ...newData } } : w
+  ));
+  // Supabase upsert...
+}, [user?.id]);
+```
+Now `widget.data` always reflects the latest user edits, so if the component remounts, widgets reinitialise with current data rather than stale Supabase-fetch-time data.
+
+---
+
+**2. Work section reminders — edit functionality (Fix 2)**
+
+Added inline edit mode to `WorkReminders`:
+- New state: `editingId`, `editDraft` (`{ text, date, time, priority }`)
+- Each reminder row now has a ✎ button (visible only for real, non-example reminders).
+- Clicking ✎ replaces the row with an inline edit form (same fields as the "Add" form: text, date, time, priority buttons, Save / Delete / ✕ Cancel).
+- `saveEdit()` calls `setReminders(...)` (the persistent setter from WorkPage) so edits are immediately written to Supabase.
+- `startEdit` collapses the "Add" form (`setAdding(false)`) to avoid two open forms.
+- Delete button in edit mode removes the reminder (and collapses edit form via the `remove` function).
+
+---
+
+**3. Work section reminders & meetings data not saving (Fix 3)**
+
+Root causes:
+- `reminders` in `WorkPage` used a plain `useState` setter — no call to `saveWorkData`.
+- `meetings` in `WorkPage` had no setter at all (`const [meetings] = useState(...)`). `WorkMeetings` managed its own internal `useState(init)` — changes were never propagated back to `WorkPage` and never persisted.
+- Neither `work_reminders` nor `work_meetings` was in the Supabase `sbKeys` fetch list.
+- `WorkPage` unmounts when navigating away (it's conditionally rendered), so any in-memory state was lost.
+
+**Fix:**
+1. Added `WORK_REMINDERS_KEY` and `WORK_MEETINGS_KEY` localStorage keys.
+2. Added `remindersRef` and `meetingsRef` (same ref-mirror pattern as masterRef, dailyRef, etc.).
+3. Changed `const [reminders, setReminders] = useState(...)` → `const [reminders, setRemindersRaw] = useState(...)` and added a persistent wrapper:
+```js
+const setReminders = useCallback((val) => {
+  const next = typeof val === "function" ? val(remindersRef.current) : val;
+  remindersRef.current = next;
+  setRemindersRaw(next);
+  saveWorkData('work_reminders', WORK_REMINDERS_KEY, next);
+}, [saveWorkData, WORK_REMINDERS_KEY]);
+```
+4. Same pattern for `setMeetings` (similarly wrapped around `setMeetingsRaw`).
+5. Changed `WorkMeetings` signature from `({ meetings: init })` with its own `useState(init)` to `({ meetings, setMeetings })` — state is now fully owned by `WorkPage` and passed down.
+6. Updated render call: `<WorkMeetings meetings={meetings} setMeetings={setMeetings} />`.
+7. Added `'work_reminders'` and `'work_meetings'` to `sbKeys` in the Supabase load effect, with load/apply/migration logic matching the other five keys.
+8. localStorage Step 1 load also now reads `lsReminders` and `lsMeetings` for instant display before Supabase responds.
+
+---
+
+## Changes Made This Session (session 17)
+
+### Bug fixes — 7 issues resolved
+
+**1. Email confirmation → Onboarding (Fix 1)**
+- `showOnboarding` is now initialised from `window.location.hash` — if the hash contains `type=signup` (Supabase email confirmation redirect), `showOnboarding` starts as `true` so the protection redirect can't pre-empt onboarding.
+- Added a guard `useEffect`: if `showOnboarding` is true but `nook_onboarded_${user.id}` already exists in localStorage, skip onboarding and go straight to dashboard (handles returning users who somehow hit the link again).
+- `completeOnboarding` now clears the confirmation hash from the URL via `window.history.replaceState`.
+
+**2. Onboarding widget selections persist (Fix 2)**
+- Added `widgetReloadKey` state (`useState(0)`) in `App`. Passed as prop to `DashboardPage`.
+- `DashboardPage` adds `widgetReloadKey` to the dependency array of its widget-load `useEffect`, so the load re-fires whenever the key changes.
+- `completeOnboarding` calls `setWidgetReloadKey(k => k + 1)` after saving widget configs to Supabase, triggering a fresh DB load that picks up the newly-saved selections.
+- Root cause: `DashboardPage` stays mounted (hidden via CSS) even during onboarding; the initial empty load was never re-triggered after onboarding saved.
+
+**3. Saved links widget URLs (Fix 3)**
+- Added `ensureHttps(url)` helper at the top of widget definitions.
+- `LinksWidget.add()` now runs the URL through `ensureHttps` before saving, so pasting a bare domain like `google.com` becomes `https://google.com` instead of navigating to a relative path.
+
+**4. Sports tracker — edit sports + emoji picker (Fix 4)**
+- Added `SPORT_EMOJIS` constant (32 sport emoji).
+- `SportsWidget` now has `editingActivityId` / `editDraft` / `showEditEmojiPicker` state.
+- Each activity tab now has an inline ✎ edit button.
+- Clicking edit shows an inline form (name, unit, emoji picker) with Save / Delete sport / Cancel.
+- The "Add sport" form was also upgraded to use a popup emoji picker instead of a free-text input.
+
+**5. Gallery widget (Fix 5)**
+- Initial state changed from `GALLERY_SEED` fallback → `data.posts || []`. New dashboards start empty.
+- "Link URL" and "Link label" inputs removed from both the add-post form and the edit modal (no longer stored or displayed).
+- `GalleryWidget` now fetches real user handles from `supabase.from('profiles').select('id, name, handle')` on mount and exposes them as `allUserHandles`.
+- Tag suggestion chips and the edit-modal dropdown now show actual Nook users instead of hardcoded dummy handles.
+- Tagged handles in the post detail view are now wrapped in `<HandleBadge>` (clickable → navigates to their profile).
+- `allUserHandles` passed as prop to `GalleryPostModal`.
+
+**6. Bookmarks widget URLs (Fix 6)**
+- `BookmarkEditModal` normalises `url` via `ensureHttps` on save.
+- `addBm` in `BookmarksWidget` also normalises the URL so pasting bare domains opens correctly.
+
+**7. All widgets save to database (Fix 7)**
+- Changed merge priority in DashboardPage widget load: `{ ...savedWidgetData, ...dbDataMap }` (Supabase wins) instead of the previous order where localStorage overrode DB. Supabase is now the source of truth for widget content across devices.
+- `onDataChange` callback now passes `updated_at` in the upsert and logs a warning (not silent) on error.
+
+---
+
 ## Changes Made This Session (session 8)
 
 ### 34. Note auto-focus broken for second+ notes + widget badge still resetting on login
@@ -920,6 +1050,119 @@ Fixed: was using `convo.conversation_members?.length` (nested array no longer pr
 
 ---
 
+## Session 21 Changes (2026-03-17)
+
+### 52. Notification click — post detail modal
+
+**Problem:** Clicking a like/comment notification needed to show the specific post that was liked/commented on. The post belongs to the current user, so it doesn't appear in the feed (which only shows followed users' posts).
+
+**Fix:**
+- New `PostDetailModal` component: fetches the post by ID from Supabase on mount (including likes + comments with profiles), renders the full post with like toggle and comment thread, allows adding new comments inline. Click outside or ✕ to close.
+- New `viewPostId` state in App. `onOpenPost` prop now just calls `setViewPostId(postId)` — no page navigation needed.
+- `PostDetailModal` rendered in App alongside other modals; shown whenever `viewPostId` is set.
+- `NotificationsDropdown` already had `onOpenPost` wired from session 20 work. No changes needed there.
+- SQL: `supabase-notification-source-id.sql` was **applied** this session — adds `source_id TEXT` column to `notifications` and updates both trigger functions to populate it with `post_id`.
+
+### 53. Feed excludes own posts
+
+**Problem:** The current user's own posts were appearing in their feed. Feed should show only posts from followed users.
+
+**Fix — `src/hooks/useFeed.js`:**
+- `following` filter: removed `ids.push(user.id)` — own posts no longer included.
+- `all` filter: added `.neq('user_id', user.id)` — own posts excluded from the "All" view too.
+
+---
+
+## Session 20 Changes (2026-03-17)
+
+### 51. Feed like/comment notifications — DB triggers + notifications subscription
+
+**Problem:** Users received no notification when someone liked or commented on their feed posts. Investigation showed all SQL was already set up (`posts`, `likes`, `comments` in Realtime publication; `notifications` table with RLS existing). The previous client-side approach (subscribe to `likes`/`comments` → async ownership query → call addNotif) was silently failing — the `try/catch` blocks swallowed errors and the async post-ownership queries were unreliable.
+
+**Root cause:** Client-side Realtime handlers that perform async DB queries in the callback are fragile. The ownership check (`supabase.from('posts').eq('user_id', user.id)`) could return null under various conditions, causing the handler to exit without firing a notification.
+
+**Fix — two parts:**
+
+**1. New file `supabase-feed-notification-triggers.sql`** (run once in Supabase SQL Editor):
+- Adds `notifications` table to Realtime publication (safe DO block, idempotent).
+- Creates `notify_on_like()` — PLPGSQL SECURITY DEFINER function that fires on `likes` INSERT: looks up post owner + liker name, inserts `type='like'` notification into `notifications` for the post owner.
+- Creates `notify_on_comment()` — same pattern for `comments` INSERT.
+- Attaches both as `AFTER INSERT` triggers on `likes` and `comments`.
+
+**2. App.jsx changes (notification `useEffect`):**
+- Removed `commentCh` and `likesCh` (subscribe to `comments`/`likes` tables) — replaced by DB triggers.
+- Added `notifCh` — subscribes to `notifications` table INSERT events with filter `user_id=eq.${user.id}`. When a DB trigger inserts a notification, Supabase Realtime delivers it directly to the post owner. Handler just updates in-memory state with dedup. No async ownership queries needed.
+- Cleanup: now `followCh` + `notifCh` (was `followCh` + `commentCh` + `likesCh`).
+
+**How it all works together:**
+- **Real-time (same session):** DB trigger fires → inserts into `notifications` → `notifCh` delivers to owner's client → bell lights up immediately.
+- **Offline (next login):** existing load-on-login loads last 50 rows from `notifications` — DB-inserted notifications are automatically included, no extra code needed.
+
+**Action required: run `supabase-feed-notification-triggers.sql`** in Supabase SQL Editor.
+
+---
+
+## Session 19 Changes (2026-03-17)
+
+### 13. Dashboard blank on login until tab switch — fixed
+
+**Root cause:** `DashboardPage` was mounted (with `display: none`) while `page` was still `"home"`. The browser never painted the widgets. When the user switched tabs and back, the browser triggered a repaint and the widgets appeared.
+
+**Fix — `dashboardEverMounted` render-phase guard:**
+- Added `const dashboardEverMounted = useRef(false);` in `App`.
+- Inline (render phase, before `return (`): `if (user && ["dashboard","customize"].includes(page)) dashboardEverMounted.current = true;`
+- JSX: `{user && dashboardEverMounted.current && <div style={{ display: [...].includes(page) ? "block" : "none" }}><DashboardPage .../></div>}`
+- This ensures `DashboardPage` only ever **first mounts** when it will be visible (`display: block`), so the browser paints it correctly. Once mounted it stays mounted (CSS `display:none/block`) to preserve widget state.
+- **Key lesson**: Setting a ref inside `useEffect` runs *after* render — JSX conditions reading that ref won't see it in the same render. The assignment must be in the render phase (function body, before `return`).
+
+### 14. Goals / reading list / habit tracker / podcast picks / exercise log not saving cross-browser — fixed
+
+**Root cause:** These 5 widgets use "lifted state" — their data lives in `DashboardPage` state (`readingItems`, `goals`, `habits`, `pods`, `exerciseChecked`) passed down via `getLiveData()`. The raw `setState` setters were returned directly; they update React state and `localStorage` but never called `onDataChange`, so Supabase (`widget_configs`) was never written. Opening a new browser had no data to load.
+
+**Fix — `getLiveData` rewrite with `saveToDb` wrapper:**
+Each lifted-state entry in `getLiveData` now wraps its setter with a `saveToDb` call that upserts to `widget_configs`:
+```js
+const saveToDb = (widgetId, data) => {
+  if (!user?.id) return;
+  supabase.from('widget_configs')
+    .upsert({ user_id: user.id, widget_id: widgetId, data, updated_at: new Date().toISOString() },
+             { onConflict: 'user_id,widget_id', ignoreDuplicates: false })
+    .then(({ error }) => { if (error) console.warn('[Nook] lifted-state save error', widgetId, error); });
+};
+```
+Affected widget IDs: `"reading"`, `"goals"`, `"habitstreak"`, `"podcast"`, `"exercise"`.
+
+### 15. Saved links / bookmarks open `localhost:5173/google.ie` — fixed
+
+**Root cause:** `ensureHttps(url)` was applied when *saving* new links (session 17) but not when *rendering* existing ones. Bare URLs like `google.ie` in an `<a href>` are treated as relative paths by the browser → `localhost:5173/google.ie`.
+
+**Fix:** Applied `ensureHttps()` at render time on every `<a href>`:
+- `LinksWidget` (~line 698): `href={ensureHttps(l.url)}`
+- `BookmarksWidget` (~lines 2643, 2768, 2798): `href={ensureHttps(bm.url)}`
+
+### 16. Profile photo not saved cross-device — fixed
+
+**Root cause:** `profilePic` was only persisted to `localStorage` (`nook_state`). A new device/browser had no photo.
+
+**Fix:**
+- Load: added `'profile_pic'` to the `user_data` Supabase query in the auth load effect. When found, sets `profilePic` state and writes to `localStorage`.
+- Save: added a `useEffect` on `[profilePic, user?.id]` that upserts `{ key: 'profile_pic', value: { data: profilePic } }` to `user_data` table.
+
+### 17. Exercise log shows different data in public view — fixed
+
+Resolved automatically by fix #14 (session 19). Once the exercise widget saves to `widget_configs` via `saveToDb`, the `PublicProfilePage` (which reads `widget_configs`) shows the correct data.
+
+### 18. Blog posts stuck as draft — no way to publish — fixed
+
+**Root cause:** The Publish toggle was only accessible inside the edit modal. Users had to click Edit, toggle published, then save — not discoverable.
+
+**Fix:** Added Publish / Unpublish buttons directly in the **view mode** of `BlogPostModal` (visible to the post owner only):
+- "✓ Publish" button: calls `onSave({ ...post, published: true })` inline
+- "← Unpublish" button: calls `onSave({ ...post, published: false })` inline
+- Existing Edit / Delete buttons remain unchanged
+
+---
+
 ## SQL Files in Project Root
 
 | File | Status | Purpose |
@@ -938,6 +1181,9 @@ Fixed: was using `convo.conversation_members?.length` (nested array no longer pr
 | `supabase-bio-links-public-read.sql` | **Pending** | Adds SELECT policy on `user_data` for `key = 'bio_links'` — required for bio links/email to appear on public profiles |
 | `supabase-calendar-contributions-v2.sql` | **Pending** | Creates `calendar_contributions` table with RLS policies for shared calendar events (session 14) |
 | `supabase-notifications.sql` | **Pending** | Creates `notifications` table with RLS — required for bell-icon notifications to persist across refreshes (session 16) |
+| `supabase-feed-events.sql` | **Applied** | Adds `posts`, `likes`, `comments` to `supabase_realtime` publication + adds `content`/`image_url` columns to `posts`. Confirmed applied — all three tables already in publication. |
+| `supabase-feed-notification-triggers.sql` | **Applied** | Creates DB triggers on `likes` and `comments` that insert into `notifications` table. Also adds `notifications` to Realtime publication. (session 20) |
+| `supabase-notification-source-id.sql` | **Applied** | Adds `source_id TEXT` column to `notifications`; updates `notify_on_like` and `notify_on_comment` trigger functions to populate it with the post ID. Required for notification click → post detail modal. (session 21) |
 
 ---
 
@@ -958,9 +1204,10 @@ Fixed: was using `convo.conversation_members?.length` (nested array no longer pr
 - **`lastSeen`, `widgets`, `posts` counts** in admin Users table: no data source in schema; currently show blank/zero for real users. Decide whether to track these.
 - **Action required — run `supabase-notifications.sql`** to create the `notifications` table + RLS. Until this is run, the bell icon will load no past notifications and `addNotif` inserts will silently fail.
 - **New follower notification** — code is fixed (session 12 second pass). **Action required: run `supabase-follows-realtime.sql`** in Supabase SQL Editor to add `follows` to the Realtime publication. Without this one SQL line, `postgres_changes` on `follows` will never fire.
+- **Feed like/comment notifications** — DB triggers + notifications subscription added (session 20, #51). **Action required: run `supabase-feed-notification-triggers.sql`** in Supabase SQL Editor. This creates the server-side triggers and adds `notifications` to Realtime. Without this, like/comment notifications will not appear.
 - ~~**In-session notifications only**~~ **FIXED (session 16)** — see #48 above. Notifications now persist to Supabase and survive refresh.
 - ~~**Note auto-focus after create — STILL UNRESOLVED**~~ **FIXED (session 16)** — see #50 above. `editorKey` + native `autoFocus` bypasses StrictMode entirely.
-- **Public profile page widget data**: `PublicProfilePage` reads widget data from the `data` column of `widget_configs`. Widget configs are now auto-saved to Supabase on dashboard load if missing, but the `data` field (widget content) is only saved via `onDataChange` (triggered by user edits). If a user has never edited a widget's content, `data` will be null and the widget renders empty on their public profile.
+- **Public profile page widget data**: `PublicProfilePage` reads widget data from the `data` column of `widget_configs`. Widget configs are now auto-saved to Supabase on dashboard load if missing, but the `data` field (widget content) is only saved via `onDataChange` (triggered by user edits). If a user has never edited a widget's content, `data` will be null and the widget renders empty on their public profile. Note: goals, reading list, habit tracker, podcast picks, and exercise log now save via the `saveToDb` wrapper in `getLiveData` (session 19 fix #14).
 - **Action required — run `supabase-widget-configs-fix.sql`** for public profiles to show widgets (RLS fix).
 - **Action required — run `supabase-bio-links-public-read.sql`** for bio links/email to appear on public profiles.
 - **Action required — run `supabase-calendar-contributions-v2.sql`** for shared calendar events to work (session 14).

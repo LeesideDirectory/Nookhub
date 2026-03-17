@@ -51,7 +51,7 @@ export function useFeed() {
         const { data: followData } = await supabase
           .from('follows').select('following_id').eq('follower_id', user.id)
         const ids = (followData || []).map(f => f.following_id)
-        ids.push(user.id)
+        // Do NOT include the current user's own posts in the following feed
         userIdsFilter = ids
       }
 
@@ -74,6 +74,9 @@ export function useFeed() {
         query = query.in('user_id', userIdsFilter.length > 0
           ? userIdsFilter
           : ['00000000-0000-0000-0000-000000000000'])
+      } else if (user) {
+        // 'all' filter: exclude the current user's own posts
+        query = query.neq('user_id', user.id)
       }
 
       const { data, error: fetchError } = await query

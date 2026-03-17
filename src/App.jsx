@@ -164,7 +164,7 @@ const HandleBadge = ({ handle, style = {} }) => {
   );
 };
 
-const Nav = ({ page, onNavigate, onLogout, unreadCount, isLoggedIn, isAdmin, me, profilePic, following, unreadNotifs, showNotifs, setShowNotifs, notifications, onMarkRead, onMarkAllRead, onOpenProfile, accent = "#C9B8F0" }) => {
+const Nav = ({ page, onNavigate, onLogout, unreadCount, isLoggedIn, isAdmin, me, profilePic, following, unreadNotifs, showNotifs, setShowNotifs, notifications, onMarkRead, onMarkAllRead, onOpenProfile, onOpenPost, accent = "#C9B8F0" }) => {
   const accentLight = accent + "33";
   const [menuOpen, setMenuOpen] = useState(false);
   const close = () => setMenuOpen(false);
@@ -195,7 +195,7 @@ const Nav = ({ page, onNavigate, onLogout, unreadCount, isLoggedIn, isAdmin, me,
                   🔔
                   {unreadNotifs > 0 && <span style={{ position: "absolute", top: -4, right: -4, background: P.rose, borderRadius: "50%", width: 16, height: 16, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: FF_S, fontSize: 9, fontWeight: 700, color: P.ink, border: `2px solid ${P.white}` }}>{unreadNotifs}</span>}
                 </button>
-                {showNotifs && <NotificationsDropdown notifs={notifications} onMarkRead={onMarkRead} onMarkAllRead={onMarkAllRead} onNavigate={onNavigate} onOpenProfile={onOpenProfile} onClose={() => setShowNotifs(false)} />}
+                {showNotifs && <NotificationsDropdown notifs={notifications} onMarkRead={onMarkRead} onMarkAllRead={onMarkAllRead} onNavigate={onNavigate} onOpenProfile={onOpenProfile} onOpenPost={onOpenPost} onClose={() => setShowNotifs(false)} />}
               </div>
               <UserAvatar user={me} size={32} showStatus photoPic={profilePic} />
               <button onClick={() => onNavigate("settings")} title="Settings" style={{ background: page === "settings" ? accent : "transparent", border: `1.5px solid ${page === "settings" ? accent : accent + "44"}`, borderRadius: 10, padding: "6px 10px", cursor: "pointer", fontSize: 14, color: P.inkLight, lineHeight: 1, transition: "all 0.2s" }}>⚙</button>
@@ -219,7 +219,7 @@ const Nav = ({ page, onNavigate, onLogout, unreadCount, isLoggedIn, isAdmin, me,
                   🔔
                   {unreadNotifs > 0 && <span style={{ position: "absolute", top: -2, right: -2, background: P.rose, borderRadius: "50%", width: 14, height: 14, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: FF_S, fontSize: 8, fontWeight: 700, color: P.ink }}>{unreadNotifs}</span>}
                 </button>
-                {showNotifs && <NotificationsDropdown notifs={notifications} onMarkRead={onMarkRead} onMarkAllRead={onMarkAllRead} onNavigate={onNavigate} onOpenProfile={onOpenProfile} onClose={() => setShowNotifs(false)} />}
+                {showNotifs && <NotificationsDropdown notifs={notifications} onMarkRead={onMarkRead} onMarkAllRead={onMarkAllRead} onNavigate={onNavigate} onOpenProfile={onOpenProfile} onOpenPost={onOpenPost} onClose={() => setShowNotifs(false)} />}
               </div>
               <UserAvatar user={me} size={28} photoPic={profilePic} />
             </>
@@ -673,6 +673,12 @@ const MoodWidget = ({ data, color, onDataChange }) => {
   );
 };
 
+const ensureHttps = (url) => {
+  if (!url || url === '#') return url;
+  if (!/^https?:\/\//i.test(url)) return 'https://' + url;
+  return url;
+};
+
 const LinksWidget = ({ data, color, onDataChange }) => {
   const [items, setItems] = useState(data.items || []);
   const [draftTitle, setDraftTitle] = useState("");
@@ -680,7 +686,8 @@ const LinksWidget = ({ data, color, onDataChange }) => {
   const remove = (i) => { const next = items.filter((_, idx) => idx !== i); setItems(next); onDataChange?.({ items: next }); };
   const add = () => {
     if (!draftTitle.trim()) return;
-    const next = [...items, { title: draftTitle.trim(), url: draftUrl.trim() || "#" }];
+    const url = ensureHttps(draftUrl.trim()) || "#";
+    const next = [...items, { title: draftTitle.trim(), url }];
     setItems(next); setDraftTitle(""); setDraftUrl(""); onDataChange?.({ items: next });
   };
   return (
@@ -688,7 +695,7 @@ const LinksWidget = ({ data, color, onDataChange }) => {
       {items.map((l, i) => (
         <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, padding: "7px 10px", borderRadius: 10, marginBottom: 6, background: color.accent + "55" }}>
           <span style={{ fontSize: 14, flexShrink: 0 }}>🔗</span>
-          <a href={l.url} target="_blank" rel="noreferrer" style={{ flex: 1, fontFamily: FF_S, fontSize: 13.5, color: P.ink, textDecoration: "none", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{l.title}</a>
+          <a href={ensureHttps(l.url)} target="_blank" rel="noreferrer" style={{ flex: 1, fontFamily: FF_S, fontSize: 13.5, color: P.ink, textDecoration: "none", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{l.title}</a>
           <button onClick={() => remove(i)} style={delBtn(color)}>×</button>
         </div>
       ))}
@@ -988,6 +995,8 @@ const InstagramWidget = ({ data, color, onDataChange }) => {
   );
 };
 
+const SPORT_EMOJIS = ["🏃","🚴","🏊","🏋️","⚽","🏀","🎾","🏈","⚾","🏒","🥊","🤸","🧘","🏄","🚵","🎿","🏇","🤾","🏌️","🥋","🤼","🎯","🏹","🧗","🚣","🤽","🏑","🏓","🏸","🥅","🎱","🛹"];
+
 const SportsWidget = ({ data, color, onDataChange }) => {
   const [activities, setActivities] = useState(data.activities || []);
   const [activeId, setActiveId] = useState(data.activities[0]?.id);
@@ -995,6 +1004,11 @@ const SportsWidget = ({ data, color, onDataChange }) => {
   const [newSession, setNewSession] = useState({ date: new Date().toISOString().slice(0, 10), time: "", value: "", note: "", location: "" });
   const [newActivity, setNewActivity] = useState({ type: "", icon: "🏃", unit: "km" });
   const [addingActivity, setAddingActivity] = useState(false);
+  const [showNewEmojiPicker, setShowNewEmojiPicker] = useState(false);
+  // Edit sport state
+  const [editingActivityId, setEditingActivityId] = useState(null);
+  const [editDraft, setEditDraft] = useState({ type: "", icon: "🏃", unit: "km" });
+  const [showEditEmojiPicker, setShowEditEmojiPicker] = useState(false);
 
   const active = activities.find(a => a.id === activeId);
   const isSurfing = active?.type?.toLowerCase() === "surfing";
@@ -1017,6 +1031,26 @@ const SportsWidget = ({ data, color, onDataChange }) => {
     setActivities(next); setActiveId(id); onDataChange?.({ activities: next });
     setNewActivity({ type: "", icon: "🏃", unit: "km" });
     setAddingActivity(false);
+    setShowNewEmojiPicker(false);
+  };
+  const startEditActivity = (a) => {
+    setEditingActivityId(a.id);
+    setEditDraft({ type: a.type, icon: a.icon, unit: a.unit });
+    setShowEditEmojiPicker(false);
+  };
+  const saveEditActivity = () => {
+    if (!editDraft.type.trim()) return;
+    const next = activities.map(a => a.id === editingActivityId ? { ...a, ...editDraft } : a);
+    setActivities(next); onDataChange?.({ activities: next });
+    setEditingActivityId(null);
+    setShowEditEmojiPicker(false);
+  };
+  const deleteActivity = (id) => {
+    const next = activities.filter(a => a.id !== id);
+    setActivities(next);
+    if (activeId === id) setActiveId(next[0]?.id);
+    onDataChange?.({ activities: next });
+    setEditingActivityId(null);
   };
 
   const inpS = { border: `1.5px solid ${color.accent}`, borderRadius: 8, padding: "5px 8px", fontFamily: FF_S, fontSize: 13, background: color.bg, color: P.ink, outline: "none" };
@@ -1026,19 +1060,54 @@ const SportsWidget = ({ data, color, onDataChange }) => {
       {/* Activity tabs */}
       <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 14 }}>
         {activities.map(a => (
-          <button key={a.id} onClick={() => setActiveId(a.id)} style={{ background: activeId === a.id ? color.dot : color.accent, color: activeId === a.id ? "#fff" : P.ink, border: "none", borderRadius: 20, padding: "4px 12px", cursor: "pointer", fontFamily: FF_S, fontSize: 12, fontWeight: activeId === a.id ? 600 : 400 }}>
-            {a.icon} {a.type}
-          </button>
+          <div key={a.id} style={{ position: "relative", display: "flex", alignItems: "center" }}>
+            <button onClick={() => { setActiveId(a.id); setEditingActivityId(null); }} style={{ background: activeId === a.id ? color.dot : color.accent, color: activeId === a.id ? "#fff" : P.ink, border: "none", borderRadius: 20, padding: "4px 12px", cursor: "pointer", fontFamily: FF_S, fontSize: 12, fontWeight: activeId === a.id ? 600 : 400 }}>
+              {a.icon} {a.type}
+            </button>
+            <button onClick={e => { e.stopPropagation(); startEditActivity(a); setActiveId(a.id); }} title="Edit sport" style={{ background: "none", border: "none", cursor: "pointer", fontSize: 10, color: activeId === a.id ? "#fff" : P.inkFaint, padding: "0 4px 0 0", marginLeft: -4, lineHeight: 1 }}>✎</button>
+          </div>
         ))}
         <button onClick={() => setAddingActivity(v => !v)} style={{ background: "none", border: `1.5px dashed ${color.dot}66`, borderRadius: 20, padding: "4px 10px", cursor: "pointer", fontSize: 12, color: P.inkFaint }}>+</button>
       </div>
 
+      {/* Edit existing activity form */}
+      {editingActivityId && (
+        <div style={{ background: color.accent + "55", borderRadius: 12, padding: "10px 12px", marginBottom: 12 }}>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center", marginBottom: 6 }}>
+            <div style={{ position: "relative" }}>
+              <button onClick={() => setShowEditEmojiPicker(v => !v)} style={{ ...inpS, width: 40, textAlign: "center", fontSize: 16, cursor: "pointer", padding: "5px" }}>{editDraft.icon}</button>
+              {showEditEmojiPicker && (
+                <div style={{ position: "absolute", top: "100%", left: 0, zIndex: 50, background: P.white, border: `1.5px solid ${color.accent}`, borderRadius: 12, padding: 8, display: "flex", flexWrap: "wrap", gap: 4, width: 220, boxShadow: "0 4px 16px rgba(61,53,80,0.15)" }}>
+                  {SPORT_EMOJIS.map(em => <span key={em} onClick={() => { setEditDraft(d => ({ ...d, icon: em })); setShowEditEmojiPicker(false); }} style={{ fontSize: 18, cursor: "pointer", padding: 3, borderRadius: 6, background: editDraft.icon === em ? color.accent : "transparent" }}>{em}</span>)}
+                </div>
+              )}
+            </div>
+            <input value={editDraft.type} onChange={e => setEditDraft(d => ({ ...d, type: e.target.value }))} placeholder="Activity name" style={{ ...inpS, flex: 1 }} />
+            <input value={editDraft.unit} onChange={e => setEditDraft(d => ({ ...d, unit: e.target.value }))} placeholder="unit" style={{ ...inpS, width: 48 }} />
+          </div>
+          <div style={{ display: "flex", gap: 6 }}>
+            <button onClick={saveEditActivity} style={{ flex: 1, background: color.dot, color: "#fff", border: "none", borderRadius: 8, padding: "5px 12px", cursor: "pointer", fontSize: 13, fontWeight: 600 }}>Save</button>
+            <button onClick={() => deleteActivity(editingActivityId)} style={{ background: "#F0B8C844", color: "#D8708A", border: "none", borderRadius: 8, padding: "5px 12px", cursor: "pointer", fontSize: 13, fontWeight: 600 }}>Delete sport</button>
+            <button onClick={() => { setEditingActivityId(null); setShowEditEmojiPicker(false); }} style={{ background: color.accent, border: "none", borderRadius: 8, padding: "5px 10px", cursor: "pointer", fontSize: 13 }}>✕</button>
+          </div>
+        </div>
+      )}
+
       {addingActivity && (
-        <div style={{ background: color.accent + "55", borderRadius: 12, padding: "10px 12px", marginBottom: 12, display: "flex", gap: 6, flexWrap: "wrap" }}>
-          <input value={newActivity.icon} onChange={e => setNewActivity(a => ({ ...a, icon: e.target.value }))} style={{ ...inpS, width: 40, textAlign: "center", fontSize: 14 }} />
-          <input value={newActivity.type} onChange={e => setNewActivity(a => ({ ...a, type: e.target.value }))} placeholder="Activity name" style={{ ...inpS, flex: 1 }} />
-          <input value={newActivity.unit} onChange={e => setNewActivity(a => ({ ...a, unit: e.target.value }))} placeholder="unit" style={{ ...inpS, width: 48 }} />
-          <button onClick={addActivity} style={{ background: color.dot, color: "#fff", border: "none", borderRadius: 8, padding: "4px 12px", cursor: "pointer", fontSize: 13, fontWeight: 600 }}>Add</button>
+        <div style={{ background: color.accent + "55", borderRadius: 12, padding: "10px 12px", marginBottom: 12 }}>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center", marginBottom: 6 }}>
+            <div style={{ position: "relative" }}>
+              <button onClick={() => setShowNewEmojiPicker(v => !v)} style={{ ...inpS, width: 40, textAlign: "center", fontSize: 16, cursor: "pointer", padding: "5px" }}>{newActivity.icon}</button>
+              {showNewEmojiPicker && (
+                <div style={{ position: "absolute", top: "100%", left: 0, zIndex: 50, background: P.white, border: `1.5px solid ${color.accent}`, borderRadius: 12, padding: 8, display: "flex", flexWrap: "wrap", gap: 4, width: 220, boxShadow: "0 4px 16px rgba(61,53,80,0.15)" }}>
+                  {SPORT_EMOJIS.map(em => <span key={em} onClick={() => { setNewActivity(a => ({ ...a, icon: em })); setShowNewEmojiPicker(false); }} style={{ fontSize: 18, cursor: "pointer", padding: 3, borderRadius: 6, background: newActivity.icon === em ? color.accent : "transparent" }}>{em}</span>)}
+                </div>
+              )}
+            </div>
+            <input value={newActivity.type} onChange={e => setNewActivity(a => ({ ...a, type: e.target.value }))} placeholder="Activity name" style={{ ...inpS, flex: 1 }} />
+            <input value={newActivity.unit} onChange={e => setNewActivity(a => ({ ...a, unit: e.target.value }))} placeholder="unit" style={{ ...inpS, width: 48 }} />
+          </div>
+          <button onClick={addActivity} style={{ background: color.dot, color: "#fff", border: "none", borderRadius: 8, padding: "5px 12px", cursor: "pointer", fontSize: 13, fontWeight: 600 }}>Add sport</button>
         </div>
       )}
 
@@ -1867,17 +1936,10 @@ const ExerciseWidget = ({ data, color, checked: extChecked, setChecked: extSetCh
   const yearStart = new Date(today.getFullYear(), 0, 1);
 
   const [localChecked, localSetChecked] = useState(() => {
-    const s = new Set(data?.days || []);
-    if (s.size === 0) {
-      const d = new Date(yearStart);
-      let i = 0;
-      while (d <= today) {
-        if (i % 7 !== 2 && i % 7 !== 5) s.add(d.toISOString().slice(0, 10));
-        d.setDate(d.getDate() + 1);
-        i++;
-      }
-    }
-    return s;
+    // data.checked is the key used by saveToDb (cross-device save).
+    // data.days is the legacy key from the original INITIAL_WIDGETS default.
+    const savedDays = data?.checked ?? data?.days ?? [];
+    return new Set(savedDays);
   });
 
   const checked    = extChecked    ?? localChecked;
@@ -1974,9 +2036,11 @@ const ExerciseWidget = ({ data, color, checked: extChecked, setChecked: extSetCh
                         ? color.accent + "33"
                         : isDone
                           ? color.dot
-                          : color.accent + "88",
+                          : isToday
+                            ? color.accent + "cc"
+                            : color.accent + "88",
                       cursor: isFuture ? "default" : "pointer",
-                      boxShadow: isToday ? `0 0 0 1.5px ${color.dot}` : "none",
+                      boxShadow: isToday && !isDone ? `0 0 0 1px rgba(0,0,0,0.25)` : "none",
                       transition: "background 0.15s, transform 0.1s",
                       transform: "scale(1)",
                     }}
@@ -2028,15 +2092,14 @@ const GALLERY_SEED = [
   { id: "g3", mediaType: "image", mediaSrc: null, caption: "Morning light through the kitchen window. Some days just start right ☀️",  tags: [],       link: "",                     linkLabel: "", ts: Date.now() - 86400000 * 9, color: "#C9B8F0" },
 ];
 
-const GalleryPostModal = ({ post, onClose, onUpdate, onDelete, isOwner, color, authorName }) => {
+const GalleryPostModal = ({ post, onClose, onUpdate, onDelete, isOwner, color, authorName, allUserHandles = [] }) => {
   const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState({ caption: post.caption, tags: post.tags.join(" "), link: post.link, linkLabel: post.linkLabel });
+  const [draft, setDraft] = useState({ caption: post.caption, tags: (post.tags || []).join(" ") });
   const [copied, setCopied] = useState(false);
-  const allUsers = ["@margot","@cleo","@soren","@iris","@felix","@ada","@theo"];
 
   const save = () => {
     const tags = draft.tags.split(/[\s,]+/).filter(t => t.startsWith("@") && t.length > 1);
-    onUpdate({ ...post, caption: draft.caption, tags, link: draft.link, linkLabel: draft.linkLabel });
+    onUpdate({ ...post, caption: draft.caption, tags });
     setEditing(false);
   };
   const copyLink = () => { setCopied(true); setTimeout(() => setCopied(false), 2000); };
@@ -2080,23 +2143,27 @@ const GalleryPostModal = ({ post, onClose, onUpdate, onDelete, isOwner, color, a
                   <textarea value={draft.caption} onChange={e => setDraft(d => ({ ...d, caption: e.target.value }))} rows={4} style={{ width: "100%", border: `1.5px solid ${P.lavender}`, borderRadius: 12, padding: "10px 12px", fontFamily: FF_S, fontSize: 14, background: P.lavenderLight, color: P.ink, outline: "none", resize: "none", boxSizing: "border-box", lineHeight: 1.6 }} />
                 </div>
                 <div>
-                  <label style={{ display: "block", fontFamily: FF_S, fontSize: 11, color: P.inkFaint, fontWeight: 600, marginBottom: 4 }}>Tag users <span style={{ fontWeight: 400 }}>(space-separated, e.g. @cleo @soren)</span></label>
+                  <label style={{ display: "block", fontFamily: FF_S, fontSize: 11, color: P.inkFaint, fontWeight: 600, marginBottom: 4 }}>Tag users <span style={{ fontWeight: 400 }}>(space-separated @handles)</span></label>
                   <input value={draft.tags} onChange={e => setDraft(d => ({ ...d, tags: e.target.value }))} placeholder="@username @another" style={{ width: "100%", border: `1.5px solid ${P.lavender}`, borderRadius: 10, padding: "8px 12px", fontFamily: FF_S, fontSize: 13, background: P.lavenderLight, color: P.ink, outline: "none", boxSizing: "border-box" }} />
-                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 6 }}>
-                    {allUsers.filter(u => !draft.tags.includes(u)).map(u => (
-                      <span key={u} onClick={() => setDraft(d => ({ ...d, tags: (d.tags + " " + u).trim() }))} style={{ background: P.lavenderLight, border: `1px solid ${P.lavender}`, borderRadius: 20, padding: "2px 10px", fontFamily: FF_S, fontSize: 11, color: "#9B85D8", cursor: "pointer" }}>{u}</span>
-                    ))}
-                  </div>
-                </div>
-                <div style={{ display: "flex", gap: 8 }}>
-                  <div style={{ flex: 1 }}>
-                    <label style={{ display: "block", fontFamily: FF_S, fontSize: 11, color: P.inkFaint, fontWeight: 600, marginBottom: 4 }}>Link URL</label>
-                    <input value={draft.link} onChange={e => setDraft(d => ({ ...d, link: e.target.value }))} placeholder="https://…" style={{ width: "100%", border: `1.5px solid ${P.lavender}`, borderRadius: 10, padding: "8px 12px", fontFamily: FF_S, fontSize: 13, background: P.lavenderLight, color: P.ink, outline: "none", boxSizing: "border-box" }} />
-                  </div>
-                  <div style={{ flex: 1 }}>
-                    <label style={{ display: "block", fontFamily: FF_S, fontSize: 11, color: P.inkFaint, fontWeight: 600, marginBottom: 4 }}>Link label</label>
-                    <input value={draft.linkLabel} onChange={e => setDraft(d => ({ ...d, linkLabel: e.target.value }))} placeholder="e.g. View project" style={{ width: "100%", border: `1.5px solid ${P.lavender}`, borderRadius: 10, padding: "8px 12px", fontFamily: FF_S, fontSize: 13, background: P.lavenderLight, color: P.ink, outline: "none", boxSizing: "border-box" }} />
-                  </div>
+                  {allUserHandles.length > 0 && (() => {
+                    const currentWord = draft.tags.split(/\s+/).filter(Boolean).pop() || '';
+                    const searchFilter = currentWord.replace(/^@/, '').toLowerCase();
+                    const alreadyAdded = (draft.tags.match(/@[\w.]+/g) || []).map(t => t.toLowerCase());
+                    const suggestions = allUserHandles
+                      .filter(u => !alreadyAdded.includes(u.toLowerCase()))
+                      .filter(u => !searchFilter || u.toLowerCase().includes(searchFilter))
+                      .slice(0, 12);
+                    return suggestions.length > 0 ? (
+                      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 6 }}>
+                        {suggestions.map(u => (
+                          <span key={u} onClick={() => {
+                            const base = draft.tags.replace(/\S*$/, '').trimEnd();
+                            setDraft(d => ({ ...d, tags: (base + (base ? ' ' : '') + u).trim() }));
+                          }} style={{ background: P.lavenderLight, border: `1px solid ${P.lavender}`, borderRadius: 20, padding: "2px 10px", fontFamily: FF_S, fontSize: 11, color: "#9B85D8", cursor: "pointer" }}>{u}</span>
+                        ))}
+                      </div>
+                    ) : null;
+                  })()}
                 </div>
                 <div style={{ display: "flex", gap: 8 }}>
                   <button onClick={save} style={{ flex: 1, background: P.lavender, color: P.ink, border: "none", borderRadius: 12, padding: "10px", cursor: "pointer", fontFamily: FF_S, fontSize: 13, fontWeight: 600 }}>Save</button>
@@ -2110,20 +2177,15 @@ const GalleryPostModal = ({ post, onClose, onUpdate, onDelete, isOwner, color, a
                   {post.caption || <span style={{ color: P.inkFaint, fontStyle: "italic" }}>No caption</span>}
                 </p>
 
-                {/* Tags */}
-                {post.tags.length > 0 && (
+                {/* Tags — clickable to visit profile */}
+                {post.tags && post.tags.length > 0 && (
                   <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 14 }}>
                     {post.tags.map(t => (
-                      <span key={t} style={{ background: P.lavenderLight, borderRadius: 20, padding: "3px 12px", fontFamily: FF_S, fontSize: 12, color: "#9B85D8", fontWeight: 600 }}>{t}</span>
+                      <span key={t} style={{ background: P.lavenderLight, borderRadius: 20, padding: "3px 12px", fontFamily: FF_S, fontSize: 12, fontWeight: 600 }}>
+                        <HandleBadge handle={t} />
+                      </span>
                     ))}
                   </div>
-                )}
-
-                {/* Link */}
-                {post.link && (
-                  <a href={post.link} target="_blank" rel="noreferrer" style={{ display: "inline-flex", alignItems: "center", gap: 6, background: color.accent, borderRadius: 10, padding: "8px 14px", fontFamily: FF_S, fontSize: 13, color: color.dot, fontWeight: 600, textDecoration: "none", marginBottom: 14 }}>
-                    🔗 {post.linkLabel || post.link}
-                  </a>
                 )}
               </>
             )}
@@ -2150,12 +2212,24 @@ const GalleryPostModal = ({ post, onClose, onUpdate, onDelete, isOwner, color, a
 };
 
 const GalleryWidget = ({ data, color, isOwnDashboard, onDataChange, authorName }) => {
-  const [posts, setPosts] = useState(() => data.posts?.length > 0 ? data.posts : GALLERY_SEED);
+  const [posts, setPosts] = useState(data.posts || []);
   const [activePost, setActivePost] = useState(null);
   const [adding, setAdding] = useState(false);
-  const [draft, setDraft] = useState({ caption: "", tags: "", link: "", linkLabel: "", mediaSrc: null, mediaType: "image" });
+  const [draft, setDraft] = useState({ caption: "", tags: "", mediaSrc: null, mediaType: "image" });
   const fileRef = useRef(null);
-  const allUsers = ["@cleo","@soren","@iris","@felix","@ada","@theo"];
+  const [realUsers, setRealUsers] = useState([]);
+  // Load real user handles for tagging
+  useEffect(() => {
+    supabase.from('profiles').select('id, name, handle').then(({ data: profiles }) => {
+      if (profiles) {
+        setRealUsers(profiles.map(p => {
+          const h = p.handle || ('@' + (p.name || '').toLowerCase().replace(/\s+/g, ''));
+          return { id: p.id, handle: h.startsWith('@') ? h : '@' + h };
+        }).filter(u => u.handle.length > 1));
+      }
+    });
+  }, []);
+  const allUserHandles = realUsers.map(u => u.handle);
   const savePosts = (next) => { setPosts(next); onDataChange?.({ posts: next }); };
   const updatePost = (updated) => savePosts(posts.map(p => p.id === updated.id ? updated : p));
   const deletePost = (id) => savePosts(posts.filter(p => p.id !== id));
@@ -2171,8 +2245,8 @@ const GalleryWidget = ({ data, color, isOwnDashboard, onDataChange, authorName }
   const addPost = () => {
     const tags = draft.tags.split(/[\s,]+/).filter(t => t.startsWith("@") && t.length > 1);
     const COLORS = ["#F8CEBA","#B4E8D8","#C9B8F0","#B8D8F0","#F0B8C8","#F5E8B0"];
-    savePosts([{ id: `g${Date.now()}`, mediaType: draft.mediaType, mediaSrc: draft.mediaSrc, caption: draft.caption, tags, link: draft.link, linkLabel: draft.linkLabel, ts: Date.now(), color: COLORS[posts.length % COLORS.length] }, ...posts]);
-    setDraft({ caption: "", tags: "", link: "", linkLabel: "", mediaSrc: null, mediaType: "image" });
+    savePosts([{ id: `g${Date.now()}`, mediaType: draft.mediaType, mediaSrc: draft.mediaSrc, caption: draft.caption, tags, ts: Date.now(), color: COLORS[posts.length % COLORS.length] }, ...posts]);
+    setDraft({ caption: "", tags: "", mediaSrc: null, mediaType: "image" });
     setAdding(false);
   };
 
@@ -2236,23 +2310,31 @@ const GalleryWidget = ({ data, color, isOwnDashboard, onDataChange, authorName }
 
           {/* Tags */}
           <div style={{ marginBottom: 10 }}>
-            <input value={draft.tags} onChange={e => setDraft(d => ({ ...d, tags: e.target.value }))} placeholder="Tag people  e.g. @cleo @soren" style={{ width: "100%", border: `1.5px solid ${color.accent}`, borderRadius: 10, padding: "8px 12px", fontFamily: FF_S, fontSize: 13, background: color.bg, color: P.ink, outline: "none", boxSizing: "border-box", marginBottom: 6 }} />
-            <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
-              {allUsers.filter(u => !draft.tags.includes(u)).map(u => (
-                <span key={u} onClick={() => setDraft(d => ({ ...d, tags: (d.tags + " " + u).trim() }))} style={{ background: color.bg, border: `1px solid ${color.dot}55`, borderRadius: 20, padding: "2px 10px", fontFamily: FF_S, fontSize: 11, color: color.dot, cursor: "pointer" }}>{u}</span>
-              ))}
-            </div>
-          </div>
-
-          {/* Link */}
-          <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
-            <input value={draft.link} onChange={e => setDraft(d => ({ ...d, link: e.target.value }))} placeholder="Link URL (optional)" style={{ flex: 2, border: `1.5px solid ${color.accent}`, borderRadius: 10, padding: "8px 12px", fontFamily: FF_S, fontSize: 13, background: color.bg, color: P.ink, outline: "none" }} />
-            <input value={draft.linkLabel} onChange={e => setDraft(d => ({ ...d, linkLabel: e.target.value }))} placeholder="Label" style={{ flex: 1, border: `1.5px solid ${color.accent}`, borderRadius: 10, padding: "8px 12px", fontFamily: FF_S, fontSize: 13, background: color.bg, color: P.ink, outline: "none" }} />
+            <input value={draft.tags} onChange={e => setDraft(d => ({ ...d, tags: e.target.value }))} placeholder="Tag people  e.g. @username" style={{ width: "100%", border: `1.5px solid ${color.accent}`, borderRadius: 10, padding: "8px 12px", fontFamily: FF_S, fontSize: 13, background: color.bg, color: P.ink, outline: "none", boxSizing: "border-box", marginBottom: 6 }} />
+            {(() => {
+              const currentWord = draft.tags.split(/\s+/).filter(Boolean).pop() || '';
+              const searchFilter = currentWord.replace(/^@/, '').toLowerCase();
+              const alreadyAdded = (draft.tags.match(/@[\w.]+/g) || []).map(t => t.toLowerCase());
+              const suggestions = allUserHandles
+                .filter(u => !alreadyAdded.includes(u.toLowerCase()))
+                .filter(u => !searchFilter || u.toLowerCase().includes(searchFilter))
+                .slice(0, 12);
+              return suggestions.length > 0 ? (
+                <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
+                  {suggestions.map(u => (
+                    <span key={u} onClick={() => {
+                      const base = draft.tags.replace(/\S*$/, '').trimEnd();
+                      setDraft(d => ({ ...d, tags: (base + (base ? ' ' : '') + u).trim() }));
+                    }} style={{ background: color.bg, border: `1px solid ${color.dot}55`, borderRadius: 20, padding: "2px 10px", fontFamily: FF_S, fontSize: 11, color: color.dot, cursor: "pointer" }}>{u}</span>
+                  ))}
+                </div>
+              ) : null;
+            })()}
           </div>
 
           <div style={{ display: "flex", gap: 8 }}>
             <button onClick={addPost} style={{ flex: 1, background: color.dot, color: "#fff", border: "none", borderRadius: 12, padding: "10px", cursor: "pointer", fontFamily: FF_S, fontWeight: 600, fontSize: 13 }}>Post</button>
-            <button onClick={() => { setAdding(false); setDraft({ caption: "", tags: "", link: "", linkLabel: "", mediaSrc: null, mediaType: "image" }); }} style={{ background: color.accent, border: "none", borderRadius: 12, padding: "10px 16px", cursor: "pointer", fontFamily: FF_S, fontSize: 13, color: P.ink }}>✕</button>
+            <button onClick={() => { setAdding(false); setDraft({ caption: "", tags: "", mediaSrc: null, mediaType: "image" }); }} style={{ background: color.accent, border: "none", borderRadius: 12, padding: "10px 16px", cursor: "pointer", fontFamily: FF_S, fontSize: 13, color: P.ink }}>✕</button>
           </div>
         </div>
       )}
@@ -2272,6 +2354,7 @@ const GalleryWidget = ({ data, color, isOwnDashboard, onDataChange, authorName }
           onUpdate={(updated) => { updatePost(updated); setActivePost(updated); }}
           onDelete={(id) => { deletePost(id); setActivePost(null); }}
           authorName={authorName}
+          allUserHandles={allUserHandles}
         />
       )}
     </div>
@@ -2413,6 +2496,11 @@ const BlogPostModal = ({ post, onClose, onSave, onDelete, isOwner, color }) => {
               </button>
               {isOwner && (
                 <>
+                  {!post.published ? (
+                    <button onClick={() => onSave({ ...post, published: true })} style={{ background: "#5DCAAA22", border: "1.5px solid #5DCAAA", borderRadius: 10, padding: "7px 14px", cursor: "pointer", fontFamily: FF_S, fontSize: 12, fontWeight: 600, color: "#3BAA80" }}>✓ Publish</button>
+                  ) : (
+                    <button onClick={() => onSave({ ...post, published: false })} style={{ background: P.butterLight, border: `1.5px solid #C8A830`, borderRadius: 10, padding: "7px 14px", cursor: "pointer", fontFamily: FF_S, fontSize: 12, fontWeight: 600, color: "#C8A830" }}>← Unpublish</button>
+                  )}
                   <button onClick={() => setEditing(true)} style={{ background: P.lavenderLight, border: `1.5px solid ${P.lavender}`, borderRadius: 10, padding: "7px 14px", cursor: "pointer", fontFamily: FF_S, fontSize: 12, fontWeight: 600, color: P.inkLight }}>Edit ✎</button>
                   <button onClick={() => { onDelete(post.id); onClose(); }} style={{ background: "#F0B8C833", border: "none", borderRadius: 10, padding: "7px 14px", cursor: "pointer", fontFamily: FF_S, fontSize: 12, fontWeight: 600, color: "#D8708A", marginLeft: "auto" }}>Delete</button>
                 </>
@@ -2573,7 +2661,7 @@ const BookmarkTile = ({ bm, onEdit, onDelete, isOwner, compact }) => {
   return (
     <div style={{ position: "relative", display: "flex", flexDirection: compact ? "row" : "column", alignItems: compact ? "center" : "stretch", gap: compact ? 8 : 0 }}>
       <a
-        href={bm.url}
+        href={ensureHttps(bm.url)}
         target="_blank"
         rel="noreferrer"
         style={{ display: "flex", flexDirection: compact ? "row" : "column", alignItems: "center", gap: compact ? 8 : 6, background: bm.color + (compact ? "55" : "88"), borderRadius: compact ? 10 : 14, padding: compact ? "7px 12px" : "14px 10px", textDecoration: "none", transition: "transform 0.15s, box-shadow 0.15s", flex: 1, minWidth: 0 }}
@@ -2636,7 +2724,7 @@ const BookmarkEditModal = ({ bm, onSave, onClose }) => {
           </div>
         </div>
         <div style={{ display: "flex", gap: 8, marginTop: 22 }}>
-          <button onClick={() => onSave(draft)} style={{ flex: 1, background: P.lavender, color: P.ink, border: "none", borderRadius: 12, padding: "10px", cursor: "pointer", fontFamily: FF_S, fontSize: 13, fontWeight: 600 }}>Save</button>
+          <button onClick={() => onSave({ ...draft, url: ensureHttps(draft.url) || "#" })} style={{ flex: 1, background: P.lavender, color: P.ink, border: "none", borderRadius: 12, padding: "10px", cursor: "pointer", fontFamily: FF_S, fontSize: 13, fontWeight: 600 }}>Save</button>
           <button onClick={onClose} style={{ background: P.lavenderLight, border: "none", borderRadius: 12, padding: "10px 16px", cursor: "pointer", fontFamily: FF_S, fontSize: 13, color: P.inkLight }}>Cancel</button>
         </div>
       </div>
@@ -2663,7 +2751,7 @@ const BookmarksWidget = ({ data, color, isOwnDashboard, onDataChange }) => {
     else { const next = frequent.filter(b => b.id !== id); setFrequent(next); saveAll(daily, next); }
   };
   const addBm = (section, draft) => {
-    const newBm = { id: `bm${Date.now()}`, title: draft.title || "New link", url: draft.url || "#", emoji: draft.emoji || "🔗", color: draft.color || BOOKMARK_COLORS[0] };
+    const newBm = { id: `bm${Date.now()}`, title: draft.title || "New link", url: ensureHttps(draft.url) || "#", emoji: draft.emoji || "🔗", color: draft.color || BOOKMARK_COLORS[0] };
     if (section === "daily") { const next = [...daily, newBm]; setDaily(next); saveAll(next, frequent); }
     else { const next = [...frequent, newBm]; setFrequent(next); saveAll(daily, next); }
     setAddTarget(null);
@@ -2698,7 +2786,7 @@ const BookmarksWidget = ({ data, color, isOwnDashboard, onDataChange }) => {
           <div key={bm.id} style={{ position: "relative" }}
             onMouseEnter={e => { const btns = e.currentTarget.querySelectorAll(".bm-action"); btns.forEach(b => b.style.opacity = "1"); }}
             onMouseLeave={e => { const btns = e.currentTarget.querySelectorAll(".bm-action"); btns.forEach(b => b.style.opacity = "0"); }}>
-            <a href={bm.url} target="_blank" rel="noreferrer" style={{ display: "flex", flexDirection: view === "grid" ? "column" : "row", alignItems: "center", gap: view === "grid" ? 6 : 10, background: bm.color + (view === "grid" ? "88" : "55"), borderRadius: view === "grid" ? 14 : 10, padding: view === "grid" ? "14px 10px" : "8px 12px", textDecoration: "none", transition: "transform 0.15s, box-shadow 0.15s" }}
+            <a href={ensureHttps(bm.url)} target="_blank" rel="noreferrer" style={{ display: "flex", flexDirection: view === "grid" ? "column" : "row", alignItems: "center", gap: view === "grid" ? 6 : 10, background: bm.color + (view === "grid" ? "88" : "55"), borderRadius: view === "grid" ? 14 : 10, padding: view === "grid" ? "14px 10px" : "8px 12px", textDecoration: "none", transition: "transform 0.15s, box-shadow 0.15s" }}
               onMouseEnter={e => { e.currentTarget.style.transform = "translateY(-2px)"; e.currentTarget.style.boxShadow = "0 4px 14px rgba(61,53,80,0.12)"; }}
               onMouseLeave={e => { e.currentTarget.style.transform = "translateY(0)"; e.currentTarget.style.boxShadow = "none"; }}>
               <FaviconIcon url={bm.url} emoji={bm.emoji} size={view === "grid" ? 32 : 22} iconSize={view === "grid" ? 18 : 14} />
@@ -2728,7 +2816,7 @@ const BookmarksWidget = ({ data, color, isOwnDashboard, onDataChange }) => {
           <div key={bm.id} style={{ position: "relative" }}
             onMouseEnter={e => { const btns = e.currentTarget.querySelectorAll(".bm-action"); btns.forEach(b => b.style.opacity = "1"); }}
             onMouseLeave={e => { const btns = e.currentTarget.querySelectorAll(".bm-action"); btns.forEach(b => b.style.opacity = "0"); }}>
-            <a href={bm.url} target="_blank" rel="noreferrer" style={{ display: "flex", flexDirection: view === "grid" ? "column" : "row", alignItems: "center", gap: view === "grid" ? 6 : 10, background: bm.color + (view === "grid" ? "88" : "55"), borderRadius: view === "grid" ? 14 : 10, padding: view === "grid" ? "14px 10px" : "8px 12px", textDecoration: "none", transition: "transform 0.15s, box-shadow 0.15s" }}
+            <a href={ensureHttps(bm.url)} target="_blank" rel="noreferrer" style={{ display: "flex", flexDirection: view === "grid" ? "column" : "row", alignItems: "center", gap: view === "grid" ? 6 : 10, background: bm.color + (view === "grid" ? "88" : "55"), borderRadius: view === "grid" ? 14 : 10, padding: view === "grid" ? "14px 10px" : "8px 12px", textDecoration: "none", transition: "transform 0.15s, box-shadow 0.15s" }}
               onMouseEnter={e => { e.currentTarget.style.transform = "translateY(-2px)"; e.currentTarget.style.boxShadow = "0 4px 14px rgba(61,53,80,0.12)"; }}
               onMouseLeave={e => { e.currentTarget.style.transform = "translateY(0)"; e.currentTarget.style.boxShadow = "none"; }}>
               <FaviconIcon url={bm.url} emoji={bm.emoji} size={view === "grid" ? 32 : 22} iconSize={view === "grid" ? 18 : 14} />
@@ -3336,7 +3424,7 @@ const WidgetToggleCard = ({ w, onToggle }) => {
   );
 };
 
-const DashboardPage = ({ user: userProp, view, onNavigate, profilePic, setProfilePic, widgetRequests, setWidgetRequests, following, toggleFollow}) => {
+const DashboardPage = ({ user: userProp, view, onNavigate, profilePic, setProfilePic, widgetRequests, setWidgetRequests, following, toggleFollow, widgetReloadKey = 0}) => {
   const { user: authUser, profile, updateProfile } = useAuth();
   const user = userProp || authUser;
 
@@ -3360,9 +3448,23 @@ const DashboardPage = ({ user: userProp, view, onNavigate, profilePic, setProfil
     return {};
   })();
 
-  const [widgets, setWidgets] = useState(() =>
-    INITIAL_WIDGETS.map(w => ({ ...w, enabled: false, isPublic: false }))
-  );
+  // Initialize from localStorage immediately so widgets show without waiting for Supabase.
+  // The load effect below will then override with the authoritative Supabase data.
+  const [widgets, setWidgets] = useState(() => {
+    if (STORAGE_KEY) {
+      try {
+        const saved = localStorage.getItem(STORAGE_KEY);
+        if (saved) {
+          const ws = JSON.parse(saved);
+          return ws.map(w => {
+            const wd = savedWidgetData[w.id];
+            return wd ? { ...w, data: { ...w.data, ...wd } } : w;
+          });
+        }
+      } catch {}
+    }
+    return INITIAL_WIDGETS.map(w => ({ ...w, enabled: false, isPublic: false }));
+  });
   const [widgetOrder, setWidgetOrder] = useState(() =>
     INITIAL_WIDGETS.map(w => w.id)
   );
@@ -3402,9 +3504,10 @@ const DashboardPage = ({ user: userProp, view, onNavigate, profilePic, setProfil
 
         if (data && data.length > 0) {
           console.log('[Nook] Found', data.length, 'widgets in Supabase, enabled:', data.filter(r=>r.enabled).map(r=>r.widget_id));
-          // Merge Supabase data column with localStorage (localStorage wins for unsaved changes)
+          // Supabase is the source of truth — it wins over localStorage so data is
+          // consistent across devices and sessions.
           const dbDataMap = Object.fromEntries(data.filter(r => r.data).map(r => [r.widget_id, r.data]));
-          const mergedData = { ...dbDataMap, ...savedWidgetData }; // localStorage overrides DB
+          const mergedData = { ...savedWidgetData, ...dbDataMap }; // Supabase overrides localStorage
           // Build config from Supabase
           const configMap = Object.fromEntries(data.map(r => [r.widget_id, r]));
           const merged = INITIAL_WIDGETS.map(w => ({
@@ -3489,7 +3592,7 @@ const DashboardPage = ({ user: userProp, view, onNavigate, profilePic, setProfil
       loadedRef.current = true;
     };
     load();
-  }, [user?.id]); // eslint-disable-line
+  }, [user?.id, widgetReloadKey]); // eslint-disable-line
   const [editBio, setEditBio] = useState(false);
   const [bio, setBio] = useState(profile?.bio || "");
   // Sync bio when profile loads asynchronously (same pattern as name/handle in SettingsPage)
@@ -3565,14 +3668,91 @@ const DashboardPage = ({ user: userProp, view, onNavigate, profilePic, setProfil
     }
   }, [widgetData, DATA_KEY]);
 
+  // Stable ref so onDataChange can read old widget data without re-creating on every data update
+  const widgetDataRef = useRef(savedWidgetData);
+  useEffect(() => { widgetDataRef.current = widgetData; }, [widgetData]);
+
+  // Publish a feed event (post) to Supabase when a meaningful widget update happens
+  const publishFeedEvent = useCallback(async (type, payload, contentText) => {
+    if (!user?.id) return;
+    // Store content inside payload.text so it works even if the content column doesn't exist yet
+    const fullPayload = { ...(payload || {}), text: contentText || null };
+    const { error } = await supabase.from('posts').insert({
+      user_id: user.id,
+      type,
+      payload: fullPayload,
+      is_public: true,
+    });
+    if (error) console.warn('[Nook] feed publish error', type, error.message);
+  }, [user?.id]);
+
   const onDataChange = useCallback((widgetId, newData) => {
+    const oldData = widgetDataRef.current[widgetId] || {};
+
+    // ── Feed event detection — publish meaningful changes ──────────────────
+    if (widgetId === 'mood') {
+      const todayStr = new Date().toISOString().slice(0, 10);
+      const oldToday = (oldData.history || []).find(d => d.date === todayStr);
+      const newToday = (newData.history || []).find(d => d.date === todayStr);
+      if (newToday?.mood > 0 && (!oldToday || oldToday.mood === 0)) {
+        const MOOD_LABELS = ["", "Rough", "Low", "Okay", "Good", "Great"];
+        const MOOD_EMOJIS = ["", "😞", "😕", "😐", "🙂", "😊"];
+        publishFeedEvent('mood',
+          { mood: newToday.mood, note: newToday.note || null, date: todayStr },
+          `Feeling ${MOOD_LABELS[newToday.mood]} today ${MOOD_EMOJIS[newToday.mood]}`);
+      }
+    }
+    if (widgetId === 'blog') {
+      const justPublished = (newData.posts || []).find(p => {
+        const old = (oldData.posts || []).find(op => op.id === p.id);
+        return p.published && (!old || !old.published);
+      });
+      if (justPublished) {
+        publishFeedEvent('blog', {
+          post: {
+            id: justPublished.id,
+            title: justPublished.title,
+            body: (justPublished.body || '').slice(0, 300),
+            category: justPublished.category,
+            tags: justPublished.tags || [],
+            coverColor: justPublished.coverColor,
+            readTime: justPublished.readTime,
+          }
+        }, `Published: ${justPublished.title}`);
+      }
+    }
+    if (widgetId === 'sports') {
+      for (const newAct of (newData.activities || [])) {
+        const oldAct = (oldData.activities || []).find(a => a.id === newAct.id);
+        if (oldAct && (newAct.sessions || []).length > (oldAct.sessions || []).length) {
+          const newSess = newAct.sessions[newAct.sessions.length - 1];
+          publishFeedEvent('sports', {
+            activity: { type: newAct.type, icon: newAct.icon, unit: newAct.unit },
+            session: newSess,
+          }, `Logged a ${newAct.type} session: ${newSess.value} ${newAct.unit}`);
+        }
+      }
+    }
+    // ──────────────────────────────────────────────────────────────────────
+
     setWidgetData(prev => ({ ...prev, [widgetId]: newData }));
-    // Save content to Supabase immediately
+    // Also keep widgets array in sync so widget.data stays fresh if the
+    // component ever remounts — the useState initializer will pick up the
+    // correct data instead of stale data from the last Supabase fetch.
+    setWidgets(prev => prev.map(w =>
+      w.id === widgetId ? { ...w, data: { ...w.data, ...newData } } : w
+    ));
+    // Persist to Supabase immediately (source of truth for all widget data)
     if (!user?.id) return;
     supabase.from('widget_configs')
-      .upsert({ user_id: user.id, widget_id: widgetId, data: newData }, { onConflict: 'user_id,widget_id' })
-      .then(({ error }) => { if (error) console.log('[Nook] data save error:', error); });
-  }, [user?.id]);
+      .upsert(
+        { user_id: user.id, widget_id: widgetId, data: newData, updated_at: new Date().toISOString() },
+        { onConflict: 'user_id,widget_id', ignoreDuplicates: false }
+      )
+      .then(({ error }) => {
+        if (error) console.warn('[Nook] widget data save error for', widgetId, error);
+      });
+  }, [user?.id, publishFeedEvent]);
 
   // Save widget config explicitly (called after user actions, not reactively)
   const saveWidgetConfig = useCallback(async (updatedWidgets, updatedOrder) => {
@@ -3652,11 +3832,91 @@ const DashboardPage = ({ user: userProp, view, onNavigate, profilePic, setProfil
 
   // Map widget id → live state props to spread into that renderer
   const getLiveData = (id) => {
-    if (id === "reading")     return { items: readingItems, setItems: setReadingItems };
-    if (id === "goals")       return { items: goals, setItems: setGoals };
-    if (id === "habitstreak") return { habits, setHabits };
-    if (id === "podcast")     return { pods, setPods };
-    if (id === "exercise")    return { checked: exerciseChecked, setChecked: setExerciseChecked };
+    // Helper: upsert widget data to Supabase so lifted-state widgets persist cross-device
+    const saveToDb = (widgetId, data) => {
+      if (!user?.id) return;
+      supabase.from('widget_configs')
+        .upsert(
+          { user_id: user.id, widget_id: widgetId, data, updated_at: new Date().toISOString() },
+          { onConflict: 'user_id,widget_id', ignoreDuplicates: false }
+        )
+        .then(({ error }) => { if (error) console.warn('[Nook] lifted-state save error', widgetId, error); });
+    };
+    if (id === "reading") return {
+      items: readingItems,
+      setItems: (next) => {
+        const resolved = typeof next === 'function' ? next(readingItems) : next;
+        // Detect new book added (array grew)
+        if (resolved.length > readingItems.length) {
+          const newBook = resolved.find(b => !readingItems.some(r => r.title === b.title && r.author === b.author));
+          if (newBook) publishFeedEvent('reading',
+            { book: newBook, action: 'added' },
+            `Added "${newBook.title}"${newBook.author ? ` by ${newBook.author}` : ''} to reading list`);
+        }
+        // Detect book just marked as finished
+        const justFinished = resolved.find(b => {
+          const prev = readingItems.find(r => r.title === b.title && r.author === b.author);
+          return prev && prev.status !== 'done' && b.status === 'done';
+        });
+        if (justFinished) publishFeedEvent('reading',
+          { book: justFinished, action: 'finished' },
+          `Finished reading "${justFinished.title}"${justFinished.author ? ` by ${justFinished.author}` : ''} 📖`);
+        setReadingItems(resolved);
+        saveToDb('reading', { items: resolved });
+      }
+    };
+    if (id === "goals") return {
+      items: goals,
+      setItems: (next) => {
+        const resolved = typeof next === 'function' ? next(goals) : next;
+        // Detect goals just completed
+        resolved.forEach(g => {
+          const prev = goals.find(old => old.id === g.id);
+          if (prev && Number(g.progress) >= Number(g.total) && Number(prev.progress) < Number(prev.total)) {
+            publishFeedEvent('goal',
+              { goal: { id: g.id, name: g.name, total: g.total } },
+              `Completed goal: ${g.name} 🎉`);
+          }
+        });
+        setGoals(resolved);
+        saveToDb('goals', { items: resolved });
+      }
+    };
+    if (id === "habitstreak") return {
+      habits,
+      setHabits: (next) => {
+        const resolved = typeof next === 'function' ? next(habits) : next;
+        setHabits(resolved);
+        saveToDb('habitstreak', { habits: resolved });
+      }
+    };
+    if (id === "podcast") return {
+      pods,
+      setPods: (next) => {
+        const resolved = typeof next === 'function' ? next(pods) : next;
+        setPods(resolved);
+        saveToDb('podcast', { pods: resolved });
+      }
+    };
+    if (id === "exercise") return {
+      checked: exerciseChecked,
+      setChecked: (next) => {
+        const resolved = typeof next === 'function' ? next(exerciseChecked) : next;
+        // Detect newly checked days
+        const newDays = [...resolved].filter(d => !exerciseChecked.has(d));
+        if (newDays.length > 0) {
+          try {
+            const d = new Date(newDays[0] + 'T12:00:00');
+            const dayStr = d.toLocaleDateString('en-IE', { weekday: 'long', day: 'numeric', month: 'short' });
+            publishFeedEvent('exercise',
+              { date: newDays[0] },
+              `Logged exercise on ${dayStr} 💪`);
+          } catch {}
+        }
+        setExerciseChecked(resolved);
+        saveToDb('exercise', { checked: [...resolved] });
+      }
+    };
     if (id === "gallery")     return { authorName: profile?.name || user?.email?.split('@')[0] };
     return {};
   };
@@ -3788,7 +4048,7 @@ const DashboardPage = ({ user: userProp, view, onNavigate, profilePic, setProfil
                   )}
                   {/* Link pills */}
                   {bioLinks.filter(l => l.url).map((lnk, i) => (
-                    <a key={i} href={lnk.url} target="_blank" rel="noreferrer" style={{ display: "inline-flex", alignItems: "center", gap: 4, fontFamily: FF_S, fontSize: 12, color: "#9B85D8", textDecoration: "none", fontWeight: 500, background: P.lavenderLight, borderRadius: 20, padding: "3px 11px" }}>
+                    <a key={i} href={ensureHttps(lnk.url)} target="_blank" rel="noreferrer" style={{ display: "inline-flex", alignItems: "center", gap: 4, fontFamily: FF_S, fontSize: 12, color: "#9B85D8", textDecoration: "none", fontWeight: 500, background: P.lavenderLight, borderRadius: 20, padding: "3px 11px" }}>
                       🔗 {lnk.label || lnk.url}
                     </a>
                   ))}
@@ -3840,7 +4100,7 @@ const DashboardPage = ({ user: userProp, view, onNavigate, profilePic, setProfil
                         : <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 20 }}>
                             {pubGrid.map(w => (
                               <div key={w.id} style={{ gridColumn: expandedWidgets.has(w.id) ? "1 / -1" : "auto" }}>
-                                <WidgetCard widget={w} isOwnDashboard={false} />
+                                <WidgetCard widget={w} isOwnDashboard={false} liveData={getLiveData(w.id)} />
                               </div>
                             ))}
                           </div>
@@ -4431,13 +4691,21 @@ const WorkNotes = ({ notes, setNotes }) => {
 const WorkReminders = ({ reminders, setReminders }) => {
   const [adding, setAdding]       = useState(false);
   const [draft, setDraft]         = useState({ text: "", date: "", time: "", priority: "medium" });
+  const [editingId, setEditingId] = useState(null);
+  const [editDraft, setEditDraft] = useState({ text: "", date: "", time: "", priority: "medium" });
 
   const toggle = (id) => setReminders(rs => rs.map(r => r.id === id ? { ...r, done: !r.done } : r));
-  const remove = (id) => setReminders(rs => rs.filter(r => r.id !== id));
+  const remove = (id) => { if (editingId === id) setEditingId(null); setReminders(rs => rs.filter(r => r.id !== id)); };
   const add    = () => {
     if (!draft.text.trim()) return;
     setReminders(rs => [...rs, { id: `r${Date.now()}`, ...draft, done: false }]);
     setDraft({ text: "", date: "", time: "", priority: "medium" }); setAdding(false);
+  };
+  const startEdit = (r) => { setEditingId(r.id); setEditDraft({ text: r.text, date: r.date || "", time: r.time || "", priority: r.priority || "medium" }); setAdding(false); };
+  const saveEdit  = () => {
+    if (!editDraft.text.trim()) return;
+    setReminders(rs => rs.map(r => r.id === editingId ? { ...r, ...editDraft } : r));
+    setEditingId(null);
   };
 
   const upcoming = reminders.filter(r => !r.done && !r._example).sort((a, b) => (a.date || "").localeCompare(b.date || ""));
@@ -4450,7 +4718,7 @@ const WorkReminders = ({ reminders, setReminders }) => {
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
         <span style={{ fontFamily: FF_S, fontSize: 13, color: P.inkFaint }}>{upcoming.length} upcoming · {done.length} done</span>
-        <button onClick={() => setAdding(v => !v)} style={{ background: P.lavender, border: "none", borderRadius: 10, padding: "6px 14px", cursor: "pointer", fontFamily: FF_S, fontSize: 13, fontWeight: 600, color: P.ink }}>+ Reminder</button>
+        <button onClick={() => { setAdding(v => !v); setEditingId(null); }} style={{ background: P.lavender, border: "none", borderRadius: 10, padding: "6px 14px", cursor: "pointer", fontFamily: FF_S, fontSize: 13, fontWeight: 600, color: P.ink }}>+ Reminder</button>
       </div>
 
       {adding && (
@@ -4485,19 +4753,38 @@ const WorkReminders = ({ reminders, setReminders }) => {
         </div>
       ))}
       {upcoming.map(r => (
-        <div key={r.id} style={{ display: "flex", alignItems: "flex-start", gap: 12, padding: "12px 14px", borderRadius: 14, marginBottom: 8, background: r._example ? P.bg : isOverdue(r) ? P.roseLight : P.white, border: `1.5px solid ${r._example ? P.lavender + "33" : isOverdue(r) ? P.rose : P.lavender + "44"}`, transition: "all 0.2s", opacity: r._example ? 0.6 : 1 }}>
-          <div onClick={() => !r._example && toggle(r.id)} style={{ width: 20, height: 20, borderRadius: 6, flexShrink: 0, marginTop: 2, background: "transparent", border: `2px dashed ${r._example ? P.inkFaint : isOverdue(r) ? "#D8708A" : P.lavender}`, display: "flex", alignItems: "center", justifyContent: "center", cursor: r._example ? "default" : "pointer" }} />
-          <div style={{ flex: 1 }}>
-            <div style={{ fontFamily: FF_S, fontSize: 13.5, color: r._example ? P.inkFaint : P.ink, fontWeight: 400, fontStyle: r._example ? "italic" : "normal" }}>{r.text}</div>
-            {!r._example && <div style={{ fontFamily: FF_S, fontSize: 11.5, color: isOverdue(r) ? "#D8708A" : P.inkFaint, marginTop: 3 }}>
-              {isOverdue(r) ? "⚠ Overdue · " : "📅 "}{r.date}{r.time ? ` at ${r.time}` : ""}
-            </div>}
-            {r._example && <div style={{ fontFamily: FF_S, fontSize: 11, color: P.inkFaint, marginTop: 2 }}>example — click + Reminder to add yours</div>}
-          </div>
-          <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
-            {!r._example && <span style={{ background: PRIORITY_STYLE[r.priority].bg, color: PRIORITY_STYLE[r.priority].text, borderRadius: 20, padding: "2px 8px", fontFamily: FF_S, fontSize: 10, fontWeight: 600 }}>{PRIORITY_STYLE[r.priority].label}</span>}
-            <button onClick={() => remove(r.id)} style={{ background: "none", border: "none", cursor: "pointer", color: r._example ? P.lavender + "88" : P.inkFaint, fontSize: 15, padding: 0 }}>×</button>
-          </div>
+        <div key={r.id} style={{ marginBottom: 8 }}>
+          {editingId === r.id ? (
+            <div style={{ background: P.lavenderLight, borderRadius: 14, padding: "14px 16px", border: `1.5px solid ${P.lavender}88` }}>
+              <input value={editDraft.text} onChange={e => setEditDraft(d => ({ ...d, text: e.target.value }))} onKeyDown={e => e.key === "Enter" && saveEdit()} placeholder="Reminder text" style={{ ...wi({ width: "100%", marginBottom: 8, boxSizing: "border-box" }) }} autoFocus />
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                <input type="date" value={editDraft.date} onChange={e => setEditDraft(d => ({ ...d, date: e.target.value }))} style={wi({ flex: 1 })} />
+                <input type="time" value={editDraft.time} onChange={e => setEditDraft(d => ({ ...d, time: e.target.value }))} style={wi({ width: 100 })} />
+                {["high","medium","low"].map(p => (
+                  <button key={p} onClick={() => setEditDraft(d => ({ ...d, priority: p }))} style={{ background: editDraft.priority === p ? PRIORITY_STYLE[p].dot : P.lavenderLight, color: editDraft.priority === p ? "#fff" : P.inkLight, border: "none", borderRadius: 8, padding: "6px 10px", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>{PRIORITY_STYLE[p].label}</button>
+                ))}
+                <button onClick={saveEdit} style={{ background: P.lavender, color: P.ink, border: "none", borderRadius: 10, padding: "6px 16px", cursor: "pointer", fontFamily: FF_S, fontSize: 13, fontWeight: 600 }}>Save</button>
+                <button onClick={() => remove(r.id)} style={{ background: "#F0B8C8", color: "#D8708A", border: "none", borderRadius: 10, padding: "6px 12px", cursor: "pointer", fontFamily: FF_S, fontSize: 12, fontWeight: 600 }}>Delete</button>
+                <button onClick={() => setEditingId(null)} style={{ background: "none", border: "none", cursor: "pointer", color: P.inkFaint, fontSize: 15 }}>✕</button>
+              </div>
+            </div>
+          ) : (
+            <div style={{ display: "flex", alignItems: "flex-start", gap: 12, padding: "12px 14px", borderRadius: 14, background: r._example ? P.bg : isOverdue(r) ? P.roseLight : P.white, border: `1.5px solid ${r._example ? P.lavender + "33" : isOverdue(r) ? P.rose : P.lavender + "44"}`, transition: "all 0.2s", opacity: r._example ? 0.6 : 1 }}>
+              <div onClick={() => !r._example && toggle(r.id)} style={{ width: 20, height: 20, borderRadius: 6, flexShrink: 0, marginTop: 2, background: "transparent", border: `2px dashed ${r._example ? P.inkFaint : isOverdue(r) ? "#D8708A" : P.lavender}`, display: "flex", alignItems: "center", justifyContent: "center", cursor: r._example ? "default" : "pointer" }} />
+              <div style={{ flex: 1 }}>
+                <div style={{ fontFamily: FF_S, fontSize: 13.5, color: r._example ? P.inkFaint : P.ink, fontWeight: 400, fontStyle: r._example ? "italic" : "normal" }}>{r.text}</div>
+                {!r._example && <div style={{ fontFamily: FF_S, fontSize: 11.5, color: isOverdue(r) ? "#D8708A" : P.inkFaint, marginTop: 3 }}>
+                  {isOverdue(r) ? "⚠ Overdue · " : "📅 "}{r.date}{r.time ? ` at ${r.time}` : ""}
+                </div>}
+                {r._example && <div style={{ fontFamily: FF_S, fontSize: 11, color: P.inkFaint, marginTop: 2 }}>example — click + Reminder to add yours</div>}
+              </div>
+              <div style={{ display: "flex", gap: 6, flexShrink: 0, alignItems: "center" }}>
+                {!r._example && <span style={{ background: PRIORITY_STYLE[r.priority]?.bg, color: PRIORITY_STYLE[r.priority]?.text, borderRadius: 20, padding: "2px 8px", fontFamily: FF_S, fontSize: 10, fontWeight: 600 }}>{PRIORITY_STYLE[r.priority]?.label}</span>}
+                {!r._example && <button onClick={() => startEdit(r)} style={{ background: "none", border: "none", cursor: "pointer", color: P.inkFaint, fontSize: 13, padding: "0 2px" }} title="Edit">✎</button>}
+                <button onClick={() => remove(r.id)} style={{ background: "none", border: "none", cursor: "pointer", color: r._example ? P.lavender + "88" : P.inkFaint, fontSize: 15, padding: 0 }}>×</button>
+              </div>
+            </div>
+          )}
         </div>
       ))}
 
@@ -4902,8 +5189,7 @@ const FocusTimer = () => {
   );
 };
 
-const WorkMeetings = ({ meetings: init }) => {
-  const [meetings, setMeetings] = useState(init);
+const WorkMeetings = ({ meetings, setMeetings }) => {
   const [adding, setAdding]     = useState(false);
   const [draft, setDraft]       = useState({ title: "", date: "", time: "", attendees: "", notes: "" });
   const [expandId, setExpandId] = useState(null);
@@ -5760,6 +6046,8 @@ const WorkPage = () => {
   const WORK_NOTES_KEY     = user ? `nook_work_notes_${user.id}`     : null;
   const WORK_CUSTOM_KEY    = user ? `nook_work_custom_${user.id}`    : null;
   const WORK_CALENDAR_KEY  = user ? `nook_work_calendar_${user.id}`  : null;
+  const WORK_REMINDERS_KEY = user ? `nook_work_reminders_${user.id}` : null;
+  const WORK_MEETINGS_KEY  = user ? `nook_work_meetings_${user.id}`  : null;
 
   const loadLS = (key, fallback) => {
     if (!key) return fallback;
@@ -5773,19 +6061,21 @@ const WorkPage = () => {
   const [dailyTodos,    setDailyTodosRaw]   = useState(INIT_DAILY_TODOS);
   const [notes,         setNotesRaw]        = useState(INIT_NOTES);
   const [customLists,   setCustomListsRaw]  = useState([]);
-  const [reminders,     setReminders]       = useState(INIT_REMINDERS);
-  const [meetings]                          = useState(INIT_MEETINGS);
+  const [reminders,     setRemindersRaw]    = useState(INIT_REMINDERS);
+  const [meetings,      setMeetingsRaw]     = useState(INIT_MEETINGS);
   const [calendarData,  setCalendarDataRaw] = useState(null);
 
   // Refs that mirror state — updated synchronously in each setter so we can compute
   // "next" immediately (without relying on the functional-updater trick, which is
   // unreliable in React 18: updater functions run during the render phase, so the
   // "let next" capture approach leaves next=undefined when saveWorkData is called).
-  const notesRef    = useRef(notes);
-  const masterRef   = useRef(masterTodos);
-  const dailyRef    = useRef(dailyTodos);
-  const customRef   = useRef(customLists);
-  const calendarRef = useRef(null);
+  const notesRef     = useRef(notes);
+  const masterRef    = useRef(masterTodos);
+  const dailyRef     = useRef(dailyTodos);
+  const customRef    = useRef(customLists);
+  const calendarRef  = useRef(null);
+  const remindersRef = useRef(INIT_REMINDERS);
+  const meetingsRef  = useRef(INIT_MEETINGS);
 
   // ── Save helper ───────────────────────────────────────────────────────────
   const saveWorkData = useCallback((sbKey, lsKey, value) => {
@@ -5838,6 +6128,20 @@ const WorkPage = () => {
     saveWorkData('work_calendar', WORK_CALENDAR_KEY, next);
   }, [saveWorkData, WORK_CALENDAR_KEY]); // eslint-disable-line
 
+  const setReminders = useCallback((val) => {
+    const next = typeof val === "function" ? val(remindersRef.current) : val;
+    remindersRef.current = next;
+    setRemindersRaw(next);
+    saveWorkData('work_reminders', WORK_REMINDERS_KEY, next);
+  }, [saveWorkData, WORK_REMINDERS_KEY]); // eslint-disable-line
+
+  const setMeetings = useCallback((val) => {
+    const next = typeof val === "function" ? val(meetingsRef.current) : val;
+    meetingsRef.current = next;
+    setMeetingsRaw(next);
+    saveWorkData('work_meetings', WORK_MEETINGS_KEY, next);
+  }, [saveWorkData, WORK_MEETINGS_KEY]); // eslint-disable-line
+
   // ── Load data on login ────────────────────────────────────────────────────
   // Step 1 (sync): pull from localStorage — user.id is now available so keys are valid.
   //   This gives instant data without waiting for the network.
@@ -5847,19 +6151,23 @@ const WorkPage = () => {
     if (!user?.id) return;
 
     // Step 1 — localStorage (instant)
-    const lsMaster   = loadLS(WORK_MASTER_KEY,   null);
-    const lsDaily    = loadLS(WORK_DAILY_KEY,    null);
-    const lsNotes    = loadLS(WORK_NOTES_KEY,    null);
-    const lsCustom   = loadLS(WORK_CUSTOM_KEY,   null);
-    const lsCalendar = loadLS(WORK_CALENDAR_KEY, null);
-    if (lsMaster)   { masterRef.current   = lsMaster;   setMasterTodosRaw(lsMaster); }
-    if (lsDaily)    { dailyRef.current    = lsDaily;    setDailyTodosRaw(lsDaily); }
-    if (lsNotes)    { notesRef.current    = lsNotes;    setNotesRaw(lsNotes); }
-    if (lsCustom)   { customRef.current   = lsCustom;   setCustomListsRaw(lsCustom); }
-    if (lsCalendar) { calendarRef.current = lsCalendar; setCalendarDataRaw(lsCalendar); }
+    const lsMaster    = loadLS(WORK_MASTER_KEY,    null);
+    const lsDaily     = loadLS(WORK_DAILY_KEY,     null);
+    const lsNotes     = loadLS(WORK_NOTES_KEY,     null);
+    const lsCustom    = loadLS(WORK_CUSTOM_KEY,    null);
+    const lsCalendar  = loadLS(WORK_CALENDAR_KEY,  null);
+    const lsReminders = loadLS(WORK_REMINDERS_KEY, null);
+    const lsMeetings  = loadLS(WORK_MEETINGS_KEY,  null);
+    if (lsMaster)    { masterRef.current    = lsMaster;    setMasterTodosRaw(lsMaster); }
+    if (lsDaily)     { dailyRef.current     = lsDaily;     setDailyTodosRaw(lsDaily); }
+    if (lsNotes)     { notesRef.current     = lsNotes;     setNotesRaw(lsNotes); }
+    if (lsCustom)    { customRef.current    = lsCustom;    setCustomListsRaw(lsCustom); }
+    if (lsCalendar)  { calendarRef.current  = lsCalendar;  setCalendarDataRaw(lsCalendar); }
+    if (lsReminders) { remindersRef.current = lsReminders; setRemindersRaw(lsReminders); }
+    if (lsMeetings)  { meetingsRef.current  = lsMeetings;  setMeetingsRaw(lsMeetings); }
 
     // Step 2 — Supabase (authoritative, async)
-    const sbKeys = ['work_notes', 'work_todos_master', 'work_todos_daily', 'work_todos_custom', 'work_calendar'];
+    const sbKeys = ['work_notes', 'work_todos_master', 'work_todos_daily', 'work_todos_custom', 'work_calendar', 'work_reminders', 'work_meetings'];
     // safeParse: handles jsonb objects (returned as-is) and any JSON strings (legacy format)
     const safeParse = (v) => {
       if (v === null || v === undefined) return null;
@@ -5874,20 +6182,24 @@ const WorkPage = () => {
         const keysInDb = new Set(data.map(d => d.key));
 
         // Apply Supabase data (overrides localStorage — it is the cross-device source of truth)
-        if (map.work_todos_master) { masterRef.current   = map.work_todos_master; setMasterTodosRaw(map.work_todos_master);   if (WORK_MASTER_KEY)   try { localStorage.setItem(WORK_MASTER_KEY,   JSON.stringify(map.work_todos_master)); }   catch {} }
-        if (map.work_todos_daily)  { dailyRef.current    = map.work_todos_daily;  setDailyTodosRaw(map.work_todos_daily);     if (WORK_DAILY_KEY)    try { localStorage.setItem(WORK_DAILY_KEY,    JSON.stringify(map.work_todos_daily)); }    catch {} }
-        if (map.work_notes)        { notesRef.current    = map.work_notes;        setNotesRaw(map.work_notes);                 if (WORK_NOTES_KEY)    try { localStorage.setItem(WORK_NOTES_KEY,    JSON.stringify(map.work_notes)); }          catch {} }
-        if (map.work_todos_custom) { customRef.current   = map.work_todos_custom; setCustomListsRaw(map.work_todos_custom);   if (WORK_CUSTOM_KEY)   try { localStorage.setItem(WORK_CUSTOM_KEY,   JSON.stringify(map.work_todos_custom)); }   catch {} }
-        if (map.work_calendar)     { calendarRef.current = map.work_calendar;     setCalendarDataRaw(map.work_calendar);       if (WORK_CALENDAR_KEY) try { localStorage.setItem(WORK_CALENDAR_KEY, JSON.stringify(map.work_calendar)); }       catch {} }
+        if (map.work_todos_master) { masterRef.current    = map.work_todos_master; setMasterTodosRaw(map.work_todos_master);   if (WORK_MASTER_KEY)    try { localStorage.setItem(WORK_MASTER_KEY,    JSON.stringify(map.work_todos_master)); }   catch {} }
+        if (map.work_todos_daily)  { dailyRef.current     = map.work_todos_daily;  setDailyTodosRaw(map.work_todos_daily);     if (WORK_DAILY_KEY)     try { localStorage.setItem(WORK_DAILY_KEY,    JSON.stringify(map.work_todos_daily)); }    catch {} }
+        if (map.work_notes)        { notesRef.current     = map.work_notes;        setNotesRaw(map.work_notes);               if (WORK_NOTES_KEY)     try { localStorage.setItem(WORK_NOTES_KEY,    JSON.stringify(map.work_notes)); }          catch {} }
+        if (map.work_todos_custom) { customRef.current    = map.work_todos_custom; setCustomListsRaw(map.work_todos_custom);   if (WORK_CUSTOM_KEY)    try { localStorage.setItem(WORK_CUSTOM_KEY,   JSON.stringify(map.work_todos_custom)); }   catch {} }
+        if (map.work_calendar)     { calendarRef.current  = map.work_calendar;     setCalendarDataRaw(map.work_calendar);     if (WORK_CALENDAR_KEY)  try { localStorage.setItem(WORK_CALENDAR_KEY, JSON.stringify(map.work_calendar)); }       catch {} }
+        if (map.work_reminders)    { remindersRef.current = map.work_reminders;    setRemindersRaw(map.work_reminders);       if (WORK_REMINDERS_KEY) try { localStorage.setItem(WORK_REMINDERS_KEY, JSON.stringify(map.work_reminders)); }     catch {} }
+        if (map.work_meetings)     { meetingsRef.current  = map.work_meetings;     setMeetingsRaw(map.work_meetings);         if (WORK_MEETINGS_KEY)  try { localStorage.setItem(WORK_MEETINGS_KEY,  JSON.stringify(map.work_meetings)); }      catch {} }
 
         // Migration: if localStorage has data for a key that doesn't exist in Supabase yet,
         // push it now so it's available from any browser going forward.
         const toMigrate = [
-          !keysInDb.has('work_todos_master') && lsMaster   ? { user_id: user.id, key: 'work_todos_master', value: lsMaster }   : null,
-          !keysInDb.has('work_todos_daily')  && lsDaily    ? { user_id: user.id, key: 'work_todos_daily',  value: lsDaily }    : null,
-          !keysInDb.has('work_notes')        && lsNotes    ? { user_id: user.id, key: 'work_notes',        value: lsNotes }    : null,
-          !keysInDb.has('work_todos_custom') && lsCustom   ? { user_id: user.id, key: 'work_todos_custom', value: lsCustom }   : null,
-          !keysInDb.has('work_calendar')     && lsCalendar ? { user_id: user.id, key: 'work_calendar',     value: lsCalendar } : null,
+          !keysInDb.has('work_todos_master') && lsMaster    ? { user_id: user.id, key: 'work_todos_master', value: lsMaster }    : null,
+          !keysInDb.has('work_todos_daily')  && lsDaily     ? { user_id: user.id, key: 'work_todos_daily',  value: lsDaily }     : null,
+          !keysInDb.has('work_notes')        && lsNotes     ? { user_id: user.id, key: 'work_notes',        value: lsNotes }     : null,
+          !keysInDb.has('work_todos_custom') && lsCustom    ? { user_id: user.id, key: 'work_todos_custom', value: lsCustom }    : null,
+          !keysInDb.has('work_calendar')     && lsCalendar  ? { user_id: user.id, key: 'work_calendar',     value: lsCalendar }  : null,
+          !keysInDb.has('work_reminders')    && lsReminders ? { user_id: user.id, key: 'work_reminders',    value: lsReminders } : null,
+          !keysInDb.has('work_meetings')     && lsMeetings  ? { user_id: user.id, key: 'work_meetings',     value: lsMeetings }  : null,
         ].filter(Boolean);
         if (toMigrate.length > 0) {
           supabase.from('user_data').upsert(toMigrate, { onConflict: 'user_id,key' })
@@ -5935,7 +6247,7 @@ const WorkPage = () => {
           {section === "reminders" && <WorkReminders reminders={reminders} setReminders={setReminders} />}
           {section === "kanban" || section === "workflow" ? <WorkKanban /> : null}
           {section === "focus"     && <WorkFocus />}
-          {section === "meetings"  && <WorkMeetings meetings={meetings} />}
+          {section === "meetings"  && <WorkMeetings meetings={meetings} setMeetings={setMeetings} />}
           {section === "calendar"  && <WorkCalendar calendarData={calendarData} setCalendarData={setCalendarData} currentUserId={user?.id} />}
         </div>
       </div>
@@ -6711,7 +7023,113 @@ const FeedCard = ({ item, user, following, toggleFollow, onViewUser }) => {
   );
 };
 
-const RealFeedCard = ({ item, currentUserId, onLike, onComment, onDelete, onViewUser }) => {
+// Rich inline preview for a widget-type feed card
+const FeedWidgetPreview = ({ item }) => {
+  const p = item.payload || {};
+  const type = item.type;
+
+  if (type === 'reading' && p.book) {
+    const isFinished = p.action === 'finished';
+    return (
+      <div style={{ marginTop: 10, background: P.lavenderLight, borderRadius: 14, padding: "12px 16px", display: "flex", gap: 14, alignItems: "center" }}>
+        <div style={{ width: 44, height: 60, borderRadius: 8, background: P.lavender, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22, flexShrink: 0 }}>📚</div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontFamily: FF_S, fontSize: 11, color: P.inkFaint, textTransform: "uppercase", letterSpacing: 0.5, fontWeight: 600, marginBottom: 3 }}>
+            {isFinished ? "Finished reading" : "Added to reading list"}
+          </div>
+          <div style={{ fontFamily: FF_D, fontSize: 16, color: P.ink, fontWeight: 400, lineHeight: 1.3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.book.title}</div>
+          {p.book.author && <div style={{ fontFamily: FF_S, fontSize: 13, color: P.inkLight, marginTop: 2 }}>{p.book.author}</div>}
+          {p.book.rating > 0 && <div style={{ marginTop: 5, fontSize: 12 }}>{"★".repeat(p.book.rating)}{"☆".repeat(5 - p.book.rating)}</div>}
+        </div>
+        {isFinished && <div style={{ fontSize: 28 }}>✓</div>}
+      </div>
+    );
+  }
+
+  if (type === 'sports' && p.activity && p.session) {
+    return (
+      <div style={{ marginTop: 10, background: "#5DCAAA15", borderRadius: 14, padding: "12px 16px", display: "flex", gap: 14, alignItems: "center", border: "1px solid #5DCAAA33" }}>
+        <div style={{ fontSize: 32 }}>{p.activity.icon}</div>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontFamily: FF_S, fontSize: 11, color: "#3BAA80", textTransform: "uppercase", letterSpacing: 0.5, fontWeight: 600, marginBottom: 3 }}>Session logged</div>
+          <div style={{ fontFamily: FF_D, fontSize: 16, color: P.ink, fontWeight: 400 }}>{p.activity.type}</div>
+          <div style={{ fontFamily: FF_S, fontSize: 13, color: P.inkLight, marginTop: 2 }}>
+            {p.session.value} {p.activity.unit}
+            {p.session.date ? ` · ${new Date(p.session.date + 'T12:00:00').toLocaleDateString('en-IE', { day: 'numeric', month: 'short' })}` : ''}
+          </div>
+          {p.session.note && <div style={{ fontFamily: FF_S, fontSize: 12, color: P.inkFaint, marginTop: 4, fontStyle: "italic" }}>{p.session.note}</div>}
+        </div>
+      </div>
+    );
+  }
+
+  if (type === 'exercise' && p.date) {
+    const dateStr = (() => { try { return new Date(p.date + 'T12:00:00').toLocaleDateString('en-IE', { weekday: 'long', day: 'numeric', month: 'short' }); } catch { return p.date; } })();
+    return (
+      <div style={{ marginTop: 10, background: "#E8956A15", borderRadius: 14, padding: "12px 16px", display: "flex", gap: 14, alignItems: "center", border: "1px solid #E8956A33" }}>
+        <div style={{ fontSize: 32 }}>💪</div>
+        <div>
+          <div style={{ fontFamily: FF_S, fontSize: 11, color: "#E8956A", textTransform: "uppercase", letterSpacing: 0.5, fontWeight: 600, marginBottom: 3 }}>Exercise logged</div>
+          <div style={{ fontFamily: FF_S, fontSize: 14, color: P.ink }}>{dateStr}</div>
+        </div>
+      </div>
+    );
+  }
+
+  if (type === 'mood' && p.mood) {
+    const MOOD_LABELS = ["", "Rough", "Low", "Okay", "Good", "Great"];
+    const MOOD_EMOJIS = ["", "😞", "😕", "😐", "🙂", "😊"];
+    const MOOD_COLORS = ["", "#D8708A", "#E8956A", "#C8A830", "#5DCAAA", "#9B85D8"];
+    return (
+      <div style={{ marginTop: 10, background: MOOD_COLORS[p.mood] + "18", borderRadius: 14, padding: "14px 18px", display: "flex", gap: 14, alignItems: "center", border: `1px solid ${MOOD_COLORS[p.mood]}33` }}>
+        <div style={{ fontSize: 36 }}>{MOOD_EMOJIS[p.mood]}</div>
+        <div>
+          <div style={{ fontFamily: FF_S, fontSize: 11, color: MOOD_COLORS[p.mood], textTransform: "uppercase", letterSpacing: 0.5, fontWeight: 600, marginBottom: 3 }}>Today's mood</div>
+          <div style={{ fontFamily: FF_D, fontSize: 17, color: P.ink, fontWeight: 400 }}>{MOOD_LABELS[p.mood]}</div>
+          {p.note && <div style={{ fontFamily: FF_S, fontSize: 13, color: P.inkFaint, marginTop: 4, fontStyle: "italic" }}>"{p.note}"</div>}
+        </div>
+      </div>
+    );
+  }
+
+  if (type === 'blog' && p.post) {
+    const excerpt = (p.post.body || '').slice(0, 160) + (p.post.body?.length > 160 ? '…' : '');
+    return (
+      <div style={{ marginTop: 10, borderRadius: 14, overflow: "hidden", border: `1px solid ${P.lavender}44` }}>
+        <div style={{ height: 6, background: p.post.coverColor || P.lavender }} />
+        <div style={{ padding: "12px 16px", background: P.lavenderLight }}>
+          <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 6, flexWrap: "wrap" }}>
+            {p.post.category && <span style={{ background: P.lavender + "55", borderRadius: 20, padding: "2px 10px", fontFamily: FF_S, fontSize: 11, color: P.inkFaint, fontWeight: 600 }}>{p.post.category}</span>}
+            {p.post.readTime && <span style={{ fontFamily: FF_S, fontSize: 11, color: P.inkFaint }}>{p.post.readTime} min read</span>}
+          </div>
+          <div style={{ fontFamily: FF_D, fontSize: 16, color: P.ink, fontWeight: 400, lineHeight: 1.35, marginBottom: 6 }}>{p.post.title}</div>
+          {excerpt && <div style={{ fontFamily: FF_S, fontSize: 13, color: P.inkLight, lineHeight: 1.6 }}>{excerpt}</div>}
+          {(p.post.tags || []).length > 0 && (
+            <div style={{ marginTop: 8, display: "flex", gap: 5, flexWrap: "wrap" }}>
+              {p.post.tags.map(t => <span key={t} style={{ fontFamily: FF_S, fontSize: 11, color: P.inkFaint, background: P.lavender + "33", borderRadius: 20, padding: "2px 9px" }}>#{t}</span>)}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  if (type === 'goal' && p.goal) {
+    return (
+      <div style={{ marginTop: 10, background: "#5DCAAA15", borderRadius: 14, padding: "12px 16px", display: "flex", gap: 12, alignItems: "center", border: "1px solid #5DCAAA44" }}>
+        <div style={{ fontSize: 28 }}>🎉</div>
+        <div>
+          <div style={{ fontFamily: FF_S, fontSize: 11, color: "#3BAA80", textTransform: "uppercase", letterSpacing: 0.5, fontWeight: 600, marginBottom: 3 }}>Goal completed!</div>
+          <div style={{ fontFamily: FF_S, fontSize: 14, color: P.ink, fontWeight: 500 }}>{p.goal.name}</div>
+        </div>
+      </div>
+    );
+  }
+
+  return null;
+};
+
+const RealFeedCard = ({ item, currentUserId, onLike, onComment, onDelete, onViewUser, isHighlighted }) => {
   const [showComments, setShowComments] = useState(false);
   const [commentText, setCommentText] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -6726,8 +7144,12 @@ const RealFeedCard = ({ item, currentUserId, onLike, onComment, onDelete, onView
     setSubmitting(false);
   };
 
+  // Derive a clean caption for widget events (hide it when the rich preview covers it)
+  const widgetTypes = ['reading','sports','exercise','mood','blog','goal'];
+  const isWidgetPost = widgetTypes.includes(item.type);
+
   return (
-    <div style={{ background: P.white, borderRadius: 20, padding: "20px 24px", boxShadow: "0 2px 16px rgba(61,53,80,0.06)", border: `1px solid ${P.lavender}22` }}>
+    <div id={`feed-post-${item.id}`} style={{ background: P.white, borderRadius: 20, padding: "20px 24px", boxShadow: isHighlighted ? `0 0 0 3px ${P.lavender}, 0 2px 24px rgba(61,53,80,0.14)` : "0 2px 16px rgba(61,53,80,0.06)", border: `1px solid ${isHighlighted ? P.lavender : P.lavender + "22"}`, transition: "box-shadow 0.4s, border 0.4s" }}>
       <div style={{ display: "flex", alignItems: "flex-start", gap: 12, marginBottom: 14 }}>
         <div onClick={() => onViewUser?.(poster)} style={{ cursor: "pointer" }}>
           <UserAvatar user={poster} size={40} />
@@ -6743,15 +7165,18 @@ const RealFeedCard = ({ item, currentUserId, onLike, onComment, onDelete, onView
               {isOwn && <button onClick={onDelete} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 13, color: P.inkFaint, padding: "2px 6px", borderRadius: 8 }}>✕</button>}
             </div>
           </div>
-          {item.content && <p style={{ fontFamily: FF_S, fontSize: 14, color: P.ink, margin: "8px 0 0", lineHeight: 1.6 }}>{item.content}</p>}
+          {/* For plain posts, show the text content; for widget posts, show only if there's extra context */}
+          {item.content && !isWidgetPost && <p style={{ fontFamily: FF_S, fontSize: 14, color: P.ink, margin: "8px 0 0", lineHeight: 1.6 }}>{item.content}</p>}
           {item.image_url && <img src={item.image_url} alt="" style={{ width: "100%", borderRadius: 12, marginTop: 10, maxHeight: 320, objectFit: "cover" }} />}
+          {/* Rich widget preview */}
+          <FeedWidgetPreview item={item} />
         </div>
       </div>
       <div style={{ display: "flex", gap: 16, paddingTop: 12, borderTop: `1px solid ${P.lavender}22` }}>
         <button onClick={onLike} style={{ background: "none", border: "none", cursor: "pointer", fontFamily: FF_S, fontSize: 13, color: item.isLiked ? "#D8708A" : P.inkFaint, display: "flex", alignItems: "center", gap: 5, fontWeight: item.isLiked ? 600 : 400 }}>
           {item.isLiked ? "♥" : "♡"} {item.likeCount}
         </button>
-        <button onClick={() => setShowComments(s => !s)} style={{ background: "none", border: "none", cursor: "pointer", fontFamily: FF_S, fontSize: 13, color: P.inkFaint, display: "flex", alignItems: "center", gap: 5 }}>
+        <button onClick={() => setShowComments(s => !s)} style={{ background: "none", border: "none", cursor: "pointer", fontFamily: FF_S, fontSize: 13, color: showComments ? P.ink : P.inkFaint, display: "flex", alignItems: "center", gap: 5 }}>
           💬 {item.commentCount}
         </button>
       </div>
@@ -7094,12 +7519,153 @@ const FeedPage = ({ onNavigate, onViewUser, following, toggleFollowApp }) => {
   );
 };
 
+// Modal that shows a single post (owned by the current user) so notification
+// clicks on likes/comments can surface the relevant activity without it needing
+// to appear in the feed.
+const PostDetailModal = ({ postId, onClose }) => {
+  const { user } = useAuth();
+  const [post, setPost] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [commentText, setCommentText] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (!postId) return;
+    setLoading(true);
+    supabase
+      .from('posts')
+      .select(`
+        id, type, content, image_url, payload, is_public, created_at, user_id,
+        profiles:user_id ( id, name, handle, avatar_color, avatar_url ),
+        likes ( user_id ),
+        comments (
+          id, body, created_at, user_id,
+          profiles:user_id ( id, name, handle, avatar_color, avatar_url )
+        )
+      `)
+      .eq('id', postId)
+      .maybeSingle()
+      .then(({ data }) => { setPost(data); setLoading(false); });
+  }, [postId]);
+
+  const handleLike = async () => {
+    if (!user || !post) return;
+    const liked = post.likes?.some(l => l.user_id === user.id);
+    if (liked) {
+      await supabase.from('likes').delete().eq('post_id', post.id).eq('user_id', user.id);
+      setPost(p => ({ ...p, likes: p.likes.filter(l => l.user_id !== user.id) }));
+    } else {
+      await supabase.from('likes').upsert({ post_id: post.id, user_id: user.id }, { onConflict: 'post_id,user_id' });
+      setPost(p => ({ ...p, likes: [...(p.likes || []), { user_id: user.id }] }));
+    }
+  };
+
+  const handleComment = async () => {
+    if (!commentText.trim() || !user || !post || submitting) return;
+    setSubmitting(true);
+    const { data: newComment } = await supabase
+      .from('comments')
+      .insert({ post_id: post.id, user_id: user.id, body: commentText.trim() })
+      .select(`id, body, created_at, user_id, profiles:user_id ( id, name, handle, avatar_color, avatar_url )`)
+      .maybeSingle();
+    if (newComment) setPost(p => ({ ...p, comments: [...(p.comments || []), newComment] }));
+    setCommentText("");
+    setSubmitting(false);
+  };
+
+  return (
+    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(61,53,80,0.45)", zIndex: 500, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+      <div onClick={e => e.stopPropagation()} style={{ background: P.white, borderRadius: 24, width: "100%", maxWidth: 560, maxHeight: "85vh", overflowY: "auto", boxShadow: "0 16px 60px rgba(61,53,80,0.22)", border: `1px solid ${P.lavender}33` }}>
+        {/* Header */}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "18px 24px 14px", borderBottom: `1px solid ${P.lavender}22` }}>
+          <span style={{ fontFamily: FF_D, fontSize: 18, color: P.ink }}>Your Post</span>
+          <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 20, color: P.inkFaint, lineHeight: 1, padding: "2px 6px" }}>✕</button>
+        </div>
+
+        <div style={{ padding: "20px 24px" }}>
+          {loading ? (
+            <div style={{ textAlign: "center", padding: "40px 0", fontFamily: FF_S, fontSize: 14, color: P.inkFaint }}>Loading…</div>
+          ) : !post ? (
+            <div style={{ textAlign: "center", padding: "40px 0", fontFamily: FF_S, fontSize: 14, color: P.inkFaint }}>Post not found.</div>
+          ) : (() => {
+            const poster = post.profiles;
+            const liked = post.likes?.some(l => l.user_id === user?.id);
+            const likeCount = post.likes?.length || 0;
+            const comments = post.comments || [];
+            return (
+              <>
+                {/* Post author */}
+                <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
+                  <UserAvatar user={poster} size={40} />
+                  <div>
+                    <div style={{ fontFamily: FF_S, fontSize: 14, fontWeight: 600, color: P.ink }}>{poster?.name}</div>
+                    <div style={{ fontFamily: FF_S, fontSize: 11, color: P.inkFaint }}>{poster?.handle ? `@${poster.handle}` : ""} · {post.created_at ? new Date(post.created_at).toLocaleDateString() : ""}</div>
+                  </div>
+                </div>
+
+                {/* Post content */}
+                {post.content && (
+                  <p style={{ fontFamily: FF_S, fontSize: 14, color: P.ink, lineHeight: 1.6, margin: "0 0 14px" }}>{post.content}</p>
+                )}
+                {post.image_url && (
+                  <img src={post.image_url} alt="" style={{ width: "100%", borderRadius: 12, marginBottom: 14, objectFit: "cover", maxHeight: 320 }} />
+                )}
+
+                {/* Like / comment counts */}
+                <div style={{ display: "flex", gap: 12, marginBottom: 16 }}>
+                  <button onClick={handleLike} style={{ background: liked ? "#FDE8EF" : P.lavenderLight, border: `1.5px solid ${liked ? "#F0B8C8" : P.lavender + "44"}`, borderRadius: 20, padding: "6px 14px", cursor: "pointer", fontFamily: FF_S, fontSize: 13, color: liked ? "#C0476A" : P.inkLight, display: "flex", alignItems: "center", gap: 5 }}>
+                    {liked ? "♥" : "♡"} {likeCount}
+                  </button>
+                  <span style={{ fontFamily: FF_S, fontSize: 13, color: P.inkFaint, display: "flex", alignItems: "center", gap: 5 }}>
+                    💬 {comments.length}
+                  </span>
+                </div>
+
+                {/* Comments */}
+                {comments.length > 0 && (
+                  <div style={{ borderTop: `1px solid ${P.lavender}22`, paddingTop: 14, marginBottom: 14, display: "flex", flexDirection: "column", gap: 10 }}>
+                    {comments.map(c => (
+                      <div key={c.id} style={{ display: "flex", gap: 8 }}>
+                        <UserAvatar user={c.profiles} size={28} />
+                        <div style={{ background: P.lavenderLight, borderRadius: 12, padding: "7px 12px", flex: 1 }}>
+                          <span style={{ fontFamily: FF_S, fontSize: 12, fontWeight: 600, color: P.ink }}>{c.profiles?.name} </span>
+                          <span style={{ fontFamily: FF_S, fontSize: 13, color: P.ink }}>{c.body}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Add comment */}
+                {user && (
+                  <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
+                    <input
+                      value={commentText}
+                      onChange={e => setCommentText(e.target.value)}
+                      onKeyDown={e => e.key === "Enter" && !e.shiftKey && handleComment()}
+                      placeholder="Add a comment…"
+                      style={{ flex: 1, border: `1.5px solid ${P.lavender}`, borderRadius: 20, padding: "8px 14px", fontFamily: FF_S, fontSize: 13, background: P.lavenderLight, color: P.ink, outline: "none" }}
+                    />
+                    <button onClick={handleComment} disabled={!commentText.trim() || submitting} style={{ background: commentText.trim() ? P.lavender : P.lavenderLight, border: "none", borderRadius: 20, padding: "8px 16px", cursor: commentText.trim() ? "pointer" : "default", fontFamily: FF_S, fontSize: 13, fontWeight: 600, color: P.ink }}>
+                      {submitting ? "…" : "Post"}
+                    </button>
+                  </div>
+                )}
+              </>
+            );
+          })()}
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const NOTIF_SEED = [];
 
 const NOTIF_ICONS  = { follow: "👤", like: "♥", comment: "💬", mention: "✦", calendar_share: "📆" };
 const NOTIF_COLORS = { follow: P.lavender, like: "#F0B8C8", comment: P.sky, mention: P.butter, calendar_share: "#5DCAAA" };
 
-const NotificationsDropdown = ({ notifs, onMarkRead, onMarkAllRead, onNavigate, onOpenProfile, onClose }) => {
+const NotificationsDropdown = ({ notifs, onMarkRead, onMarkAllRead, onNavigate, onOpenProfile, onOpenPost, onClose }) => {
   const unread = notifs.filter(n => !n.read).length;
   return (
     <div style={{ position: "absolute", top: "calc(100% + 10px)", right: 0, width: 340, background: P.white, borderRadius: 20, boxShadow: "0 8px 40px rgba(61,53,80,0.18)", border: `1px solid ${P.lavender}44`, zIndex: 300, overflow: "hidden", animation: "popIn 0.15s ease" }}>
@@ -7114,6 +7680,7 @@ const NotificationsDropdown = ({ notifs, onMarkRead, onMarkAllRead, onNavigate, 
           const user = USERS.find(u => u.id === n.uid);
           // For follow notifications, render the name as a clickable link to the follower's profile.
           // n.name holds the display name; n.uid holds the follower's user ID.
+          // For like/comment notifications with a source_id, clicking navigates to the post in the feed.
           const textNode = (n.type === 'follow' && n.name && n.uid && onOpenProfile) ? (
             <p style={{ fontFamily: FF_S, fontSize: 13, color: P.ink, margin: "0 0 2px", lineHeight: 1.4 }}>
               <span
@@ -7124,10 +7691,22 @@ const NotificationsDropdown = ({ notifs, onMarkRead, onMarkAllRead, onNavigate, 
               {" started following you"}
             </p>
           ) : (
-            <p style={{ fontFamily: FF_S, fontSize: 13, color: P.ink, margin: "0 0 2px", lineHeight: 1.4 }}>{n.text}</p>
+            <p style={{ fontFamily: FF_S, fontSize: 13, color: P.ink, margin: "0 0 2px", lineHeight: 1.4 }}>
+              {n.text}
+              {(n.type === 'like' || n.type === 'comment') && n.source_id && onOpenPost && (
+                <span style={{ display: "block", fontFamily: FF_S, fontSize: 11, color: "#9B85D8", marginTop: 2, fontWeight: 600 }}>Tap to view post ↗</span>
+              )}
+            </p>
           );
+          const handleClick = () => {
+            onMarkRead(n.id);
+            onClose();
+            if ((n.type === 'like' || n.type === 'comment') && n.source_id && onOpenPost) {
+              onOpenPost(n.source_id);
+            }
+          };
           return (
-            <div key={n.id} onClick={() => { onMarkRead(n.id); onClose(); }} style={{ display: "flex", alignItems: "flex-start", gap: 12, padding: "12px 20px", background: n.read ? "transparent" : P.lavenderLight, cursor: "pointer", borderBottom: `1px solid ${P.lavender}11`, transition: "background 0.15s" }}
+            <div key={n.id} onClick={handleClick} style={{ display: "flex", alignItems: "flex-start", gap: 12, padding: "12px 20px", background: n.read ? "transparent" : P.lavenderLight, cursor: "pointer", borderBottom: `1px solid ${P.lavender}11`, transition: "background 0.15s" }}
               onMouseEnter={e => e.currentTarget.style.background = P.lavenderLight}
               onMouseLeave={e => e.currentTarget.style.background = n.read ? "transparent" : P.lavenderLight}>
               <div style={{ position: "relative", flexShrink: 0 }}>
@@ -7246,7 +7825,7 @@ const PublicProfilePage = ({ userId, onBack, following, toggleFollow, onMessage 
                       </a>
                     )}
                     {bioLinks.filter(l => l.url).map((lnk, i) => (
-                      <a key={i} href={lnk.url} target="_blank" rel="noreferrer" style={{ display: "inline-flex", alignItems: "center", gap: 4, fontFamily: FF_S, fontSize: 12, color: "#9B85D8", textDecoration: "none", fontWeight: 500, background: P.lavenderLight, borderRadius: 20, padding: "3px 11px" }}>
+                      <a key={i} href={ensureHttps(lnk.url)} target="_blank" rel="noreferrer" style={{ display: "inline-flex", alignItems: "center", gap: 4, fontFamily: FF_S, fontSize: 12, color: "#9B85D8", textDecoration: "none", fontWeight: 500, background: P.lavenderLight, borderRadius: 20, padding: "3px 11px" }}>
                         🔗 {lnk.label || lnk.url}
                       </a>
                     ))}
@@ -7788,7 +8367,22 @@ const HomePageNew = ({ onNavigate, profilePic }) => {
 export default function App() {
   const { user, profile, loading: authLoading, profileLoading, signIn, signUp, signOut } = useAuth();
   const [page, setPage] = useState(() => {
-    try { return sessionStorage.getItem("nook_page") || "home"; } catch { return "home"; }
+    try {
+      const saved = sessionStorage.getItem("nook_page");
+      if (saved) return saved;
+      // No saved page — check if a valid Supabase session is cached in localStorage.
+      // If so, default to "dashboard" immediately (avoids an extra redirect render cycle).
+      for (const key of Object.keys(localStorage)) {
+        if (/^sb-.+-auth-token$/.test(key)) {
+          const raw = localStorage.getItem(key);
+          const session = raw ? JSON.parse(raw) : null;
+          if (session?.user?.id && (!session.expires_at || Date.now() / 1000 + 30 < session.expires_at)) {
+            return "dashboard";
+          }
+        }
+      }
+      return "home";
+    } catch { return "home"; }
   });
   const pageRef = useRef(page);
   useEffect(() => { pageRef.current = page; }, [page]);
@@ -7806,11 +8400,26 @@ export default function App() {
   const notifPrefsRef = useRef({ follows: true, likes: true, comments: true, mentions: true, announcements: false });
   useEffect(() => { notifPrefsRef.current = notifPrefs; }, [notifPrefs]);
 
+  const [viewPostId, setViewPostId] = useState(null);
   const [viewingUser, setViewingUser] = useState(null);
   const [profileViewId, setProfileViewId] = useState(null);
   const [prevPage, setPrevPage] = useState("feed");
   const [pendingDmUserId, setPendingDmUserId] = useState(null);
-  const [showOnboarding, setShowOnboarding] = useState(false);
+  const [showOnboarding, setShowOnboarding] = useState(() => {
+    // If the user just confirmed their email (Supabase redirects back with type=signup in hash),
+    // we need to show onboarding immediately — before any auth-based page guard can redirect away.
+    try {
+      const hash = window.location.hash;
+      if (hash && hash.includes('type=signup')) return true;
+    } catch {}
+    return false;
+  });
+  const [widgetReloadKey, setWidgetReloadKey] = useState(0);
+  const dashboardEverMounted = useRef(false);
+  // Tracks the last non-null user so DashboardPage stays mounted even if
+  // auth briefly flickers to null (e.g. during Supabase token refresh).
+  const lastKnownUserRef = useRef(null);
+  if (user) lastKnownUserRef.current = user;
   const [accent, setAccent] = useState("#C9B8F0");
 
   // Read accent from localStorage once user id is known
@@ -7852,21 +8461,22 @@ export default function App() {
     meta.content = 'width=device-width, initial-scale=1, maximum-scale=1';
   }, []);
 
-  // Persist key state in localStorage
+  // Persist key state in localStorage — keyed per-user so photos don't bleed across accounts
+  // hasOnboarded is loaded per-user in useEffect([user?.id]) below; profilePic comes from Supabase.
+  // This effect only handles the legacy global key migration (one-time read, then ignored).
   useEffect(() => {
     try {
       const saved = localStorage.getItem("nook_state");
       if (saved) {
         const s = JSON.parse(saved);
-        if (s.profilePic) setProfilePic(s.profilePic);
+        // Only migrate hasOnboarded flag — never load a photo from the global key
+        // (the photo may belong to a different user)
         if (s.hasOnboarded) setHasOnboarded(true);
+        // Remove the global key so it can't pollute future sessions
+        localStorage.removeItem("nook_state");
       }
     } catch {}
   }, []);
-
-  useEffect(() => {
-    try { localStorage.setItem("nook_state", JSON.stringify({ profilePic, hasOnboarded })); } catch {}
-  }, [profilePic, hasOnboarded]);
 
   // Load follows from Supabase when user is available
   useEffect(() => {
@@ -7894,7 +8504,7 @@ export default function App() {
     (async () => {
       // ── Settings prefs ──────────────────────────────────────────────────
       const { data: settingsData } = await supabase.from('user_data').select('key, value')
-        .eq('user_id', user.id).in('key', ['notif_prefs', 'priv_prefs']);
+        .eq('user_id', user.id).in('key', ['notif_prefs', 'priv_prefs', 'profile_pic']);
       if (settingsData) {
         const byKey = Object.fromEntries(settingsData.map(r => [r.key, r.value]));
         if (byKey.notif_prefs) {
@@ -7909,6 +8519,16 @@ export default function App() {
         } else {
           try { const s = localStorage.getItem(`nook_priv_${user.id}`); if (s) setPrivPrefs(p => ({ ...p, ...JSON.parse(s) })); } catch {}
         }
+        if (byKey.profile_pic?.data) {
+          setProfilePic(byKey.profile_pic.data);
+          try { localStorage.setItem(`nook_pic_${user.id}`, byKey.profile_pic.data); } catch {}
+        } else {
+          // Try user-specific localStorage cache as a fast fallback before Supabase loads
+          try {
+            const cached = localStorage.getItem(`nook_pic_${user.id}`);
+            if (cached) setProfilePic(cached);
+          } catch {}
+        }
       }
       // ── Persistent notifications ────────────────────────────────────────
       const { data: notifData, error: notifErr } = await supabase
@@ -7918,6 +8538,7 @@ export default function App() {
         setNotifications(notifData.map(r => ({
           id: r.id, type: r.type, uid: r.uid, name: r.name,
           text: r.text, read: r.read, ts: new Date(r.created_at).getTime(),
+          source_id: r.source_id || null,
         })));
       }
     })();
@@ -7940,6 +8561,15 @@ export default function App() {
       .upsert({ user_id: user.id, key: 'priv_prefs', value: privPrefs }, { onConflict: 'user_id,key' })
       .then(({ error }) => { if (error) console.error('[Settings] priv_prefs save error', error); });
   }, [privPrefs, user?.id]); // eslint-disable-line
+
+  // Save profile photo to Supabase + user-specific localStorage so it persists across browsers/devices
+  useEffect(() => {
+    if (!user?.id || !profilePic) return;
+    try { localStorage.setItem(`nook_pic_${user.id}`, profilePic); } catch {}
+    supabase.from('user_data')
+      .upsert({ user_id: user.id, key: 'profile_pic', value: { data: profilePic } }, { onConflict: 'user_id,key' })
+      .then(({ error }) => { if (error) console.error('[App] profile_pic save error', error); });
+  }, [profilePic, user?.id]); // eslint-disable-line
 
   useEffect(() => {
     try { sessionStorage.setItem("nook_page", page); } catch {}
@@ -8055,23 +8685,30 @@ export default function App() {
       )
       .subscribe();
 
-    // Subscribe to new comments on posts owned by the current user
-    const commentCh = supabase
-      .channel(`notif-comments-${user.id}`)
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'comments' },
-        async (payload) => {
-          const commenterId = payload.new?.user_id;
-          const postId = payload.new?.post_id;
-          if (!commenterId || commenterId === user.id || !postId) return;
-          // Check if the post belongs to the current user
-          try {
-            const { data: post } = await supabase.from('posts').select('user_id, content').eq('id', postId).eq('user_id', user.id).maybeSingle();
-            if (!post) return; // Post doesn't belong to current user
-            const { data: p } = await supabase.from('profiles').select('name, handle').eq('id', commenterId).maybeSingle();
-            const name = p?.name || p?.handle || 'Someone';
-            const preview = (post.content || '').slice(0, 40);
-            addNotif({ type: 'comment', uid: commenterId, text: `${name} commented on your post${preview ? `: "${preview}${post.content?.length > 40 ? '…' : ''}"` : ''}` });
-          } catch {}
+    // ── Like & comment notifications (real-time via notifications table) ────
+    // DB triggers (see supabase-feed-notification-triggers.sql) insert a row
+    // into the notifications table whenever someone likes or comments on a post
+    // owned by the current user. This subscription delivers those inserts to the
+    // client in real-time so the bell icon lights up immediately.
+    // The existing load-on-login block above handles notifications received
+    // while the user was offline — no separate login-diff needed.
+    const notifCh = supabase
+      .channel(`user-notifs-${user.id}`)
+      .on('postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'notifications', filter: `user_id=eq.${user.id}` },
+        (payload) => {
+          const n = payload.new;
+          if (!n || n.user_id !== user.id) return;
+          // Respect the user's notification preferences
+          const prefs = notifPrefsRef.current;
+          if (n.type === 'like'    && !prefs.likes)    return;
+          if (n.type === 'comment' && !prefs.comments) return;
+          if (n.type === 'follow'  && !prefs.follows)  return;
+          // Update in-memory state — dedup by id in case load-on-login already caught it
+          setNotifications(ns => {
+            if (ns.some(x => x.id === n.id)) return ns;
+            return [{ id: n.id, type: n.type, uid: n.uid, name: n.name, text: n.text, read: false, ts: new Date(n.created_at).getTime(), source_id: n.source_id || null }, ...ns.slice(0, 49)];
+          });
         }
       )
       .subscribe();
@@ -8108,7 +8745,7 @@ export default function App() {
 
     return () => {
       supabase.removeChannel(followCh);
-      supabase.removeChannel(commentCh);
+      supabase.removeChannel(notifCh);
     };
   }, [user?.id]); // eslint-disable-line
 
@@ -8129,7 +8766,11 @@ export default function App() {
 
   const logout = async () => {
     await signOut();
+    // Clear the last-known-user ref so DashboardPage unmounts cleanly on logout
+    lastKnownUserRef.current = null;
+    dashboardEverMounted.current = false;
     try { sessionStorage.removeItem("nook_page"); } catch {}
+    setProfilePic(null); // Clear photo so the next user doesn't see the previous user's photo
     setPage("home");
     setHasOnboarded(false);
   };
@@ -8176,8 +8817,13 @@ export default function App() {
     } catch {}
     // Mark this specific user as onboarded in localStorage
     try { localStorage.setItem(`nook_onboarded_${user?.id}`, "1"); } catch {}
+    // Clean the email confirmation hash from the URL so it doesn't re-trigger onboarding on refresh
+    try { if (window.location.hash.includes('type=signup')) window.history.replaceState(null, '', window.location.pathname); } catch {}
     setHasOnboarded(true);
     setShowOnboarding(false);
+    // Increment reload key so DashboardPage re-fetches widget configs from Supabase
+    // (DashboardPage stays mounted while logged in, so we must trigger a fresh load)
+    setWidgetReloadKey(k => k + 1);
     setPage("dashboard");
   };
 
@@ -8224,6 +8870,19 @@ export default function App() {
     }
   }, [justSignedUp, user]);
 
+  // If showOnboarding was set by the URL hash (email confirmation), but this user has
+  // already been through onboarding, skip it and go straight to the dashboard.
+  useEffect(() => {
+    if (showOnboarding && user && !authLoading) {
+      try {
+        if (localStorage.getItem(`nook_onboarded_${user.id}`) === "1") {
+          setShowOnboarding(false);
+          setPage("dashboard");
+        }
+      } catch {}
+    }
+  }, [showOnboarding, user, authLoading]);
+
   const protectedPages = ["dashboard","customize","messages","feed","work","admin","settings","profile"];
   useEffect(() => {
     if (authLoading) return;
@@ -8234,6 +8893,9 @@ export default function App() {
     }
     if (page === "admin" && !isAdmin) { setPage("dashboard"); }
   }, [user, authLoading, page, showOnboarding, isAdmin]);
+
+  // Set during render (not in a useEffect) so the JSX condition sees it in the same render pass
+  if (user && ["dashboard","customize"].includes(page)) dashboardEverMounted.current = true;
 
   // Show nothing while Supabase checks session — prevents flash of login page
   if (authLoading) return (
@@ -8394,6 +9056,7 @@ export default function App() {
             .then(({ error }) => { if (error) console.error('[Notif] mark all read error', error); });
         }}
         onOpenProfile={openUserProfile}
+        onOpenPost={(postId) => { setViewPostId(postId); }}
         accent={accent}
       />
 
@@ -8419,10 +9082,11 @@ export default function App() {
         </div>
       )}
 
-      {/* DashboardPage stays mounted while logged in — hidden via CSS to preserve widget state */}
-      {user && (
-        <div style={{ display: ["dashboard","customize"].includes(page) ? "block" : "none" }}>
-          <DashboardPage user={user} view={page} onNavigate={navigate} profilePic={profilePic} setProfilePic={setProfilePic} widgetRequests={widgetRequests} setWidgetRequests={setWidgetRequests} following={following} toggleFollow={toggleFollow} onViewUser={openUserProfile} />
+      {/* DashboardPage stays mounted while logged in — hidden via CSS to preserve widget state.
+          Uses lastKnownUserRef so a brief auth null-flicker doesn't unmount and wipe widget state. */}
+      {dashboardEverMounted.current && lastKnownUserRef.current && (
+        <div style={{ display: user && ["dashboard","customize"].includes(page) ? "block" : "none" }}>
+          <DashboardPage user={lastKnownUserRef.current} view={page} onNavigate={navigate} profilePic={profilePic} setProfilePic={setProfilePic} widgetRequests={widgetRequests} setWidgetRequests={setWidgetRequests} following={following} toggleFollow={toggleFollow} onViewUser={openUserProfile} widgetReloadKey={widgetReloadKey} />
         </div>
       )}
       {page === "messages" && user && <MessagesPage requests={requests} setRequests={setRequests} pendingDmUserId={pendingDmUserId} onPendingDmHandled={() => setPendingDmUserId(null)} />}
@@ -8431,6 +9095,9 @@ export default function App() {
       {page === "admin"    && isAdmin && <AdminPage widgetRequests={widgetRequests} setWidgetRequests={setWidgetRequests} />}
       {page === "settings" && user && <SettingsPage profilePic={profilePic} setProfilePic={setProfilePic} onLogout={logout} accent={accent} onAccentChange={updateAccent} notifPrefs={notifPrefs} setNotifPrefs={setNotifPrefs} privPrefs={privPrefs} setPrivPrefs={setPrivPrefs} />}
       {page === "profile"  && user && profileViewId && <PublicProfilePage userId={profileViewId} onBack={() => navigate(prevPage || "feed")} following={following} toggleFollow={toggleFollow} onMessage={(userId) => { setPendingDmUserId(userId); navigate("messages"); }} />}
+
+      {/* Post detail modal — opened when clicking a like/comment notification */}
+      {viewPostId && <PostDetailModal postId={viewPostId} onClose={() => setViewPostId(null)} />}
 
       {/* User profile modal */}
       {viewingUser && (
