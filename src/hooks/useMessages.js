@@ -84,16 +84,21 @@ export function useMessages() {
     setLoading(true)
 
     try {
-      // Step 1: Get conversation IDs the user belongs to
+      // Step 1: Get conversation IDs the user belongs to (including last_read_at for unread counts)
       const { data: memberData, error: memberError } = await supabase
         .from('conversation_members')
-        .select('conversation_id')
+        .select('conversation_id, last_read_at')
         .eq('user_id', user.id)
 
       if (memberError) throw memberError
       if (!memberData?.length) { setConversations([]); setLoading(false); return }
 
       const convIds = memberData.map(m => m.conversation_id)
+
+      // Build a DB-sourced read-timestamp map; merge with localStorage (DB wins for cross-device accuracy)
+      const dbReadTimestamps = Object.fromEntries(
+        (memberData || []).map(m => [m.conversation_id, m.last_read_at]).filter(([, ts]) => ts)
+      )
 
       // Step 2: Get conversations (flat — no nested join)
       const { data: convData, error: convError } = await supabase
@@ -124,8 +129,8 @@ export function useMessages() {
       const profilesById = Object.fromEntries((profilesData || []).map(p => [p.id, p]))
 
       // Step 5: For each conversation, fetch last message + assemble metadata
-      // Load persisted read-timestamps so unread counts survive navigation
-      const readTimestamps = getReadTimestamps(user.id)
+      // Merge localStorage (instant cache) with DB timestamps (DB wins as cross-device source of truth)
+      const readTimestamps = { ...getReadTimestamps(user.id), ...dbReadTimestamps }
 
       const withMeta = await Promise.all((convData || []).map(async (conv) => {
         const convMembers = (allMembers || []).filter(m => m.conversation_id === conv.id)
@@ -231,13 +236,22 @@ export function useMessages() {
     activeConversationIdRef.current = conversationId  // keep ref in sync for closure access
     setTypingUsers([])
 
-    // Clear unread count and persist the read timestamp so it survives navigation
+    // Clear unread count and persist the read timestamp so it survives navigation + cross-device
     if (conversationId) {
       setConversations(prev => prev.map(c =>
         c.id === conversationId ? { ...c, unreadCount: 0 } : c
       ))
-      // Persist: any future fetchConversations will count only messages after now
+      // Persist to localStorage (instant, in-session)
       saveReadTimestamp(user?.id, conversationId)
+      // Persist to Supabase (cross-device: next login on any browser will read this)
+      if (user?.id) {
+        supabase
+          .from('conversation_members')
+          .update({ last_read_at: new Date().toISOString() })
+          .eq('conversation_id', conversationId)
+          .eq('user_id', user.id)
+          .then(({ error }) => { if (error) console.warn('[Nook] last_read_at update error', error) })
+      }
     }
 
     if (messageChannelRef.current) supabase?.removeChannel(messageChannelRef.current)

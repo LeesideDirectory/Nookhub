@@ -4612,6 +4612,37 @@ const HomePage = ({ onNavigate, profilePic }) => {
 // Legal pages
 // ─────────────────────────────────────────────────────────────────────────────
 
+// ─── Suspended account page ───────────────────────────────────────────────────
+// Shown instead of the entire app when profile.suspended === true.
+// The user can only log out or send an appeal email — no other navigation is possible.
+const SuspendedPage = ({ onLogout }) => (
+  <div style={{ minHeight: "100vh", background: P.bg, display: "flex", alignItems: "center", justifyContent: "center", padding: "24px" }}>
+    <div style={{ background: P.white, borderRadius: 24, padding: "48px 40px", maxWidth: 460, width: "100%", boxShadow: "0 4px 32px #C9B8F022", textAlign: "center", border: `1.5px solid ${P.lavender}33` }}>
+      <div style={{ fontFamily: FF_D, fontSize: 28, color: P.lavender, marginBottom: 8 }}>✦ Nook</div>
+      <div style={{ fontSize: 36, marginBottom: 16 }}>⊘</div>
+      <h1 style={{ fontFamily: FF_D, fontSize: 26, color: P.ink, margin: "0 0 12px", fontWeight: 400 }}>Account suspended</h1>
+      <p style={{ fontFamily: FF_S, fontSize: 14, color: P.inkLight, lineHeight: 1.75, margin: "0 0 28px" }}>
+        Your Nook account has been temporarily suspended. You won't be able to access your dashboard or any other features while the suspension is active.
+      </p>
+      <p style={{ fontFamily: FF_S, fontSize: 14, color: P.inkLight, lineHeight: 1.75, margin: "0 0 32px" }}>
+        If you believe this is a mistake, you can contact us to appeal:
+      </p>
+      <a
+        href="mailto:nook-hub@outlook.com?subject=Account%20suspension%20appeal"
+        style={{ display: "block", background: P.lavender, color: P.white, borderRadius: 12, padding: "12px 24px", fontFamily: FF_S, fontSize: 14, fontWeight: 600, textDecoration: "none", marginBottom: 12 }}
+      >
+        ✉ Appeal this suspension
+      </a>
+      <button
+        onClick={onLogout}
+        style={{ background: "transparent", border: `1.5px solid ${P.lavender}55`, borderRadius: 12, padding: "11px 24px", width: "100%", cursor: "pointer", fontFamily: FF_S, fontSize: 14, color: P.inkLight }}
+      >
+        Log out
+      </button>
+    </div>
+  </div>
+);
+
 const LegalSection = ({ title, children }) => (
   <div style={{ marginBottom: 32 }}>
     <h2 style={{ fontFamily: FF_D, fontSize: 22, color: P.ink, margin: "0 0 12px", fontWeight: 400 }}>{title}</h2>
@@ -10504,6 +10535,12 @@ export default function App() {
       <div style={{ fontFamily: "'DM Serif Display', serif", fontSize: 28, color: "#C9B8F0" }}>✦ Nook</div>
     </div>
   );
+
+  // If the logged-in user's account is suspended, show only the suspension notice.
+  // profileLoading guard prevents a brief flash while the profile is fetched after login.
+  if (user && !profileLoading && profile?.suspended) {
+    return <SuspendedPage onLogout={handleLogout} />;
+  }
 
   return (
     <ProfileViewContext.Provider value={openUserProfile}>
