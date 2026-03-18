@@ -5625,7 +5625,7 @@ const DashboardPage = ({ user: userProp, view, onNavigate, profilePic, setProfil
                     <>
                       {pubGrid.length === 0 && !pubArchive
                         ? <div style={{ textAlign: "center", padding: "60px 0", color: P.inkLight }}><p style={{ fontSize: 32, margin: "0 0 12px" }}>🔒</p><p>All your widgets are private — toggle some to public in Customise.</p></div>
-                        : <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 20 }}>
+                        : <div className="nook-dash-grid" style={{ gap: 20 }}>
                             {pubGrid.map(w => (
                               <div key={w.id} style={{ gridColumn: expandedWidgets.has(w.id) ? "1 / -1" : "auto", minWidth: 0 }}>
                                 <WidgetCard widget={w} isOwnDashboard={false} liveData={getLiveData(w.id)} />
@@ -9401,9 +9401,11 @@ const PublicProfilePage = ({ userId, onBack, following, toggleFollow, onMessage 
                 <p>This user hasn't added any widgets to their Nook yet.</p>
               </div>
             ) : (
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 20 }}>
+              <div className="nook-dash-grid" style={{ gap: 20 }}>
                 {widgets.filter(w => w.id !== "archive").map(w => (
-                  <WidgetCard key={w.id} widget={w} isOwnDashboard={false} />
+                  <div key={w.id} style={{ minWidth: 0 }}>
+                    <WidgetCard widget={w} isOwnDashboard={false} />
+                  </div>
                 ))}
               </div>
             )}
@@ -10651,11 +10653,13 @@ export default function App() {
 
           /* ── Widget cards: tighter padding + contain overflow ── */
           .nook-widget-card { padding: 16px !important; max-width: 100%; }
-          .nook-widget-card-header { flex-wrap: wrap !important; gap: 6px !important; }
-          .nook-widget-card-title { min-width: 0; overflow: hidden; }
+
+          /* Title row fills the full first line; controls wrap to a second line */
+          .nook-widget-card-header { flex-wrap: wrap !important; align-items: center !important; row-gap: 8px !important; column-gap: 0 !important; }
+          .nook-widget-card-title { width: 100% !important; flex: none !important; min-width: 0; }
           .nook-widget-card-title span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block; }
 
-          /* ── Widget controls: allow wrapping so header doesn't overflow ── */
+          /* ── Widget controls: allow wrapping + scale down gap ── */
           .nook-widget-controls { flex-wrap: wrap !important; gap: 4px !important; }
 
           /* ── Gallery / photo-post modal: stack media above detail on mobile ── */
