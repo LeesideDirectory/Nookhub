@@ -5382,10 +5382,12 @@ const DashboardPage = ({ user: userProp, view, onNavigate, profilePic, setProfil
 
         {view === "customize" && (() => {
           const CATEGORIES = [
-            { id: "productivity",     label: "Productivity",      emoji: "⚡", ids: ["todo", "goals", "links", "bookmarks"] },
-            { id: "lifestyle",        label: "Lifestyle",          emoji: "🌿", ids: ["habitstreak", "sobriety", "mood", "gratitude", "hobbies", "archive"] },
+            { id: "productivity",     label: "Productivity",      emoji: "⚡", ids: ["todo", "goals", "links", "bookmarks", "studylog", "skillprog"] },
+            { id: "lifestyle",        label: "Lifestyle",          emoji: "🌿", ids: ["habitstreak", "sobriety", "mood", "gratitude", "hobbies", "archive", "sleeplog", "waterring", "plants", "countdown", "birthdays"] },
+            { id: "finance",          label: "Finance",            emoji: "💰", ids: ["finance"] },
+            { id: "food",             label: "Food & Meal Planning", emoji: "🍽", ids: ["mealplanner"] },
             { id: "sports",           label: "Sports",             emoji: "🏃", ids: ["sports", "exercise"] },
-            { id: "culture",          label: "Culture",            emoji: "📚", ids: ["reading", "podcast", "articles", "blog"] },
+            { id: "culture",          label: "Culture",            emoji: "📚", ids: ["reading", "podcast", "articles", "blog", "watchlist", "quotes"] },
             { id: "social",           label: "Social Media",       emoji: "✨", ids: ["instagram", "linkedin", "twitter", "gallery"] },
             { id: "entrepreneurship", label: "Entrepreneurship",   emoji: "🚀", ids: ["projects"] },
             { id: "lifestyle2",       label: "Life & Travel",      emoji: "✈",  ids: ["travel"] },
