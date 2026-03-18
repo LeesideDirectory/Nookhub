@@ -72,6 +72,17 @@ const INITIAL_WIDGETS = [
   { id: "gallery",     title: "Gallery",                 icon: "🖼",  enabled: false, isPublic: false, colorIdx: 4, category: "social",           data: { posts: [] }},
   { id: "blog",        title: "Blog",                    icon: "✍",  enabled: false, isPublic: false, colorIdx: 0, category: "culture",          data: { posts: [] }},
   { id: "bookmarks",   title: "Bookmarks",               icon: "🔖", enabled: false, isPublic: false, colorIdx: 2, category: "productivity",     data: { bookmarks: null }},
+  { id: "finance",     title: "Finance Tracker",         icon: "💰", enabled: false, isPublic: false, colorIdx: 1, category: "lifestyle",        data: { budgets: [], expenses: [], savings: [], bills: [], netWorth: { assets: 0, liabilities: 0 } }},
+  { id: "countdown",   title: "Countdown",                icon: "⏳", enabled: false, isPublic: false, colorIdx: 3, category: "lifestyle",        data: { events: [] }},
+  { id: "watchlist",   title: "Watchlist",                icon: "🎬", enabled: false, isPublic: false, colorIdx: 4, category: "culture",          data: { items: [] }},
+  { id: "sleeplog",    title: "Sleep Log",                icon: "🌙", enabled: false, isPublic: false, colorIdx: 0, category: "lifestyle",        data: { entries: [] }},
+  { id: "waterring",   title: "Daily Habits",             icon: "💧", enabled: false, isPublic: false, colorIdx: 2, category: "lifestyle",        data: { targets: [], logs: {} }},
+  { id: "quotes",      title: "Quotes Collection",        icon: "❝",  enabled: false, isPublic: false, colorIdx: 5, category: "culture",          data: { quotes: [], showRandom: false }},
+  { id: "plants",      title: "Plant Tracker",            icon: "🌿", enabled: false, isPublic: false, colorIdx: 1, category: "lifestyle",        data: { plants: [] }},
+  { id: "birthdays",   title: "Friend Birthdays",         icon: "🎂", enabled: false, isPublic: false, colorIdx: 3, category: "lifestyle",        data: { birthdays: [] }},
+  { id: "studylog",    title: "Study & Focus Log",        icon: "📚", enabled: false, isPublic: false, colorIdx: 0, category: "productivity",     data: { sessions: [], subjects: [] }},
+  { id: "skillprog",   title: "Skill Progress",           icon: "⚡", enabled: false, isPublic: false, colorIdx: 4, category: "productivity",     data: { skills: [] }},
+  { id: "mealplanner", title: "Meal Planner",             icon: "🍽", enabled: false, isPublic: false, colorIdx: 2, category: "lifestyle",        data: { weeks: {} }},
 ];
 
 function fmtTime(ts) {
@@ -2878,6 +2889,1162 @@ const FaviconIcon = ({ url, emoji, size, iconSize }) => {
   );
 };
 
+// ─── Finance Tracker ────────────────────────────────────────────────────────
+const FinanceWidget = ({ data, color, onDataChange }) => {
+  const [tab, setTab] = useState("budget");
+  const [budgets, setBudgets] = useState(data.budgets || []);
+  const [expenses, setExpenses] = useState(data.expenses || []);
+  const [savings, setSavings] = useState(data.savings || []);
+  const [bills, setBills] = useState(data.bills || []);
+  const [netWorth, setNetWorth] = useState(data.netWorth || { assets: 0, liabilities: 0 });
+
+  const save = (patch) => {
+    const next = { budgets, expenses, savings, bills, netWorth, ...patch };
+    onDataChange?.(next);
+  };
+
+  // Budget tab state
+  const [budgetInput, setBudgetInput] = useState({ category: "", amount: "" });
+  const [expenseInput, setExpenseInput] = useState({ category: "", amount: "", note: "" });
+
+  // Savings tab state
+  const [savingInput, setSavingInput] = useState({ name: "", target: "", saved: "" });
+
+  // Bills tab state
+  const [billInput, setBillInput] = useState({ name: "", amount: "", dueDay: "" });
+
+  // Net worth tab state
+  const [nwEdit, setNwEdit] = useState(false);
+  const [nwDraft, setNwDraft] = useState({ assets: netWorth.assets, liabilities: netWorth.liabilities });
+
+  const CATS = ["🏠 Housing", "🍔 Food", "🚗 Transport", "🛍 Shopping", "💊 Health", "🎉 Social", "📱 Subscriptions", "📚 Education", "🏋 Fitness", "💼 Work", "🎬 Entertainment", "🌍 Travel", "💸 Other"];
+
+  const addBudget = () => {
+    if (!budgetInput.category || !budgetInput.amount) return;
+    const next = [...budgets, { id: `b${Date.now()}`, category: budgetInput.category, amount: parseFloat(budgetInput.amount) || 0 }];
+    setBudgets(next); setBudgetInput({ category: "", amount: "" }); save({ budgets: next });
+  };
+  const removeBudget = (id) => { const next = budgets.filter(b => b.id !== id); setBudgets(next); save({ budgets: next }); };
+
+  const addExpense = () => {
+    if (!expenseInput.category || !expenseInput.amount) return;
+    const next = [...expenses, { id: `e${Date.now()}`, category: expenseInput.category, amount: parseFloat(expenseInput.amount) || 0, note: expenseInput.note, date: new Date().toISOString().slice(0,10) }];
+    setExpenses(next); setExpenseInput({ category: "", amount: "", note: "" }); save({ expenses: next });
+  };
+  const removeExpense = (id) => { const next = expenses.filter(e => e.id !== id); setExpenses(next); save({ expenses: next }); };
+
+  const addSaving = () => {
+    if (!savingInput.name || !savingInput.target) return;
+    const next = [...savings, { id: `s${Date.now()}`, name: savingInput.name, target: parseFloat(savingInput.target) || 0, saved: parseFloat(savingInput.saved) || 0 }];
+    setSavings(next); setSavingInput({ name: "", target: "", saved: "" }); save({ savings: next });
+  };
+  const updateSaved = (id, val) => {
+    const next = savings.map(s => s.id === id ? { ...s, saved: parseFloat(val) || 0 } : s);
+    setSavings(next); save({ savings: next });
+  };
+  const removeSaving = (id) => { const next = savings.filter(s => s.id !== id); setSavings(next); save({ savings: next }); };
+
+  const addBill = () => {
+    if (!billInput.name || !billInput.amount) return;
+    const next = [...bills, { id: `bl${Date.now()}`, name: billInput.name, amount: parseFloat(billInput.amount) || 0, dueDay: parseInt(billInput.dueDay) || null }];
+    setBills(next); setBillInput({ name: "", amount: "", dueDay: "" }); save({ bills: next });
+  };
+  const removeBill = (id) => { const next = bills.filter(b => b.id !== id); setBills(next); save({ bills: next }); };
+
+  const saveNetWorth = () => {
+    const next = { assets: parseFloat(nwDraft.assets) || 0, liabilities: parseFloat(nwDraft.liabilities) || 0 };
+    setNetWorth(next); setNwEdit(false); save({ netWorth: next });
+  };
+
+  const spendByCategory = {};
+  expenses.forEach(e => { spendByCategory[e.category] = (spendByCategory[e.category] || 0) + e.amount; });
+  const totalBudget = budgets.reduce((a, b) => a + b.amount, 0);
+  const totalSpent = expenses.reduce((a, e) => a + e.amount, 0);
+  const monthlyBills = bills.reduce((a, b) => a + b.amount, 0);
+
+  const tabStyle = (t) => ({
+    background: tab === t ? color.dot : "none",
+    color: tab === t ? "#fff" : P.inkLight,
+    border: `1.5px solid ${tab === t ? color.dot : color.accent}`,
+    borderRadius: 8, padding: "5px 14px", cursor: "pointer",
+    fontFamily: FF_S, fontSize: 12, fontWeight: 600,
+  });
+
+  return (
+    <div>
+      {/* Tab bar */}
+      <div style={{ display: "flex", gap: 6, marginBottom: 18, flexWrap: "wrap" }}>
+        {[["budget","📊 Budget"],["savings","🐷 Savings"],["bills","📋 Bills"],["networth","📈 Net Worth"]].map(([t,label]) => (
+          <button key={t} onClick={() => setTab(t)} style={tabStyle(t)}>{label}</button>
+        ))}
+      </div>
+
+      {/* ── BUDGET tab ── */}
+      {tab === "budget" && (
+        <div>
+          {/* Overview bar */}
+          {totalBudget > 0 && (
+            <div style={{ marginBottom: 16 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+                <span style={{ fontFamily: FF_S, fontSize: 12, color: P.inkLight }}>Monthly spend</span>
+                <span style={{ fontFamily: FF_S, fontSize: 13, fontWeight: 700, color: totalSpent > totalBudget ? "#E57373" : color.dot }}>
+                  €{totalSpent.toFixed(2)} / €{totalBudget.toFixed(2)}
+                </span>
+              </div>
+              <div style={{ height: 8, background: color.accent + "55", borderRadius: 4, overflow: "hidden" }}>
+                <div style={{ height: "100%", width: `${Math.min((totalSpent / totalBudget) * 100, 100)}%`, background: totalSpent > totalBudget ? "#E57373" : color.dot, borderRadius: 4, transition: "width 0.4s" }} />
+              </div>
+            </div>
+          )}
+          {/* Per-category rows */}
+          {budgets.map(b => {
+            const spent = spendByCategory[b.category] || 0;
+            const pct = b.amount > 0 ? Math.min((spent / b.amount) * 100, 100) : 0;
+            const over = spent > b.amount;
+            return (
+              <div key={b.id} style={{ marginBottom: 12 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+                  <span style={{ fontFamily: FF_S, fontSize: 13, color: P.ink }}>{b.category}</span>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <span style={{ fontFamily: FF_S, fontSize: 12, color: over ? "#E57373" : P.inkLight }}>€{spent.toFixed(2)} / €{b.amount.toFixed(2)}</span>
+                    <button onClick={() => removeBudget(b.id)} style={delBtn(color)}>×</button>
+                  </div>
+                </div>
+                <div style={{ height: 5, background: color.accent + "55", borderRadius: 3, overflow: "hidden" }}>
+                  <div style={{ height: "100%", width: `${pct}%`, background: over ? "#E57373" : color.dot, borderRadius: 3, transition: "width 0.3s" }} />
+                </div>
+              </div>
+            );
+          })}
+          {/* Add budget */}
+          <div style={{ display: "flex", gap: 6, marginTop: 10, flexWrap: "wrap" }}>
+            <select value={budgetInput.category} onChange={e => setBudgetInput(p => ({...p, category: e.target.value}))} style={{ ...inp(color), flex: 2, minWidth: 120 }}>
+              <option value="">Category…</option>
+              {CATS.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+            <input value={budgetInput.amount} onChange={e => setBudgetInput(p => ({...p, amount: e.target.value}))} placeholder="€ budget" style={{ ...inp(color), width: 90 }} />
+            <button onClick={addBudget} style={{ background: color.dot, color: "#fff", border: "none", borderRadius: 8, padding: "5px 12px", cursor: "pointer", fontWeight: 600, fontSize: 13 }}>+</button>
+          </div>
+          {/* Log expense */}
+          <div style={{ marginTop: 16, paddingTop: 14, borderTop: `1px solid ${color.accent}55` }}>
+            <div style={{ fontFamily: FF_S, fontSize: 11, fontWeight: 700, color: P.inkFaint, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 8 }}>Log Expense</div>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+              <select value={expenseInput.category} onChange={e => setExpenseInput(p => ({...p, category: e.target.value}))} style={{ ...inp(color), flex: 2, minWidth: 120 }}>
+                <option value="">Category…</option>
+                {CATS.map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+              <input value={expenseInput.amount} onChange={e => setExpenseInput(p => ({...p, amount: e.target.value}))} placeholder="€ amount" style={{ ...inp(color), width: 90 }} />
+              <input value={expenseInput.note} onChange={e => setExpenseInput(p => ({...p, note: e.target.value}))} onKeyDown={e => e.key === "Enter" && addExpense()} placeholder="Note (optional)" style={{ ...inp(color), flex: 3, minWidth: 100 }} />
+              <button onClick={addExpense} style={{ background: color.dot, color: "#fff", border: "none", borderRadius: 8, padding: "5px 12px", cursor: "pointer", fontWeight: 600, fontSize: 13 }}>Add</button>
+            </div>
+            {/* Recent expenses */}
+            {expenses.length > 0 && (
+              <div style={{ marginTop: 12, maxHeight: 180, overflowY: "auto" }}>
+                {[...expenses].reverse().map(e => (
+                  <div key={e.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 10px", borderRadius: 8, marginBottom: 4, background: color.accent + "33" }}>
+                    <span style={{ fontFamily: FF_S, fontSize: 13, flex: 1, color: P.ink }}>{e.category}{e.note ? ` — ${e.note}` : ""}</span>
+                    <span style={{ fontFamily: FF_S, fontSize: 12, color: color.dot, fontWeight: 600 }}>€{e.amount.toFixed(2)}</span>
+                    <span style={{ fontFamily: FF_S, fontSize: 10, color: P.inkFaint }}>{e.date}</span>
+                    <button onClick={() => removeExpense(e.id)} style={delBtn(color)}>×</button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── SAVINGS tab ── */}
+      {tab === "savings" && (
+        <div>
+          {savings.map(s => {
+            const pct = s.target > 0 ? Math.min((s.saved / s.target) * 100, 100) : 0;
+            return (
+              <div key={s.id} style={{ marginBottom: 14, padding: "12px 14px", borderRadius: 12, background: color.accent + "33" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                  <span style={{ fontFamily: FF_D, fontSize: 15, color: P.ink }}>{s.name}</span>
+                  <button onClick={() => removeSaving(s.id)} style={delBtn(color)}>×</button>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                  <div style={{ flex: 1, height: 8, background: color.accent + "55", borderRadius: 4, overflow: "hidden" }}>
+                    <div style={{ height: "100%", width: `${pct}%`, background: color.dot, borderRadius: 4, transition: "width 0.4s" }} />
+                  </div>
+                  <span style={{ fontFamily: FF_S, fontSize: 12, color: P.inkLight, flexShrink: 0 }}>€{s.saved} / €{s.target} ({Math.round(pct)}%)</span>
+                </div>
+                <div style={{ display: "flex", gap: 6 }}>
+                  <input type="number" defaultValue={s.saved} onBlur={e => updateSaved(s.id, e.target.value)} placeholder="Saved so far…" style={{ ...inp(color), width: 120 }} />
+                  <span style={{ fontFamily: FF_S, fontSize: 12, color: P.inkFaint, alignSelf: "center" }}>saved of €{s.target} target</span>
+                </div>
+              </div>
+            );
+          })}
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
+            <input value={savingInput.name} onChange={e => setSavingInput(p => ({...p, name: e.target.value}))} placeholder="Goal name…" style={{ ...inp(color), flex: 2, minWidth: 120 }} />
+            <input value={savingInput.target} onChange={e => setSavingInput(p => ({...p, target: e.target.value}))} placeholder="€ target" style={{ ...inp(color), width: 90 }} />
+            <input value={savingInput.saved} onChange={e => setSavingInput(p => ({...p, saved: e.target.value}))} onKeyDown={e => e.key === "Enter" && addSaving()} placeholder="€ saved" style={{ ...inp(color), width: 90 }} />
+            <button onClick={addSaving} style={{ background: color.dot, color: "#fff", border: "none", borderRadius: 8, padding: "5px 12px", cursor: "pointer", fontWeight: 600, fontSize: 13 }}>+</button>
+          </div>
+        </div>
+      )}
+
+      {/* ── BILLS tab ── */}
+      {tab === "bills" && (
+        <div>
+          {monthlyBills > 0 && (
+            <div style={{ marginBottom: 14, padding: "10px 14px", borderRadius: 10, background: color.accent + "33" }}>
+              <span style={{ fontFamily: FF_S, fontSize: 12, color: P.inkLight }}>Total monthly committed: </span>
+              <span style={{ fontFamily: FF_S, fontSize: 14, fontWeight: 700, color: color.dot }}>€{monthlyBills.toFixed(2)}</span>
+            </div>
+          )}
+          {bills.map(b => (
+            <div key={b.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", borderRadius: 10, marginBottom: 6, background: color.accent + "33" }}>
+              <span style={{ fontFamily: FF_S, fontSize: 13, flex: 1, color: P.ink }}>{b.name}</span>
+              {b.dueDay && <span style={{ fontFamily: FF_S, fontSize: 11, color: P.inkFaint }}>Due: {b.dueDay}{["st","nd","rd"][b.dueDay-1] || "th"}</span>}
+              <span style={{ fontFamily: FF_S, fontSize: 13, fontWeight: 600, color: color.dot }}>€{b.amount.toFixed(2)}/mo</span>
+              <button onClick={() => removeBill(b.id)} style={delBtn(color)}>×</button>
+            </div>
+          ))}
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
+            <input value={billInput.name} onChange={e => setBillInput(p => ({...p, name: e.target.value}))} placeholder="Bill / subscription name…" style={{ ...inp(color), flex: 3, minWidth: 120 }} />
+            <input value={billInput.amount} onChange={e => setBillInput(p => ({...p, amount: e.target.value}))} placeholder="€/mo" style={{ ...inp(color), width: 80 }} />
+            <input value={billInput.dueDay} onChange={e => setBillInput(p => ({...p, dueDay: e.target.value}))} onKeyDown={e => e.key === "Enter" && addBill()} placeholder="Day due" style={{ ...inp(color), width: 70 }} />
+            <button onClick={addBill} style={{ background: color.dot, color: "#fff", border: "none", borderRadius: 8, padding: "5px 12px", cursor: "pointer", fontWeight: 600, fontSize: 13 }}>+</button>
+          </div>
+        </div>
+      )}
+
+      {/* ── NET WORTH tab ── */}
+      {tab === "networth" && (
+        <div>
+          <div style={{ display: "flex", gap: 16, marginBottom: 20 }}>
+            {[["Assets", netWorth.assets, color.dot],["Liabilities", netWorth.liabilities, "#E57373"],["Net Worth", netWorth.assets - netWorth.liabilities, netWorth.assets - netWorth.liabilities >= 0 ? color.dot : "#E57373"]].map(([label, val, c]) => (
+              <div key={label} style={{ flex: 1, padding: "14px", borderRadius: 14, background: color.accent + "44", textAlign: "center" }}>
+                <div style={{ fontFamily: FF_S, fontSize: 11, color: P.inkFaint, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 4 }}>{label}</div>
+                <div style={{ fontFamily: FF_D, fontSize: 22, color: c }}>€{Math.abs(val).toLocaleString()}</div>
+              </div>
+            ))}
+          </div>
+          {nwEdit ? (
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: 4, flex: 1 }}>
+                <label style={{ fontFamily: FF_S, fontSize: 11, color: P.inkFaint }}>Total Assets (€)</label>
+                <input type="number" value={nwDraft.assets} onChange={e => setNwDraft(p => ({...p, assets: e.target.value}))} style={{ ...inp(color) }} />
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 4, flex: 1 }}>
+                <label style={{ fontFamily: FF_S, fontSize: 11, color: P.inkFaint }}>Total Liabilities (€)</label>
+                <input type="number" value={nwDraft.liabilities} onChange={e => setNwDraft(p => ({...p, liabilities: e.target.value}))} style={{ ...inp(color) }} />
+              </div>
+              <div style={{ display: "flex", gap: 6, alignSelf: "flex-end" }}>
+                <button onClick={saveNetWorth} style={{ background: color.dot, color: "#fff", border: "none", borderRadius: 8, padding: "6px 14px", cursor: "pointer", fontWeight: 600, fontSize: 13 }}>Save</button>
+                <button onClick={() => setNwEdit(false)} style={{ background: "none", border: "none", cursor: "pointer", color: P.inkFaint, fontSize: 14 }}>✕</button>
+              </div>
+            </div>
+          ) : (
+            <button onClick={() => { setNwDraft({ assets: netWorth.assets, liabilities: netWorth.liabilities }); setNwEdit(true); }} style={{ background: "none", border: `1.5px dashed ${color.dot}55`, borderRadius: 8, padding: "6px 16px", cursor: "pointer", fontFamily: FF_S, fontSize: 12, color: P.inkFaint, width: "100%" }}>✎ Update figures</button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
+
+// ─── Countdown ───────────────────────────────────────────────────────────────
+const CountdownWidget = ({ data, color, onDataChange }) => {
+  const [events, setEvents] = useState(data.events || []);
+  const [adding, setAdding] = useState(false);
+  const [draft, setDraft] = useState({ name: "", date: "", emoji: "🎉" });
+
+  const save = (next) => { setEvents(next); onDataChange?.({ events: next }); };
+
+  const addEvent = () => {
+    if (!draft.name.trim() || !draft.date) return;
+    save([...events, { id: `cd${Date.now()}`, name: draft.name.trim(), date: draft.date, emoji: draft.emoji }]);
+    setDraft({ name: "", date: "", emoji: "🎉" }); setAdding(false);
+  };
+  const removeEvent = (id) => save(events.filter(e => e.id !== id));
+
+  const getDays = (dateStr) => {
+    const target = new Date(dateStr); target.setHours(0,0,0,0);
+    const today = new Date(); today.setHours(0,0,0,0);
+    return Math.round((target - today) / 86400000);
+  };
+
+  const sorted = [...events].sort((a, b) => new Date(a.date) - new Date(b.date));
+
+  const QUICK_EMOJIS = ["🎉","🎂","🏖","✈","🎓","💍","🎄","🎃","🏆","🌸","🏡","🎸"];
+
+  return (
+    <div>
+      {sorted.length === 0 && !adding && (
+        <div style={{ textAlign: "center", padding: "20px 0", color: P.inkFaint, fontFamily: FF_S, fontSize: 13 }}>No events yet — add your first countdown!</div>
+      )}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: 10, marginBottom: 12 }}>
+        {sorted.map(e => {
+          const days = getDays(e.date);
+          const past = days < 0;
+          return (
+            <div key={e.id} style={{ padding: "14px 16px", borderRadius: 14, background: past ? color.accent + "22" : color.accent + "55", textAlign: "center", position: "relative", opacity: past ? 0.6 : 1 }}>
+              <button onClick={() => removeEvent(e.id)} style={{ position: "absolute", top: 6, right: 8, background: "none", border: "none", cursor: "pointer", color: P.inkFaint, fontSize: 13, opacity: 0.5 }}>×</button>
+              <div style={{ fontSize: 28, marginBottom: 4 }}>{e.emoji}</div>
+              <div style={{ fontFamily: FF_D, fontSize: 15, color: P.ink, marginBottom: 4 }}>{e.name}</div>
+              {past ? (
+                <div style={{ fontFamily: FF_S, fontSize: 12, color: P.inkFaint }}>Happened {Math.abs(days)}d ago</div>
+              ) : days === 0 ? (
+                <div style={{ fontFamily: FF_S, fontSize: 14, fontWeight: 700, color: color.dot }}>TODAY! 🎊</div>
+              ) : (
+                <>
+                  <div style={{ fontFamily: FF_D, fontSize: 32, color: color.dot, lineHeight: 1 }}>{days}</div>
+                  <div style={{ fontFamily: FF_S, fontSize: 11, color: P.inkFaint }}>days to go</div>
+                </>
+              )}
+            </div>
+          );
+        })}
+      </div>
+      {adding ? (
+        <div style={{ padding: "14px", borderRadius: 12, background: color.accent + "33", display: "flex", flexDirection: "column", gap: 8 }}>
+          <div style={{ display: "flex", gap: 6 }}>
+            <input autoFocus value={draft.name} onChange={e => setDraft(p => ({...p, name: e.target.value}))} placeholder="Event name…" style={{ ...inp(color), flex: 1 }} />
+            <input type="date" value={draft.date} onChange={e => setDraft(p => ({...p, date: e.target.value}))} style={{ ...inp(color), width: 140 }} />
+          </div>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+            <span style={{ fontFamily: FF_S, fontSize: 11, color: P.inkFaint }}>Emoji:</span>
+            {QUICK_EMOJIS.map(em => (
+              <span key={em} onClick={() => setDraft(p => ({...p, emoji: em}))} style={{ fontSize: 18, cursor: "pointer", opacity: draft.emoji === em ? 1 : 0.4, transition: "opacity 0.15s" }}>{em}</span>
+            ))}
+          </div>
+          <div style={{ display: "flex", gap: 6 }}>
+            <button onClick={addEvent} style={{ background: color.dot, color: "#fff", border: "none", borderRadius: 8, padding: "6px 16px", cursor: "pointer", fontWeight: 600, fontSize: 13 }}>Add</button>
+            <button onClick={() => setAdding(false)} style={{ background: "none", border: "none", cursor: "pointer", color: P.inkFaint, fontSize: 14 }}>✕</button>
+          </div>
+        </div>
+      ) : (
+        <button onClick={() => setAdding(true)} style={{ background: "none", border: `1.5px dashed ${color.dot}55`, borderRadius: 8, padding: "6px 16px", cursor: "pointer", fontFamily: FF_S, fontSize: 12, color: P.inkFaint, width: "100%" }}>+ Add event</button>
+      )}
+    </div>
+  );
+};
+
+// ─── Watchlist ───────────────────────────────────────────────────────────────
+const WatchlistWidget = ({ data, color, onDataChange }) => {
+  const [items, setItems] = useState(data.items || []);
+  const [draft, setDraft] = useState({ title: "", type: "movie", note: "" });
+  const [filter, setFilter] = useState("all");
+
+  const save = (next) => { setItems(next); onDataChange?.({ items: next }); };
+  const addItem = () => {
+    if (!draft.title.trim()) return;
+    save([...items, { id: `w${Date.now()}`, title: draft.title.trim(), type: draft.type, note: draft.note.trim(), watched: false }]);
+    setDraft({ title: "", type: "movie", note: "" });
+  };
+  const toggle = (id) => save(items.map(i => i.id === id ? { ...i, watched: !i.watched } : i));
+  const remove = (id) => save(items.filter(i => i.id !== id));
+
+  const TYPE_ICONS = { movie: "🎬", show: "📺", documentary: "🎥", anime: "✨" };
+  const filtered = filter === "all" ? items : filter === "watched" ? items.filter(i => i.watched) : items.filter(i => !i.watched);
+
+  return (
+    <div>
+      <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
+        {[["all","All"],["unwatched","To Watch"],["watched","Watched"]].map(([f,label]) => (
+          <button key={f} onClick={() => setFilter(f)} style={{ background: filter === f ? color.dot : "none", color: filter === f ? "#fff" : P.inkLight, border: `1.5px solid ${filter === f ? color.dot : color.accent}`, borderRadius: 20, padding: "3px 12px", cursor: "pointer", fontFamily: FF_S, fontSize: 12 }}>{label} {f === "all" ? `(${items.length})` : f === "watched" ? `(${items.filter(i=>i.watched).length})` : `(${items.filter(i=>!i.watched).length})`}</button>
+        ))}
+      </div>
+      {filtered.map(item => (
+        <div key={item.id} style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: "8px 10px", borderRadius: 10, marginBottom: 6, background: item.watched ? color.accent + "22" : color.accent + "44" }}>
+          <span style={{ fontSize: 18, flexShrink: 0, marginTop: 1 }}>{TYPE_ICONS[item.type] || "🎬"}</span>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontFamily: FF_S, fontSize: 13.5, color: P.ink, textDecoration: item.watched ? "line-through" : "none", opacity: item.watched ? 0.6 : 1 }}>{item.title}</div>
+            {item.note && <div style={{ fontFamily: FF_S, fontSize: 11, color: P.inkFaint, marginTop: 2 }}>{item.note}</div>}
+          </div>
+          <button onClick={() => toggle(item.id)} title={item.watched ? "Mark unwatched" : "Mark watched"} style={{ background: item.watched ? color.dot : "none", border: `1.5px solid ${color.dot}`, borderRadius: 6, width: 24, height: 24, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, color: item.watched ? "#fff" : color.dot, flexShrink: 0 }}>{item.watched ? "✓" : ""}</button>
+          <button onClick={() => remove(item.id)} style={delBtn(color)}>×</button>
+        </div>
+      ))}
+      <div style={{ display: "flex", gap: 6, marginTop: 10, flexWrap: "wrap" }}>
+        <input value={draft.title} onChange={e => setDraft(p => ({...p, title: e.target.value})) } onKeyDown={e => e.key === "Enter" && addItem()} placeholder="Title…" style={{ ...inp(color), flex: 2, minWidth: 120 }} />
+        <select value={draft.type} onChange={e => setDraft(p => ({...p, type: e.target.value}))} style={{ ...inp(color), width: 110 }}>
+          {Object.entries(TYPE_ICONS).map(([t,ic]) => <option key={t} value={t}>{ic} {t.charAt(0).toUpperCase()+t.slice(1)}</option>)}
+        </select>
+        <input value={draft.note} onChange={e => setDraft(p => ({...p, note: e.target.value}))} placeholder="Note (optional)" style={{ ...inp(color), flex: 2, minWidth: 100 }} />
+        <button onClick={addItem} style={{ background: color.dot, color: "#fff", border: "none", borderRadius: 8, padding: "5px 12px", cursor: "pointer", fontWeight: 600, fontSize: 13 }}>+</button>
+      </div>
+    </div>
+  );
+};
+
+// ─── Sleep Log ───────────────────────────────────────────────────────────────
+const SleepLogWidget = ({ data, color, onDataChange }) => {
+  const [entries, setEntries] = useState(data.entries || []);
+  const today = new Date().toISOString().slice(0, 10);
+  const [draft, setDraft] = useState({ date: today, hours: "", quality: 3 });
+
+  const save = (next) => { setEntries(next); onDataChange?.({ entries: next }); };
+  const addEntry = () => {
+    if (!draft.hours) return;
+    const existing = entries.findIndex(e => e.date === draft.date);
+    const entry = { date: draft.date, hours: parseFloat(draft.hours) || 0, quality: draft.quality };
+    const next = existing >= 0 ? entries.map((e, i) => i === existing ? entry : e) : [entry, ...entries];
+    save(next); setDraft({ date: today, hours: "", quality: 3 });
+  };
+  const remove = (date) => save(entries.filter(e => e.date !== date));
+
+  const recent = [...entries].sort((a,b) => b.date.localeCompare(a.date)).slice(0, 14);
+  const avg = recent.length > 0 ? (recent.reduce((a,e) => a+e.hours, 0) / recent.length).toFixed(1) : null;
+  const QUALITY = ["😴","😞","😐","🙂","😄"];
+  const BAR_MAX = 10;
+
+  return (
+    <div>
+      {avg && (
+        <div style={{ display: "flex", gap: 16, marginBottom: 16 }}>
+          {[["Avg sleep", `${avg}h`, color.dot],["Entries", recent.length, P.inkLight]].map(([l,v,c]) => (
+            <div key={l} style={{ flex: 1, padding: "10px 14px", borderRadius: 12, background: color.accent + "44", textAlign: "center" }}>
+              <div style={{ fontFamily: FF_S, fontSize: 10, color: P.inkFaint, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 3 }}>{l}</div>
+              <div style={{ fontFamily: FF_D, fontSize: 22, color: c }}>{v}</div>
+            </div>
+          ))}
+        </div>
+      )}
+      {/* Bar chart — last 7 days */}
+      {recent.length > 0 && (
+        <div style={{ display: "flex", alignItems: "flex-end", gap: 4, height: 60, marginBottom: 16 }}>
+          {recent.slice(0,7).reverse().map(e => (
+            <div key={e.date} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
+              <div style={{ width: "100%", height: `${(e.hours / BAR_MAX) * 52}px`, background: color.dot, borderRadius: "4px 4px 0 0", minHeight: 3 }} title={`${e.date}: ${e.hours}h`} />
+              <span style={{ fontFamily: FF_S, fontSize: 9, color: P.inkFaint }}>{new Date(e.date+'T12:00:00').toLocaleDateString(undefined,{weekday:"short"}).slice(0,1)}</span>
+            </div>
+          ))}
+        </div>
+      )}
+      {/* Log form */}
+      <div style={{ display: "flex", gap: 6, marginBottom: 14, flexWrap: "wrap" }}>
+        <input type="date" value={draft.date} onChange={e => setDraft(p => ({...p, date: e.target.value}))} style={{ ...inp(color), width: 140 }} />
+        <input type="number" step="0.5" min="0" max="24" value={draft.hours} onChange={e => setDraft(p => ({...p, hours: e.target.value}))} placeholder="Hours slept" style={{ ...inp(color), width: 100 }} />
+        <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
+          {QUALITY.map((q,i) => (
+            <span key={i} onClick={() => setDraft(p => ({...p, quality: i+1}))} style={{ fontSize: 18, cursor: "pointer", opacity: draft.quality === i+1 ? 1 : 0.3, transition: "opacity 0.15s" }}>{q}</span>
+          ))}
+        </div>
+        <button onClick={addEntry} style={{ background: color.dot, color: "#fff", border: "none", borderRadius: 8, padding: "5px 12px", cursor: "pointer", fontWeight: 600, fontSize: 13 }}>Log</button>
+      </div>
+      {/* Recent entries */}
+      <div style={{ maxHeight: 160, overflowY: "auto" }}>
+        {recent.map(e => (
+          <div key={e.date} style={{ display: "flex", alignItems: "center", gap: 10, padding: "6px 10px", borderRadius: 8, marginBottom: 4, background: color.accent + "33" }}>
+            <span style={{ fontFamily: FF_S, fontSize: 12, color: P.inkFaint, width: 80, flexShrink: 0 }}>{e.date}</span>
+            <span style={{ fontFamily: FF_D, fontSize: 15, color: color.dot, width: 40 }}>{e.hours}h</span>
+            <span style={{ fontSize: 16 }}>{QUALITY[(e.quality||3)-1]}</span>
+            <span style={{ flex: 1 }} />
+            <button onClick={() => remove(e.date)} style={delBtn(color)}>×</button>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+// ─── Daily Habits (Water/Ring) ────────────────────────────────────────────────
+const WaterRingWidget = ({ data, color, onDataChange }) => {
+  const [targets, setTargets] = useState(data.targets || []);
+  const [logs, setLogs] = useState(data.logs || {});
+  const [adding, setAdding] = useState(false);
+  const [draft, setDraft] = useState({ name: "", goal: "", unit: "", emoji: "💧" });
+  const today = new Date().toISOString().slice(0, 10);
+
+  const saveAll = (t, l) => { setTargets(t); setLogs(l); onDataChange?.({ targets: t, logs: l }); };
+
+  const addTarget = () => {
+    if (!draft.name.trim() || !draft.goal) return;
+    const nt = [...targets, { id: `ht${Date.now()}`, name: draft.name.trim(), goal: parseFloat(draft.goal)||1, unit: draft.unit||"×", emoji: draft.emoji }];
+    saveAll(nt, logs); setDraft({ name: "", goal: "", unit: "", emoji: "💧" }); setAdding(false);
+  };
+  const removeTarget = (id) => {
+    const nt = targets.filter(t => t.id !== id);
+    const nl = { ...logs };
+    Object.keys(nl).forEach(d => { delete nl[d][id]; });
+    saveAll(nt, nl);
+  };
+  const inc = (id) => {
+    const nl = { ...logs, [today]: { ...(logs[today]||{}), [id]: ((logs[today]||{})[id]||0) + 1 } };
+    saveAll(targets, nl);
+  };
+  const dec = (id) => {
+    const cur = (logs[today]||{})[id]||0;
+    if (cur <= 0) return;
+    const nl = { ...logs, [today]: { ...(logs[today]||{}), [id]: cur - 1 } };
+    saveAll(targets, nl);
+  };
+
+  const QUICK_EMOJIS = ["💧","🥗","🏃","💊","📖","🧘","🛌","🚶","🍎","☕","🧴","🎸"];
+
+  return (
+    <div>
+      {targets.map(t => {
+        const current = (logs[today]||{})[t.id]||0;
+        const pct = Math.min((current / t.goal) * 100, 100);
+        const done = current >= t.goal;
+        return (
+          <div key={t.id} style={{ marginBottom: 12 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <span style={{ fontSize: 20 }}>{t.emoji}</span>
+              <div style={{ flex: 1 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 3 }}>
+                  <span style={{ fontFamily: FF_S, fontSize: 13, color: P.ink }}>{t.name}</span>
+                  <span style={{ fontFamily: FF_S, fontSize: 12, color: done ? color.dot : P.inkLight, fontWeight: done ? 700 : 400 }}>
+                    {current} / {t.goal} {t.unit} {done ? "✓" : ""}
+                  </span>
+                </div>
+                <div style={{ height: 7, background: color.accent + "55", borderRadius: 4, overflow: "hidden" }}>
+                  <div style={{ height: "100%", width: `${pct}%`, background: done ? color.dot : color.dot + "bb", borderRadius: 4, transition: "width 0.3s" }} />
+                </div>
+              </div>
+              <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
+                <button onClick={() => dec(t.id)} style={{ ...delBtn(color), background: color.accent + "44", borderRadius: 6, width: 26, height: 26, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14 }}>−</button>
+                <button onClick={() => inc(t.id)} style={{ background: color.dot, color: "#fff", border: "none", borderRadius: 6, width: 26, height: 26, cursor: "pointer", fontSize: 16, display: "flex", alignItems: "center", justifyContent: "center" }}>+</button>
+                <button onClick={() => removeTarget(t.id)} style={delBtn(color)}>×</button>
+              </div>
+            </div>
+          </div>
+        );
+      })}
+      {adding ? (
+        <div style={{ padding: "12px", borderRadius: 12, background: color.accent + "33", marginTop: 8 }}>
+          <div style={{ display: "flex", gap: 6, marginBottom: 8, flexWrap: "wrap" }}>
+            <input autoFocus value={draft.name} onChange={e => setDraft(p => ({...p, name: e.target.value}))} placeholder="Habit name…" style={{ ...inp(color), flex: 2, minWidth: 100 }} />
+            <input type="number" value={draft.goal} onChange={e => setDraft(p => ({...p, goal: e.target.value}))} placeholder="Goal" style={{ ...inp(color), width: 70 }} />
+            <input value={draft.unit} onChange={e => setDraft(p => ({...p, unit: e.target.value}))} placeholder="Unit (glasses, km…)" style={{ ...inp(color), flex: 2, minWidth: 100 }} />
+          </div>
+          <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginBottom: 8, alignItems: "center" }}>
+            <span style={{ fontFamily: FF_S, fontSize: 11, color: P.inkFaint }}>Emoji:</span>
+            {QUICK_EMOJIS.map(em => (
+              <span key={em} onClick={() => setDraft(p => ({...p, emoji: em}))} style={{ fontSize: 18, cursor: "pointer", opacity: draft.emoji === em ? 1 : 0.35, transition: "opacity 0.15s" }}>{em}</span>
+            ))}
+          </div>
+          <div style={{ display: "flex", gap: 6 }}>
+            <button onClick={addTarget} style={{ background: color.dot, color: "#fff", border: "none", borderRadius: 8, padding: "5px 14px", cursor: "pointer", fontWeight: 600, fontSize: 13 }}>Add</button>
+            <button onClick={() => setAdding(false)} style={{ background: "none", border: "none", cursor: "pointer", color: P.inkFaint, fontSize: 14 }}>✕</button>
+          </div>
+        </div>
+      ) : (
+        <button onClick={() => setAdding(true)} style={{ marginTop: 8, background: "none", border: `1.5px dashed ${color.dot}55`, borderRadius: 8, padding: "6px 16px", cursor: "pointer", fontFamily: FF_S, fontSize: 12, color: P.inkFaint, width: "100%" }}>+ Add habit</button>
+      )}
+    </div>
+  );
+};
+
+// ─── Quotes Collection ────────────────────────────────────────────────────────
+const QuotesWidget = ({ data, color, onDataChange }) => {
+  const [quotes, setQuotes] = useState(data.quotes || []);
+  const [featured, setFeatured] = useState(() => data.quotes?.length > 0 ? Math.floor(Math.random() * data.quotes.length) : 0);
+  const [draft, setDraft] = useState({ text: "", author: "" });
+  const [adding, setAdding] = useState(false);
+
+  const save = (next) => { setQuotes(next); onDataChange?.({ quotes: next, showRandom: data.showRandom }); };
+  const addQuote = () => {
+    if (!draft.text.trim()) return;
+    const next = [...quotes, { id: `q${Date.now()}`, text: draft.text.trim(), author: draft.author.trim() }];
+    save(next); setFeatured(next.length - 1); setDraft({ text: "", author: "" }); setAdding(false);
+  };
+  const remove = (id) => {
+    const next = quotes.filter(q => q.id !== id);
+    save(next); setFeatured(0);
+  };
+  const shuffle = () => setFeatured(Math.floor(Math.random() * quotes.length));
+
+  const featured_quote = quotes[featured];
+
+  return (
+    <div>
+      {featured_quote ? (
+        <div style={{ padding: "16px 20px", borderRadius: 14, background: color.accent + "44", borderLeft: `4px solid ${color.dot}`, marginBottom: 16, position: "relative" }}>
+          <div style={{ fontFamily: FF_D, fontSize: 17, color: P.ink, fontStyle: "italic", lineHeight: 1.5, marginBottom: 8 }}>"{featured_quote.text}"</div>
+          {featured_quote.author && <div style={{ fontFamily: FF_S, fontSize: 12, color: P.inkLight }}>— {featured_quote.author}</div>}
+          {quotes.length > 1 && (
+            <button onClick={shuffle} title="Random quote" style={{ position: "absolute", top: 10, right: 10, background: "none", border: "none", cursor: "pointer", color: P.inkFaint, fontSize: 14 }}>⟳</button>
+          )}
+        </div>
+      ) : (
+        <div style={{ textAlign: "center", padding: "16px 0", color: P.inkFaint, fontFamily: FF_S, fontSize: 13 }}>Add your first quote!</div>
+      )}
+      {/* Quote list */}
+      {quotes.length > 1 && (
+        <div style={{ maxHeight: 120, overflowY: "auto", marginBottom: 10 }}>
+          {quotes.map((q, i) => (
+            <div key={q.id} onClick={() => setFeatured(i)} style={{ display: "flex", alignItems: "flex-start", gap: 8, padding: "6px 10px", borderRadius: 8, marginBottom: 3, background: i === featured ? color.accent + "55" : "transparent", cursor: "pointer" }}>
+              <span style={{ fontFamily: FF_S, fontSize: 12, color: P.ink, flex: 1 }}>"{q.text.slice(0,60)}{q.text.length > 60 ? "…" : ""}"</span>
+              {q.author && <span style={{ fontFamily: FF_S, fontSize: 11, color: P.inkFaint, flexShrink: 0 }}>— {q.author}</span>}
+              <button onClick={e => { e.stopPropagation(); remove(q.id); }} style={delBtn(color)}>×</button>
+            </div>
+          ))}
+        </div>
+      )}
+      {adding ? (
+        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          <textarea value={draft.text} onChange={e => setDraft(p => ({...p, text: e.target.value}))} placeholder="Quote text…" rows={3}
+            style={{ ...inp(color), resize: "vertical", width: "100%", boxSizing: "border-box", lineHeight: 1.5 }} />
+          <div style={{ display: "flex", gap: 6 }}>
+            <input value={draft.author} onChange={e => setDraft(p => ({...p, author: e.target.value}))} onKeyDown={e => e.key === "Enter" && addQuote()} placeholder="Author (optional)" style={{ ...inp(color), flex: 1 }} />
+            <button onClick={addQuote} style={{ background: color.dot, color: "#fff", border: "none", borderRadius: 8, padding: "5px 14px", cursor: "pointer", fontWeight: 600, fontSize: 13 }}>Save</button>
+            <button onClick={() => setAdding(false)} style={{ background: "none", border: "none", cursor: "pointer", color: P.inkFaint, fontSize: 14 }}>✕</button>
+          </div>
+        </div>
+      ) : (
+        <button onClick={() => setAdding(true)} style={{ background: "none", border: `1.5px dashed ${color.dot}55`, borderRadius: 8, padding: "6px 16px", cursor: "pointer", fontFamily: FF_S, fontSize: 12, color: P.inkFaint, width: "100%" }}>+ Add quote</button>
+      )}
+    </div>
+  );
+};
+
+// ─── Plant Tracker ────────────────────────────────────────────────────────────
+const PlantTrackerWidget = ({ data, color, onDataChange }) => {
+  const [plants, setPlants] = useState(data.plants || []);
+  const [adding, setAdding] = useState(false);
+  const [draft, setDraft] = useState({ name: "", emoji: "🌿", waterEvery: 7 });
+
+  const save = (next) => { setPlants(next); onDataChange?.({ plants: next }); };
+  const addPlant = () => {
+    if (!draft.name.trim()) return;
+    save([...plants, { id: `pl${Date.now()}`, name: draft.name.trim(), emoji: draft.emoji, waterEvery: parseInt(draft.waterEvery)||7, lastWatered: new Date().toISOString().slice(0,10) }]);
+    setDraft({ name: "", emoji: "🌿", waterEvery: 7 }); setAdding(false);
+  };
+  const water = (id) => save(plants.map(p => p.id === id ? { ...p, lastWatered: new Date().toISOString().slice(0,10) } : p));
+  const remove = (id) => save(plants.filter(p => p.id !== id));
+
+  const getDaysUntilWater = (p) => {
+    const last = new Date(p.lastWatered); last.setHours(0,0,0,0);
+    const today = new Date(); today.setHours(0,0,0,0);
+    const daysSince = Math.floor((today - last) / 86400000);
+    return p.waterEvery - daysSince;
+  };
+
+  const PLANT_EMOJIS = ["🌿","🌵","🪴","🌱","🌺","🌻","🌴","🎋","🌾","🍀","🌸","🌳","🌲","🪷"];
+
+  return (
+    <div>
+      {plants.length === 0 && !adding && (
+        <div style={{ textAlign: "center", padding: "20px 0", color: P.inkFaint, fontFamily: FF_S, fontSize: 13 }}>No plants yet — add your first! 🌱</div>
+      )}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))", gap: 10, marginBottom: 10 }}>
+        {[...plants].sort((a,b) => getDaysUntilWater(a) - getDaysUntilWater(b)).map(p => {
+          const daysLeft = getDaysUntilWater(p);
+          const urgent = daysLeft <= 0;
+          const soon = daysLeft === 1;
+          return (
+            <div key={p.id} style={{ padding: "14px 12px", borderRadius: 14, background: urgent ? "#FDE8EF" : soon ? "#FEF0EA" : color.accent + "44", textAlign: "center", position: "relative", border: `1.5px solid ${urgent ? P.rose : soon ? P.peach : color.accent}` }}>
+              <button onClick={() => remove(p.id)} style={{ position: "absolute", top: 5, right: 7, background: "none", border: "none", cursor: "pointer", color: P.inkFaint, fontSize: 12, opacity: 0.5 }}>×</button>
+              <div style={{ fontSize: 26, marginBottom: 4 }}>{p.emoji}</div>
+              <div style={{ fontFamily: FF_S, fontSize: 13, fontWeight: 600, color: P.ink, marginBottom: 4 }}>{p.name}</div>
+              {urgent ? (
+                <div style={{ fontFamily: FF_S, fontSize: 11, color: "#D8708A", fontWeight: 700 }}>💧 Water now!</div>
+              ) : soon ? (
+                <div style={{ fontFamily: FF_S, fontSize: 11, color: "#E8956A" }}>Water tomorrow</div>
+              ) : (
+                <div style={{ fontFamily: FF_S, fontSize: 11, color: P.inkFaint }}>Water in {daysLeft}d</div>
+              )}
+              <button onClick={() => water(p.id)} style={{ marginTop: 8, background: urgent ? P.rose : color.dot, color: "#fff", border: "none", borderRadius: 8, padding: "4px 10px", cursor: "pointer", fontFamily: FF_S, fontSize: 11, fontWeight: 600, width: "100%" }}>💧 Watered!</button>
+            </div>
+          );
+        })}
+      </div>
+      {adding ? (
+        <div style={{ padding: "12px", borderRadius: 12, background: color.accent + "33", marginTop: 8 }}>
+          <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
+            <input autoFocus value={draft.name} onChange={e => setDraft(p => ({...p, name: e.target.value}))} placeholder="Plant name…" style={{ ...inp(color), flex: 1 }} />
+            <input type="number" value={draft.waterEvery} onChange={e => setDraft(p => ({...p, waterEvery: e.target.value}))} placeholder="Days between watering" style={{ ...inp(color), width: 70 }} title="Water every N days" />
+          </div>
+          <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginBottom: 8, alignItems: "center" }}>
+            <span style={{ fontFamily: FF_S, fontSize: 11, color: P.inkFaint }}>Emoji:</span>
+            {PLANT_EMOJIS.map(em => (
+              <span key={em} onClick={() => setDraft(p => ({...p, emoji: em}))} style={{ fontSize: 20, cursor: "pointer", opacity: draft.emoji === em ? 1 : 0.35, transition: "opacity 0.15s" }}>{em}</span>
+            ))}
+          </div>
+          <div style={{ display: "flex", gap: 6 }}>
+            <button onClick={addPlant} style={{ background: color.dot, color: "#fff", border: "none", borderRadius: 8, padding: "5px 14px", cursor: "pointer", fontWeight: 600, fontSize: 13 }}>Add plant</button>
+            <button onClick={() => setAdding(false)} style={{ background: "none", border: "none", cursor: "pointer", color: P.inkFaint, fontSize: 14 }}>✕</button>
+          </div>
+        </div>
+      ) : (
+        <button onClick={() => setAdding(true)} style={{ background: "none", border: `1.5px dashed ${color.dot}55`, borderRadius: 8, padding: "6px 16px", cursor: "pointer", fontFamily: FF_S, fontSize: 12, color: P.inkFaint, width: "100%" }}>+ Add plant</button>
+      )}
+    </div>
+  );
+};
+
+// ─── Friend Birthdays ─────────────────────────────────────────────────────────
+const BirthdaysWidget = ({ data, color, onDataChange }) => {
+  const [birthdays, setBirthdays] = useState(data.birthdays || []);
+  const [draft, setDraft] = useState({ name: "", date: "", note: "" });
+
+  const save = (next) => { setBirthdays(next); onDataChange?.({ birthdays: next }); };
+  const addBirthday = () => {
+    if (!draft.name.trim() || !draft.date) return;
+    save([...birthdays, { id: `bd${Date.now()}`, name: draft.name.trim(), date: draft.date, note: draft.note.trim() }]);
+    setDraft({ name: "", date: "", note: "" });
+  };
+  const remove = (id) => save(birthdays.filter(b => b.id !== id));
+
+  const getDaysUntil = (dateStr) => {
+    const [, mm, dd] = dateStr.split("-").map(Number);
+    const today = new Date(); today.setHours(0,0,0,0);
+    const next = new Date(today.getFullYear(), mm - 1, dd); next.setHours(0,0,0,0);
+    if (next < today) next.setFullYear(today.getFullYear() + 1);
+    return Math.round((next - today) / 86400000);
+  };
+  const getAge = (dateStr) => {
+    const [yyyy] = dateStr.split("-").map(Number);
+    if (!yyyy || yyyy < 1900) return null;
+    return new Date().getFullYear() - yyyy;
+  };
+
+  const sorted = [...birthdays].sort((a,b) => getDaysUntil(a.date) - getDaysUntil(b.date));
+
+  return (
+    <div>
+      {sorted.map(b => {
+        const days = getDaysUntil(b.date);
+        const age = getAge(b.date);
+        const isToday = days === 0;
+        const isSoon = days <= 7;
+        return (
+          <div key={b.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 12px", borderRadius: 12, marginBottom: 8, background: isToday ? color.accent + "88" : color.accent + "33", border: isToday ? `1.5px solid ${color.dot}` : "none" }}>
+            <div style={{ fontSize: 24 }}>{isToday ? "🎂" : isSoon ? "🎁" : "🎈"}</div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontFamily: FF_S, fontSize: 14, fontWeight: 600, color: P.ink }}>{b.name}</div>
+              <div style={{ fontFamily: FF_S, fontSize: 11, color: P.inkFaint }}>
+                {isToday ? "🎉 Happy Birthday today!" : `in ${days} day${days !== 1 ? "s" : ""}`}
+                {age && ` · Turns ${age+1}`}
+                {b.note && ` · ${b.note}`}
+              </div>
+            </div>
+            <button onClick={() => remove(b.id)} style={delBtn(color)}>×</button>
+          </div>
+        );
+      })}
+      {birthdays.length === 0 && (
+        <div style={{ textAlign: "center", padding: "12px 0", color: P.inkFaint, fontFamily: FF_S, fontSize: 13 }}>No birthdays yet!</div>
+      )}
+      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
+        <input value={draft.name} onChange={e => setDraft(p => ({...p, name: e.target.value}))} placeholder="Name…" style={{ ...inp(color), flex: 2, minWidth: 100 }} />
+        <input type="date" value={draft.date} onChange={e => setDraft(p => ({...p, date: e.target.value}))} style={{ ...inp(color), width: 150 }} />
+        <input value={draft.note} onChange={e => setDraft(p => ({...p, note: e.target.value}))} onKeyDown={e => e.key === "Enter" && addBirthday()} placeholder="Note (optional)" style={{ ...inp(color), flex: 2, minWidth: 100 }} />
+        <button onClick={addBirthday} style={{ background: color.dot, color: "#fff", border: "none", borderRadius: 8, padding: "5px 12px", cursor: "pointer", fontWeight: 600, fontSize: 13 }}>+</button>
+      </div>
+    </div>
+  );
+};
+
+// ─── Study & Focus Log ────────────────────────────────────────────────────────
+const StudyLogWidget = ({ data, color, onDataChange }) => {
+  const [sessions, setSessions] = useState(data.sessions || []);
+  const [subjects, setSubjects] = useState(data.subjects || []);
+  const [draft, setDraft] = useState({ subject: "", minutes: "", note: "" });
+  const [newSubject, setNewSubject] = useState("");
+
+  const saveAll = (s, sub) => { setSessions(s); setSubjects(sub); onDataChange?.({ sessions: s, subjects: sub }); };
+  const addSession = () => {
+    if (!draft.subject || !draft.minutes) return;
+    const ns = [{ id: `sl${Date.now()}`, subject: draft.subject, minutes: parseInt(draft.minutes)||0, note: draft.note.trim(), date: new Date().toISOString().slice(0,10) }, ...sessions];
+    saveAll(ns, subjects); setDraft({ subject: draft.subject, minutes: "", note: "" });
+  };
+  const removeSession = (id) => saveAll(sessions.filter(s => s.id !== id), subjects);
+  const addSubject = () => {
+    if (!newSubject.trim()) return;
+    const sub = [...subjects, newSubject.trim()]; saveAll(sessions, sub); setNewSubject("");
+  };
+  const removeSubject = (s) => saveAll(sessions, subjects.filter(x => x !== s));
+
+  const today = new Date().toISOString().slice(0,10);
+  const thisWeek = sessions.filter(s => {
+    const d = new Date(s.date); const now = new Date();
+    const weekStart = new Date(now); weekStart.setDate(now.getDate() - now.getDay());
+    return d >= weekStart;
+  });
+  const totalMins = sessions.reduce((a,s) => a+s.minutes, 0);
+  const weekMins = thisWeek.reduce((a,s) => a+s.minutes, 0);
+  const fmt = (m) => m >= 60 ? `${Math.floor(m/60)}h ${m%60}m` : `${m}m`;
+
+  // Per-subject totals
+  const bySubject = {};
+  sessions.forEach(s => { bySubject[s.subject] = (bySubject[s.subject]||0) + s.minutes; });
+
+  return (
+    <div>
+      {/* Stats row */}
+      {sessions.length > 0 && (
+        <div style={{ display: "flex", gap: 10, marginBottom: 16 }}>
+          {[["This week", fmt(weekMins)],["All time", fmt(totalMins)],["Sessions", sessions.length]].map(([l,v]) => (
+            <div key={l} style={{ flex: 1, padding: "10px", borderRadius: 12, background: color.accent + "44", textAlign: "center" }}>
+              <div style={{ fontFamily: FF_S, fontSize: 10, color: P.inkFaint, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 3 }}>{l}</div>
+              <div style={{ fontFamily: FF_D, fontSize: 18, color: color.dot }}>{v}</div>
+            </div>
+          ))}
+        </div>
+      )}
+      {/* Log form */}
+      <div style={{ display: "flex", gap: 6, marginBottom: 10, flexWrap: "wrap" }}>
+        <select value={draft.subject} onChange={e => setDraft(p => ({...p, subject: e.target.value}))} style={{ ...inp(color), flex: 2, minWidth: 120 }}>
+          <option value="">Subject…</option>
+          {subjects.map(s => <option key={s} value={s}>{s}</option>)}
+        </select>
+        <input type="number" value={draft.minutes} onChange={e => setDraft(p => ({...p, minutes: e.target.value}))} placeholder="Minutes" style={{ ...inp(color), width: 80 }} />
+        <input value={draft.note} onChange={e => setDraft(p => ({...p, note: e.target.value}))} onKeyDown={e => e.key === "Enter" && addSession()} placeholder="What did you study?" style={{ ...inp(color), flex: 3, minWidth: 120 }} />
+        <button onClick={addSession} style={{ background: color.dot, color: "#fff", border: "none", borderRadius: 8, padding: "5px 12px", cursor: "pointer", fontWeight: 600, fontSize: 13 }}>Log</button>
+      </div>
+      {/* Add subject */}
+      <div style={{ display: "flex", gap: 6, marginBottom: 12, flexWrap: "wrap" }}>
+        {subjects.map(s => (
+          <span key={s} style={{ background: color.accent + "55", borderRadius: 20, padding: "2px 10px 2px 10px", fontFamily: FF_S, fontSize: 12, color: P.ink, display: "flex", alignItems: "center", gap: 4 }}>
+            {s} <span onClick={() => removeSubject(s)} style={{ cursor: "pointer", color: P.inkFaint, fontSize: 13, lineHeight: 1 }}>×</span>
+          </span>
+        ))}
+        <input value={newSubject} onChange={e => setNewSubject(e.target.value)} onKeyDown={e => e.key === "Enter" && addSubject()} placeholder="+ Subject" style={{ ...inp(color), width: 100, fontSize: 12 }} />
+      </div>
+      {/* Recent sessions */}
+      <div style={{ maxHeight: 160, overflowY: "auto" }}>
+        {sessions.slice(0,10).map(s => (
+          <div key={s.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 10px", borderRadius: 8, marginBottom: 4, background: color.accent + "33" }}>
+            <span style={{ fontFamily: FF_S, fontSize: 12, color: P.inkFaint, width: 75, flexShrink: 0 }}>{s.date}</span>
+            <span style={{ background: color.accent + "88", borderRadius: 20, padding: "1px 8px", fontFamily: FF_S, fontSize: 11, color: P.ink, flexShrink: 0 }}>{s.subject}</span>
+            <span style={{ fontFamily: FF_D, fontSize: 14, color: color.dot, flexShrink: 0 }}>{fmt(s.minutes)}</span>
+            {s.note && <span style={{ fontFamily: FF_S, fontSize: 12, color: P.inkFaint, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.note}</span>}
+            <button onClick={() => removeSession(s.id)} style={delBtn(color)}>×</button>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+// ─── Skill Progress ───────────────────────────────────────────────────────────
+const SkillProgressWidget = ({ data, color, onDataChange }) => {
+  const [skills, setSkills] = useState(data.skills || []);
+  const [adding, setAdding] = useState(false);
+  const [draft, setDraft] = useState({ name: "", progress: 0, category: "", emoji: "⚡" });
+
+  const save = (next) => { setSkills(next); onDataChange?.({ skills: next }); };
+  const addSkill = () => {
+    if (!draft.name.trim()) return;
+    save([...skills, { id: `sk${Date.now()}`, name: draft.name.trim(), progress: parseInt(draft.progress)||0, category: draft.category.trim(), emoji: draft.emoji }]);
+    setDraft({ name: "", progress: 0, category: "", emoji: "⚡" }); setAdding(false);
+  };
+  const updateProgress = (id, val) => save(skills.map(s => s.id === id ? { ...s, progress: Math.max(0, Math.min(100, parseInt(val)||0)) } : s));
+  const remove = (id) => save(skills.filter(s => s.id !== id));
+
+  const SKILL_EMOJIS = ["⚡","🎸","🎨","💻","📸","✍","🏋","🗣","🍳","🎯","🔬","🎻","🏊","✏","🌐"];
+  const LEVELS = [[0,"Beginner"],[25,"Developing"],[50,"Intermediate"],[75,"Advanced"],[90,"Expert"]];
+  const getLevel = (p) => [...LEVELS].reverse().find(([t]) => p >= t)?.[1] || "Beginner";
+
+  const categories = [...new Set(skills.map(s => s.category).filter(Boolean))];
+
+  return (
+    <div>
+      {categories.length > 0 ? (
+        categories.concat([""]).map(cat => {
+          const group = skills.filter(s => (cat === "" ? !s.category : s.category === cat));
+          if (group.length === 0) return null;
+          return (
+            <div key={cat || "_uncategorized"} style={{ marginBottom: 16 }}>
+              {cat && <div style={{ fontFamily: FF_S, fontSize: 11, fontWeight: 700, color: P.inkFaint, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 8 }}>{cat}</div>}
+              {group.map(s => (
+                <div key={s.id} style={{ marginBottom: 10 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+                    <span style={{ fontSize: 16 }}>{s.emoji}</span>
+                    <span style={{ fontFamily: FF_S, fontSize: 13.5, color: P.ink, flex: 1 }}>{s.name}</span>
+                    <span style={{ fontFamily: FF_S, fontSize: 10, color: P.inkFaint }}>{getLevel(s.progress)}</span>
+                    <span style={{ fontFamily: FF_S, fontSize: 12, fontWeight: 700, color: color.dot, width: 32, textAlign: "right" }}>{s.progress}%</span>
+                    <button onClick={() => remove(s.id)} style={delBtn(color)}>×</button>
+                  </div>
+                  <input type="range" min={0} max={100} value={s.progress} onChange={e => updateProgress(s.id, e.target.value)}
+                    style={{ width: "100%", accentColor: color.dot, cursor: "pointer" }} />
+                </div>
+              ))}
+            </div>
+          );
+        })
+      ) : skills.map(s => (
+        <div key={s.id} style={{ marginBottom: 10 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+            <span style={{ fontSize: 16 }}>{s.emoji}</span>
+            <span style={{ fontFamily: FF_S, fontSize: 13.5, color: P.ink, flex: 1 }}>{s.name}</span>
+            <span style={{ fontFamily: FF_S, fontSize: 10, color: P.inkFaint }}>{getLevel(s.progress)}</span>
+            <span style={{ fontFamily: FF_S, fontSize: 12, fontWeight: 700, color: color.dot, width: 32, textAlign: "right" }}>{s.progress}%</span>
+            <button onClick={() => remove(s.id)} style={delBtn(color)}>×</button>
+          </div>
+          <input type="range" min={0} max={100} value={s.progress} onChange={e => updateProgress(s.id, e.target.value)}
+            style={{ width: "100%", accentColor: color.dot, cursor: "pointer" }} />
+        </div>
+      ))}
+      {skills.length === 0 && !adding && (
+        <div style={{ textAlign: "center", padding: "16px 0", color: P.inkFaint, fontFamily: FF_S, fontSize: 13 }}>Track skills you're learning!</div>
+      )}
+      {adding ? (
+        <div style={{ padding: "12px", borderRadius: 12, background: color.accent + "33", marginTop: 8 }}>
+          <div style={{ display: "flex", gap: 6, marginBottom: 8, flexWrap: "wrap" }}>
+            <input autoFocus value={draft.name} onChange={e => setDraft(p => ({...p, name: e.target.value}))} placeholder="Skill name…" style={{ ...inp(color), flex: 2, minWidth: 120 }} />
+            <input value={draft.category} onChange={e => setDraft(p => ({...p, category: e.target.value}))} placeholder="Category (optional)" style={{ ...inp(color), flex: 2, minWidth: 100 }} />
+          </div>
+          <div style={{ marginBottom: 8 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+              <span style={{ fontFamily: FF_S, fontSize: 12, color: P.inkFaint }}>Starting progress</span>
+              <span style={{ fontFamily: FF_S, fontSize: 12, color: color.dot, fontWeight: 600 }}>{draft.progress}%</span>
+            </div>
+            <input type="range" min={0} max={100} value={draft.progress} onChange={e => setDraft(p => ({...p, progress: e.target.value}))} style={{ width: "100%", accentColor: color.dot }} />
+          </div>
+          <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginBottom: 8, alignItems: "center" }}>
+            <span style={{ fontFamily: FF_S, fontSize: 11, color: P.inkFaint }}>Emoji:</span>
+            {SKILL_EMOJIS.map(em => (
+              <span key={em} onClick={() => setDraft(p => ({...p, emoji: em}))} style={{ fontSize: 18, cursor: "pointer", opacity: draft.emoji === em ? 1 : 0.35, transition: "opacity 0.15s" }}>{em}</span>
+            ))}
+          </div>
+          <div style={{ display: "flex", gap: 6 }}>
+            <button onClick={addSkill} style={{ background: color.dot, color: "#fff", border: "none", borderRadius: 8, padding: "5px 14px", cursor: "pointer", fontWeight: 600, fontSize: 13 }}>Add skill</button>
+            <button onClick={() => setAdding(false)} style={{ background: "none", border: "none", cursor: "pointer", color: P.inkFaint, fontSize: 14 }}>✕</button>
+          </div>
+        </div>
+      ) : (
+        <button onClick={() => setAdding(true)} style={{ marginTop: 8, background: "none", border: `1.5px dashed ${color.dot}55`, borderRadius: 8, padding: "6px 16px", cursor: "pointer", fontFamily: FF_S, fontSize: 12, color: P.inkFaint, width: "100%" }}>+ Add skill</button>
+      )}
+    </div>
+  );
+};
+
+// ─── Meal Planner ─────────────────────────────────────────────────────────────
+const GROCERY_SECTIONS = [
+  { name: "🥩 Meat & Fish",      keywords: ["chicken","beef","pork","fish","salmon","tuna","steak","lamb","turkey","mince","bacon","ham","sausage","prawn","shrimp"] },
+  { name: "🥦 Fruit & Veg",      keywords: ["lettuce","tomato","onion","carrot","potato","broccoli","spinach","pepper","garlic","ginger","celery","cucumber","avocado","lemon","lime","apple","banana","orange","mushroom","courgette","aubergine","kale","cabbage","leek","pea","corn","mango","strawberry","grape","berry"] },
+  { name: "🥛 Dairy & Eggs",     keywords: ["milk","cheese","butter","cream","yoghurt","yogurt","egg","eggs","mozzarella","parmesan","cheddar","feta"] },
+  { name: "🍞 Bakery",           keywords: ["bread","roll","bun","tortilla","wrap","pita","bagel","croissant"] },
+  { name: "🥫 Tins & Dry Goods", keywords: ["pasta","rice","flour","oat","lentil","bean","chickpea","tomato","stock","soup","sauce","tin","can","noodle","quinoa","couscous","lentil"] },
+  { name: "🧴 Condiments",       keywords: ["oil","vinegar","sauce","ketchup","mustard","mayo","salt","pepper","spice","herb","cumin","paprika","basil","oregano","thyme","honey","soy","teriyaki","pesto","chilli"] },
+  { name: "🧊 Frozen",           keywords: ["frozen","ice cream","peas frozen","sweetcorn frozen"] },
+  { name: "🥤 Drinks",           keywords: ["water","juice","coffee","tea","wine","beer","kombucha","oat milk","almond milk"] },
+];
+const categorizeShopping = (item) => {
+  const lower = item.toLowerCase();
+  for (const s of GROCERY_SECTIONS) {
+    if (s.keywords.some(k => lower.includes(k))) return s.name;
+  }
+  return "📦 Other";
+};
+
+const DAYS = ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"];
+const MEALS = ["Breakfast","Lunch","Dinner"];
+
+const getWeekKey = (offset = 0) => {
+  const d = new Date(); d.setHours(0,0,0,0);
+  const mon = new Date(d); mon.setDate(d.getDate() - (d.getDay() === 0 ? 6 : d.getDay() - 1) + offset * 7);
+  return mon.toISOString().slice(0,10);
+};
+
+const MealPlannerWidget = ({ data, color, onDataChange }) => {
+  const [weeks, setWeeks] = useState(data.weeks || {});
+  const [weekOffset, setWeekOffset] = useState(0);
+  const [activeTab, setActiveTab] = useState("planner"); // "planner" | "shopping"
+  const [editing, setEditing] = useState(null); // { day, meal }
+  const [draft, setDraft] = useState({ name: "", ingredients: "" });
+  const [ingredientInput, setIngredientInput] = useState("");
+  const weekKey = getWeekKey(weekOffset);
+
+  const saveAll = (w) => { setWeeks(w); onDataChange?.({ weeks: w }); };
+
+  const getWeekData = () => weeks[weekKey] || {};
+  const getMeal = (day, meal) => getWeekData()[day]?.[meal] || null;
+
+  const setMeal = (day, meal, mealData) => {
+    const wd = { ...getWeekData() };
+    if (!wd[day]) wd[day] = {};
+    wd[day] = { ...wd[day], [meal]: mealData };
+    const w = { ...weeks, [weekKey]: wd };
+    saveAll(w);
+  };
+  const clearMeal = (day, meal) => {
+    const wd = { ...getWeekData() };
+    if (wd[day]) { const d = { ...wd[day] }; delete d[meal]; wd[day] = d; }
+    saveAll({ ...weeks, [weekKey]: wd });
+  };
+
+  const openEdit = (day, meal) => {
+    const existing = getMeal(day, meal);
+    setDraft({ name: existing?.name || "", ingredients: existing?.ingredients || [] });
+    setIngredientInput("");
+    setEditing({ day, meal });
+  };
+  const saveEdit = () => {
+    if (!editing) return;
+    const ings = Array.isArray(draft.ingredients) ? draft.ingredients : [];
+    if (ingredientInput.trim()) {
+      ings.push(...ingredientInput.split(",").map(s => s.trim()).filter(Boolean));
+    }
+    if (draft.name.trim()) {
+      setMeal(editing.day, editing.meal, { name: draft.name.trim(), ingredients: ings });
+    } else {
+      clearMeal(editing.day, editing.meal);
+    }
+    setEditing(null); setDraft({ name: "", ingredients: [] }); setIngredientInput("");
+  };
+  const addIngredient = () => {
+    if (!ingredientInput.trim()) return;
+    const items = ingredientInput.split(",").map(s => s.trim()).filter(Boolean);
+    setDraft(p => ({ ...p, ingredients: [...(Array.isArray(p.ingredients) ? p.ingredients : []), ...items] }));
+    setIngredientInput("");
+  };
+  const removeIngredient = (i) => setDraft(p => ({ ...p, ingredients: (p.ingredients||[]).filter((_,idx) => idx !== i) }));
+
+  // Build shopping list from current week
+  const buildShoppingList = () => {
+    const all = [];
+    const wd = getWeekData();
+    Object.values(wd).forEach(dayMeals => {
+      Object.values(dayMeals).forEach(meal => {
+        if (meal?.ingredients) all.push(...meal.ingredients);
+      });
+    });
+    // Deduplicate and categorize
+    const unique = [...new Set(all.map(i => i.trim()).filter(Boolean))];
+    const grouped = {};
+    unique.forEach(item => {
+      const section = categorizeShopping(item);
+      if (!grouped[section]) grouped[section] = [];
+      grouped[section].push(item);
+    });
+    return grouped;
+  };
+
+  const [checkedItems, setCheckedItems] = useState({});
+  const toggleChecked = (item) => setCheckedItems(p => ({ ...p, [item]: !p[item] }));
+
+  const shoppingList = buildShoppingList();
+  const sectionOrder = GROCERY_SECTIONS.map(s => s.name).concat(["📦 Other"]);
+  const sortedSections = Object.keys(shoppingList).sort((a,b) => sectionOrder.indexOf(a) - sectionOrder.indexOf(b));
+
+  const weekStart = new Date(weekKey + "T12:00:00");
+  const weekEnd = new Date(weekStart); weekEnd.setDate(weekStart.getDate() + 6);
+  const weekLabel = weekOffset === 0 ? "This week" : weekOffset === 1 ? "Next week" : weekOffset === -1 ? "Last week" : `${weekStart.toLocaleDateString(undefined,{month:"short",day:"numeric"})} – ${weekEnd.toLocaleDateString(undefined,{month:"short",day:"numeric"})}`;
+
+  const tabStyle = (t) => ({
+    background: activeTab === t ? color.dot : "none", color: activeTab === t ? "#fff" : P.inkLight,
+    border: `1.5px solid ${activeTab === t ? color.dot : color.accent}`,
+    borderRadius: 8, padding: "5px 16px", cursor: "pointer", fontFamily: FF_S, fontSize: 12, fontWeight: 600,
+  });
+
+  const MEAL_COLORS = { Breakfast: P.butterLight, Lunch: P.mintLight, Dinner: P.lavenderLight };
+
+  return (
+    <div>
+      {/* Top bar */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, flexWrap: "wrap", gap: 8 }}>
+        <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
+          <button onClick={() => setWeekOffset(w => w-1)} style={{ background: "none", border: `1.5px solid ${color.accent}`, borderRadius: 6, padding: "3px 8px", cursor: "pointer", color: P.inkLight, fontSize: 14 }}>‹</button>
+          <span style={{ fontFamily: FF_S, fontSize: 13, fontWeight: 600, color: P.ink, minWidth: 100, textAlign: "center" }}>{weekLabel}</span>
+          <button onClick={() => setWeekOffset(w => w+1)} style={{ background: "none", border: `1.5px solid ${color.accent}`, borderRadius: 6, padding: "3px 8px", cursor: "pointer", color: P.inkLight, fontSize: 14 }}>›</button>
+        </div>
+        <div style={{ display: "flex", gap: 6 }}>
+          <button onClick={() => setActiveTab("planner")} style={tabStyle("planner")}>📅 Planner</button>
+          <button onClick={() => setActiveTab("shopping")} style={tabStyle("shopping")}>🛒 Shopping List</button>
+        </div>
+      </div>
+
+      {/* ── PLANNER tab ── */}
+      {activeTab === "planner" && (
+        <div style={{ overflowX: "auto" }}>
+          <table style={{ width: "100%", borderCollapse: "separate", borderSpacing: "0 4px" }}>
+            <thead>
+              <tr>
+                <th style={{ width: 90, fontFamily: FF_S, fontSize: 11, color: P.inkFaint, textAlign: "left", paddingBottom: 6, fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5 }}></th>
+                {MEALS.map(m => (
+                  <th key={m} style={{ fontFamily: FF_S, fontSize: 11, color: P.inkFaint, textAlign: "center", paddingBottom: 6, fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5 }}>{m}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {DAYS.map(day => (
+                <tr key={day}>
+                  <td style={{ fontFamily: FF_S, fontSize: 12, fontWeight: 600, color: P.inkLight, paddingRight: 8, verticalAlign: "middle", paddingTop: 4, paddingBottom: 4 }}>{day.slice(0,3)}</td>
+                  {MEALS.map(meal => {
+                    const entry = getMeal(day, meal);
+                    return (
+                      <td key={meal} style={{ padding: "3px 4px", verticalAlign: "middle" }}>
+                        <div onClick={() => openEdit(day, meal)}
+                          style={{ minHeight: 38, padding: "5px 8px", borderRadius: 8, background: entry ? MEAL_COLORS[meal] || color.accent + "44" : color.accent + "22", border: `1px solid ${color.accent}`, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", transition: "background 0.15s" }}
+                          onMouseEnter={e => e.currentTarget.style.background = color.accent + "66"}
+                          onMouseLeave={e => e.currentTarget.style.background = entry ? MEAL_COLORS[meal] || color.accent + "44" : color.accent + "22"}>
+                          {entry ? (
+                            <span style={{ fontFamily: FF_S, fontSize: 11, color: P.ink, textAlign: "center", wordBreak: "break-word", lineHeight: 1.3 }}>{entry.name}</span>
+                          ) : (
+                            <span style={{ fontFamily: FF_S, fontSize: 18, color: P.inkFaint, opacity: 0.4 }}>+</span>
+                          )}
+                        </div>
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* ── SHOPPING LIST tab ── */}
+      {activeTab === "shopping" && (
+        <div>
+          {sortedSections.length === 0 ? (
+            <div style={{ textAlign: "center", padding: "24px 0", color: P.inkFaint, fontFamily: FF_S, fontSize: 13 }}>
+              Add ingredients to your meals to generate a shopping list!
+            </div>
+          ) : sortedSections.map(section => (
+            <div key={section} style={{ marginBottom: 14 }}>
+              <div style={{ fontFamily: FF_S, fontSize: 11, fontWeight: 700, color: P.inkFaint, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 }}>{section}</div>
+              {shoppingList[section].map(item => (
+                <div key={item} onClick={() => toggleChecked(item)} style={{ display: "flex", alignItems: "center", gap: 10, padding: "6px 10px", borderRadius: 8, marginBottom: 3, background: checkedItems[item] ? color.accent + "22" : color.accent + "44", cursor: "pointer", opacity: checkedItems[item] ? 0.55 : 1, transition: "opacity 0.2s" }}>
+                  <div style={{ width: 16, height: 16, borderRadius: 4, flexShrink: 0, background: checkedItems[item] ? color.dot : "transparent", border: `2px solid ${checkedItems[item] ? color.dot : color.dot + "66"}`, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    {checkedItems[item] && <span style={{ color: "#fff", fontSize: 10, fontWeight: 700 }}>✓</span>}
+                  </div>
+                  <span style={{ fontFamily: FF_S, fontSize: 13, color: P.ink, textDecoration: checkedItems[item] ? "line-through" : "none" }}>{item}</span>
+                </div>
+              ))}
+            </div>
+          ))}
+          {sortedSections.length > 0 && (
+            <button onClick={() => setCheckedItems({})} style={{ marginTop: 8, background: "none", border: `1.5px solid ${color.accent}`, borderRadius: 8, padding: "5px 14px", cursor: "pointer", fontFamily: FF_S, fontSize: 11, color: P.inkFaint, width: "100%" }}>↺ Reset checked items</button>
+          )}
+        </div>
+      )}
+
+      {/* ── EDIT MEAL MODAL ── */}
+      {editing && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(61,53,80,0.35)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 310, backdropFilter: "blur(4px)" }} onClick={() => setEditing(null)}>
+          <div onClick={e => e.stopPropagation()} style={{ background: P.white, borderRadius: 20, width: 380, maxWidth: "90vw", padding: "24px", boxShadow: "0 20px 60px rgba(61,53,80,0.2)", border: `1.5px solid ${color.accent}`, animation: "popIn 0.2s ease" }}>
+            <div style={{ fontFamily: FF_D, fontSize: 17, color: P.ink, marginBottom: 4 }}>{editing.meal} — {editing.day}</div>
+            <div style={{ fontFamily: FF_S, fontSize: 11, color: P.inkFaint, marginBottom: 16 }}>Leave blank to clear this slot</div>
+            <input autoFocus value={draft.name} onChange={e => setDraft(p => ({...p, name: e.target.value}))} placeholder={`${editing.meal} dish name…`} style={{ ...inp(color), width: "100%", boxSizing: "border-box", marginBottom: 12 }} />
+            {/* Ingredients */}
+            <div style={{ fontFamily: FF_S, fontSize: 11, fontWeight: 700, color: P.inkFaint, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 }}>Ingredients</div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginBottom: 8 }}>
+              {(Array.isArray(draft.ingredients) ? draft.ingredients : []).map((ing, i) => (
+                <span key={i} style={{ background: color.accent + "66", borderRadius: 20, padding: "2px 10px", fontFamily: FF_S, fontSize: 12, color: P.ink, display: "flex", alignItems: "center", gap: 4 }}>
+                  {ing} <span onClick={() => removeIngredient(i)} style={{ cursor: "pointer", color: P.inkFaint, fontSize: 13, lineHeight: 1 }}>×</span>
+                </span>
+              ))}
+            </div>
+            <div style={{ display: "flex", gap: 6, marginBottom: 16 }}>
+              <input value={ingredientInput} onChange={e => setIngredientInput(e.target.value)} onKeyDown={e => e.key === "Enter" && addIngredient()} placeholder="Add ingredients (comma separated)…" style={{ ...inp(color), flex: 1 }} />
+              <button onClick={addIngredient} style={{ background: color.dot, color: "#fff", border: "none", borderRadius: 8, padding: "5px 12px", cursor: "pointer", fontWeight: 600, fontSize: 13 }}>+</button>
+            </div>
+            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+              {getMeal(editing.day, editing.meal) && (
+                <button onClick={() => { clearMeal(editing.day, editing.meal); setEditing(null); }} style={{ background: "none", border: `1.5px solid ${P.rose}`, color: P.rose, borderRadius: 8, padding: "7px 14px", cursor: "pointer", fontFamily: FF_S, fontSize: 12, fontWeight: 600 }}>✕ Clear</button>
+              )}
+              <button onClick={() => setEditing(null)} style={{ background: "none", border: `1.5px solid ${color.accent}`, borderRadius: 8, padding: "7px 14px", cursor: "pointer", fontFamily: FF_S, fontSize: 12, color: P.inkLight }}>Cancel</button>
+              <button onClick={saveEdit} style={{ background: color.dot, color: "#fff", border: "none", borderRadius: 8, padding: "7px 16px", cursor: "pointer", fontFamily: FF_S, fontSize: 12, fontWeight: 600 }}>Save</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
 const WIDGET_RENDERERS = {
   todo: TodoWidget, goals: GoalsWidget, reading: ReadingWidget, mood: MoodWidget,
   links: LinksWidget, gratitude: GratitudeWidget, sobriety: SobrietyWidget,
@@ -2888,6 +4055,10 @@ const WIDGET_RENDERERS = {
   travel: TravelWidget, articles: ArticlesWidget,
   exercise: ExerciseWidget, archive: ArchiveWidget, gallery: GalleryWidget, blog: BlogWidget,
   bookmarks: BookmarksWidget,
+  finance: FinanceWidget, countdown: CountdownWidget, watchlist: WatchlistWidget,
+  sleeplog: SleepLogWidget, waterring: WaterRingWidget, quotes: QuotesWidget,
+  plants: PlantTrackerWidget, birthdays: BirthdaysWidget, studylog: StudyLogWidget,
+  skillprog: SkillProgressWidget, mealplanner: MealPlannerWidget,
 };
 
 const ShareWidgetModal = ({ widget, onClose, handle }) => {
@@ -3091,8 +4262,8 @@ const NewConvoModal = ({ onClose, onStart, currentUserId }) => {
   const norm = (u) => ({ ...u, color: u.avatar_color || P.lavender, initials: (u.name || u.handle || "?").slice(0, 2).toUpperCase() });
 
   const toggle = (u) => {
+    if (dmBlocked.has(u.id)) return; // user has messages turned off
     if (tab === "dm") {
-      if (dmBlocked.has(u.id)) return; // can't DM this user
       setSelected([u.id]);
       setSelectedProfiles([u]);
     } else {
@@ -3150,7 +4321,7 @@ const NewConvoModal = ({ onClose, onStart, currentUserId }) => {
             <div style={{ padding: "28px", textAlign: "center", color: P.inkFaint, fontFamily: FF_S, fontSize: 13 }}>Start typing to find someone</div>
           ) : results.map(u => {
             const nu = norm(u);
-            const isBlocked = tab === "dm" && dmBlocked.has(u.id);
+            const isBlocked = dmBlocked.has(u.id);
             return (
               <div key={u.id} onClick={() => !isBlocked && toggle(nu)} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 12px", borderRadius: 14, cursor: isBlocked ? "default" : "pointer", background: selected.includes(u.id) ? P.lavenderLight : "transparent", opacity: isBlocked ? 0.5 : 1, transition: "background 0.15s" }}>
                 <UserAvatar user={nu} size={40} />
@@ -3663,7 +4834,7 @@ const DashboardPage = ({ user: userProp, view, onNavigate, profilePic, setProfil
         if (s) return new Set(JSON.parse(s));
       } catch {}
     }
-    return new Set(["gallery", "blog"]);
+    return new Set(["gallery", "blog", "finance", "mealplanner"]);
   });
   const [widgetSearch, setWidgetSearch] = useState("");
   const [dragId, setDragId] = useState(null);
@@ -4281,13 +5452,16 @@ const DashboardPage = ({ user: userProp, view, onNavigate, profilePic, setProfil
   );
 };
 
-const MessagesPage = ({ requests, setRequests, pendingDmUserId, onPendingDmHandled }) => {
+const MessagesPage = ({ requests, setRequests, pendingDmUserId, onPendingDmHandled, onUnreadChange }) => {
   const { user } = useAuth();
   const {
     conversations, activeConversation, messages, loading, messagesLoading,
     selectConversation, sendMessage, deleteMessage, deleteConversation, startDM, startGroupChat, refresh,
     typingUsers, setTyping, totalUnread,
   } = useMessages();
+
+  // Bubble unread count up to App so the Nav badge stays accurate
+  useEffect(() => { onUnreadChange?.(totalUnread); }, [totalUnread]); // eslint-disable-line
 
   const [msgTab, setMsgTab] = useState("messages");
   const [searchConvos, setSearchConvos] = useState("");
@@ -8466,6 +9640,7 @@ export default function App() {
   });
   const [widgetReloadKey, setWidgetReloadKey] = useState(0);
   const dashboardEverMounted = useRef(false);
+  const messagesEverMounted  = useRef(false);
   // Tracks the last non-null user so DashboardPage stays mounted even if
   // auth briefly flickers to null (e.g. during Supabase token refresh).
   const lastKnownUserRef = useRef(null);
@@ -8800,7 +9975,8 @@ export default function App() {
   }, [user?.id]); // eslint-disable-line
 
   const unreadNotifs = notifications.filter(n => !n.read).length;
-  const totalUnread = convos.reduce((a, c) => a + c.messages.filter(m => m.from !== "me" && !m.read).length, 0);
+  const [msgUnread, setMsgUnread] = useState(0);
+  const totalUnread = msgUnread;
   const isLoggedIn = !!user;
   const ADMIN_ID = import.meta.env.VITE_ADMIN_USER_ID;
   const isAdmin = !!user && !!ADMIN_ID && user.id === ADMIN_ID;
@@ -8819,6 +9995,8 @@ export default function App() {
     // Clear the last-known-user ref so DashboardPage unmounts cleanly on logout
     lastKnownUserRef.current = null;
     dashboardEverMounted.current = false;
+    messagesEverMounted.current = false;
+    setMsgUnread(0);
     try { sessionStorage.removeItem("nook_page"); } catch {}
     setProfilePic(null); // Clear photo so the next user doesn't see the previous user's photo
     setPage("home");
@@ -8946,6 +10124,7 @@ export default function App() {
 
   // Set during render (not in a useEffect) so the JSX condition sees it in the same render pass
   if (user && ["dashboard","customize"].includes(page)) dashboardEverMounted.current = true;
+  if (user && page === "messages") messagesEverMounted.current = true;
 
   // Show nothing while Supabase checks session — prevents flash of login page
   if (authLoading) return (
@@ -9139,7 +10318,11 @@ export default function App() {
           <DashboardPage user={lastKnownUserRef.current} view={page} onNavigate={navigate} profilePic={profilePic} setProfilePic={setProfilePic} widgetRequests={widgetRequests} setWidgetRequests={setWidgetRequests} following={following} toggleFollow={toggleFollow} onViewUser={openUserProfile} widgetReloadKey={widgetReloadKey} privPrefs={privPrefs} />
         </div>
       )}
-      {page === "messages" && user && <MessagesPage requests={requests} setRequests={setRequests} pendingDmUserId={pendingDmUserId} onPendingDmHandled={() => setPendingDmUserId(null)} />}
+      {messagesEverMounted.current && user && (
+        <div style={{ display: page === "messages" ? "block" : "none" }}>
+          <MessagesPage requests={requests} setRequests={setRequests} pendingDmUserId={pendingDmUserId} onPendingDmHandled={() => setPendingDmUserId(null)} onUnreadChange={setMsgUnread} />
+        </div>
+      )}
       {page === "feed"     && user && <FeedPage onNavigate={navigate} onViewUser={openUserProfile} following={following} toggleFollowApp={toggleFollow} />}
       {page === "work"     && user && <WorkPage />}
       {page === "admin"    && isAdmin && <AdminPage widgetRequests={widgetRequests} setWidgetRequests={setWidgetRequests} />}

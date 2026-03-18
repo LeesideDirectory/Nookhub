@@ -1,5 +1,5 @@
 # Nook — Developer Handoff Document
-*Last updated: 2026-03-18 (session 22)*
+*Last updated: 2026-03-18 (session 23)*
 
 ---
 
@@ -8,7 +8,7 @@
 **Nook** is a pastel-themed personal dashboard SPA. Users get a public-facing profile page with customisable widgets (to-dos, reading list, goals, notes, etc.), a private settings area, and a real-time messaging system (DMs + group chats).
 
 **Stack:**
-- React 18 + Vite, all inline styles (no CSS files), single file `src/App.jsx` (~9118 lines)
+- React 18 + Vite, all inline styles (no CSS files), single file `src/App.jsx` (~10,352 lines)
 - Supabase (Postgres + Auth + Realtime)
 - Row Level Security (RLS) on all tables
 - `src/hooks/useAuth.js` — auth + profile state
@@ -1050,6 +1050,38 @@ Fixed: was using `convo.conversation_members?.length` (nested array no longer pr
 
 ---
 
+## Session 23 Changes (2026-03-18)
+
+### 59. 11 new widgets added
+
+**New widgets:**
+
+| ID | Title | Category | Data shape | Notes |
+|----|-------|----------|------------|-------|
+| `finance` | Finance Tracker | lifestyle | `{ budgets, expenses, savings, bills, netWorth }` | Full-width default; 4 tabs: Budget, Savings, Bills, Net Worth |
+| `countdown` | Countdown | lifestyle | `{ events: [{id, name, date, emoji}] }` | Card grid, days-until display |
+| `watchlist` | Watchlist | culture | `{ items: [{id, title, type, note, watched}] }` | Filter by watched/unwatched; types: movie, show, documentary, anime |
+| `sleeplog` | Sleep Log | lifestyle | `{ entries: [{date, hours, quality}] }` | 7-day bar chart, avg sleep stat; quality 1–5 emoji |
+| `waterring` | Daily Habits | lifestyle | `{ targets: [{id, name, goal, unit, emoji}], logs: {"YYYY-MM-DD": {targetId: count}} }` | +/− counter per habit, per-day progress bar |
+| `quotes` | Quotes Collection | culture | `{ quotes: [{id, text, author}], showRandom }` | Featured quote display, shuffle button |
+| `plants` | Plant Tracker | lifestyle | `{ plants: [{id, name, emoji, waterEvery, lastWatered}] }` | Cards sorted by urgency; colour-coded (red = overdue, orange = tomorrow) |
+| `birthdays` | Friend Birthdays | lifestyle | `{ birthdays: [{id, name, date, note}] }` | Sorted by next occurrence; shows age-turning; today highlighted |
+| `studylog` | Study & Focus Log | productivity | `{ sessions: [{id, subject, minutes, note, date}], subjects: [] }` | Weekly/all-time totals; subject tags |
+| `skillprog` | Skill Progress | productivity | `{ skills: [{id, name, progress, category, emoji}] }` | Range slider 0–100; level labels; grouped by category |
+| `mealplanner` | Meal Planner | lifestyle | `{ weeks: {"YYYY-MM-DD": { Monday: { Breakfast, Lunch, Dinner } } } }` | Full-width default; week navigation; Shopping List tab auto-generated from ingredients |
+
+**Finance Tracker tabs:** Budget (per-category budgets + expense log with progress bars), Savings (named goals with progress), Bills (recurring subscriptions with monthly total), Net Worth (assets vs liabilities snapshot).
+
+**Meal Planner:** Week grid (Mon–Sun × Breakfast/Lunch/Dinner) with prev/next week navigation. Each cell opens a modal to set dish name + ingredients. Shopping List tab aggregates all week's ingredients, deduplicates, and sorts by supermarket section via keyword matching (Meat & Fish / Fruit & Veg / Dairy & Eggs / Bakery / Tins & Dry Goods / Condiments / Frozen / Drinks / Other). Items are checkable inline.
+
+**Full-width defaults:** `finance` and `mealplanner` added to the default `expandedWidgets` Set.
+
+**Data saving:** All widgets use `onDataChange?.(nextData)` → `DashboardPage.onDataChange(widgetId, data)` → Supabase `widget_configs` upsert + localStorage. No extra wiring needed.
+
+**`App.jsx` line count:** ~10,352 (was ~9,200 before this session).
+
+---
+
 ## Session 22 Changes (2026-03-18)
 
 ### 56. Settings privacy toggles — allowMessages + defaultPublic wired up; showOnline marked coming soon
@@ -1071,7 +1103,76 @@ Fixed: was using `convo.conversation_members?.length` (nested array no longer pr
 
 - No online status infrastructure exists (no `last_seen` column, no presence channel). Rather than leave the toggle active with no effect, `ToggleRow` now accepts a `disabled` prop (renders at 45% opacity, click is a no-op). The "Show online status" row uses `disabled` with "coming soon" in the subtitle.
 
-3. **`NewConvoModal` updated** — after the profiles search returns, a second query fetches `priv_prefs` for all result user IDs. Users with `allowMessages: false` are added to a `dmBlocked` Set. In the DM tab: blocked users render at 50% opacity with a "Messages off" badge and cannot be selected. Group tab: unaffected. Existing conversations: unaffected (block only prevents starting new DMs).
+3. **`NewConvoModal` updated** — after the profiles search returns, a second query fetches `priv_prefs` for all result user IDs. Users with `allowMessages: false` are added to a `dmBlocked` Set. In the DM tab: blocked users render at 50% opacity with a "Messages off" badge and cannot be selected. Group tab: unaffected (see fix 57 below for full enforcement). Existing conversations: unaffected (block only prevents starting new DMs).
+
+---
+
+### 57. NewConvoModal — allowMessages block extended to group chats
+
+**Problem:** Fix 56 blocked users with `allowMessages: false` from being selected in the DM tab of `NewConvoModal`, but they could still be selected in the Group tab.
+
+**Fix:**
+- Removed the `tab === "dm" &&` condition guard so `isBlocked` applies to both tabs:
+  ```js
+  // Before:
+  const isBlocked = tab === "dm" && dmBlocked.has(u.id);
+  // After:
+  const isBlocked = dmBlocked.has(u.id);
+  ```
+- Moved the `dmBlocked.has(u.id)` early-return guard to the top of the `toggle()` function (before any tab-specific logic) so no path through the toggle can add a blocked user to any selection:
+  ```js
+  const toggle = (u) => {
+    if (dmBlocked.has(u.id)) return; // messages off — block both DM and group
+    ...
+  };
+  ```
+- Blocked users now render at 50% opacity with "Messages off" badge in both tabs — non-clickable and non-selectable everywhere in the modal.
+
+---
+
+### 58. Nav bar — unread message count badge
+
+**Problem:** The nav bar already had HTML for an unread-message badge (matching the notification bell badge), but `totalUnread` was always 0. It was calculated as `convos.reduce(...)` where `convos` is `INITIAL_CONVOS = []` — an empty array at App level that is never populated (the real conversations state lives inside `useMessages()` which is only called in `MessagesPage`).
+
+**Fix — three-part:**
+
+1. **Replaced the dead calculation in App** with a new state:
+   ```js
+   const [msgUnread, setMsgUnread] = useState(0);
+   const totalUnread = msgUnread;
+   ```
+
+2. **`messagesEverMounted` ref** — same pattern as `dashboardEverMounted`. Keeps `MessagesPage` always mounted (via CSS `display:none/block`) once first visited, so its Realtime subscription and `useMessages()` hook stay alive when the user navigates away:
+   ```js
+   const messagesEverMounted = useRef(false);
+   // render phase (before return):
+   if (user && page === "messages") messagesEverMounted.current = true;
+   ```
+   JSX changed from conditional render to CSS show/hide:
+   ```jsx
+   {messagesEverMounted.current && user && (
+     <div style={{ display: page === "messages" ? "block" : "none" }}>
+       <MessagesPage ... onUnreadChange={setMsgUnread} />
+     </div>
+   )}
+   ```
+
+3. **`MessagesPage` bubbles `totalUnread` up** via `onUnreadChange` prop:
+   ```js
+   const MessagesPage = ({ ..., onUnreadChange }) => {
+     ...
+     useEffect(() => { onUnreadChange?.(totalUnread); }, [totalUnread]); // eslint-disable-line
+   ```
+   `totalUnread` in `MessagesPage` is the real count from `useMessages()` — all conversations with unread messages from other users.
+
+4. **Logout cleanup** — both refs cleared and count reset:
+   ```js
+   dashboardEverMounted.current = false;
+   messagesEverMounted.current = false;
+   setMsgUnread(0);
+   ```
+
+The nav badge now lights up in real time as new messages arrive, exactly like the notification bell badge, and clears when the user opens messages.
 
 ---
 
@@ -1262,7 +1363,7 @@ Resolved automatically by fix #14 (session 19). Once the exercise widget saves t
 | `supabase-feed-events.sql` | **Applied** | Adds `posts`, `likes`, `comments` to `supabase_realtime` publication + adds `content`/`image_url` columns to `posts`. Confirmed applied — all three tables already in publication. |
 | `supabase-feed-notification-triggers.sql` | **Applied** | Creates DB triggers on `likes` and `comments` that insert into `notifications` table. Also adds `notifications` to Realtime publication. (session 20) |
 | `supabase-notification-source-id.sql` | **Applied** | Adds `source_id TEXT` column to `notifications`; updates `notify_on_like` and `notify_on_comment` trigger functions to populate it with the post ID. Required for notification click → post detail modal. (session 21) |
-| `supabase-priv-prefs-public-read.sql` | **Pending** | Replaces `user_data_bio_links_public_read` policy with a broader policy covering both `bio_links` and `priv_prefs` — required for `allowMessages` to work on public profiles. (session 22) |
+| `supabase-priv-prefs-public-read.sql` | **Applied** | Replaces `user_data_bio_links_public_read` policy with a broader policy covering both `bio_links` and `priv_prefs` — required for `allowMessages` to work on public profiles. (session 22) |
 
 ---
 
@@ -1279,7 +1380,6 @@ Resolved automatically by fix #14 (session 19). Once the exercise widget saves t
 
 ### Settings
 - **`showOnline` privacy pref**: Marked "coming soon" and disabled in Settings UI. Requires online presence infrastructure (a `last_seen` column on `profiles` updated on login/activity, plus display on public profiles and in messages). Not yet built.
-- **Action required — run `supabase-priv-prefs-public-read.sql`** for `allowMessages` to work on public profiles. Until this is run, `priv_prefs` is not publicly readable and the Message button will always show.
 - **Settings props need a proper home**: `notifPrefs`/`privPrefs` (and setters) are passed as props from App → SettingsPage. Before adding more settings sections, move these into a `UserPrefsContext` so any component can access prefs without prop-drilling.
 
 ### Admin
@@ -1299,7 +1399,8 @@ Resolved automatically by fix #14 (session 19). Once the exercise widget saves t
 - ~~**Email confirmation link going to localhost**~~ **FIXED (session 22)** — `emailRedirectTo: 'https://nook-hub.com'` added to `signUp` in `useAuth.js`; Supabase Site URL updated in dashboard.
 - ~~**Mood tracker stuck on yesterday**~~ **FIXED (session 22)** — `mergeHistory()` now rebuilds a fresh 30-day window on every mount and overlays saved entries by date string.
 - ~~**Admin panel — no way to view user dashboards**~~ **FIXED (session 22)** — `👁 View` button added to Users section and Overview recent signups list; uses `ProfileViewContext` (no new props needed).
-- ~~**allowMessages / defaultPublic toggles were stubs**~~ **FIXED (session 22)** — both now enforced. `allowMessages` hides the Message button on public profiles; `defaultPublic` sets new widgets to public on enable. `showOnline` marked coming soon (no infrastructure yet).
+- ~~**allowMessages / defaultPublic toggles were stubs**~~ **FIXED (session 22)** — both now enforced. `allowMessages` hides the Message button on public profiles and blocks selection in all new-message modal tabs (DM and group); `defaultPublic` sets new widgets to public on enable. `showOnline` marked coming soon (no infrastructure yet).
+- ~~**Nav bar unread message badge always 0**~~ **FIXED (session 22)** — `MessagesPage` kept always-mounted via `messagesEverMounted` ref; real count bubbled up via `onUnreadChange` prop.
 - ~~**Work data lost on new-browser login**~~ **FIXED (session 15)**
 - ~~**Calendar section missing from Work sidebar**~~ **FIXED (session 15)**
 - ~~**Signup chart always zero**~~ **FIXED (session 3)**
