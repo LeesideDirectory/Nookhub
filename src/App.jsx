@@ -4660,9 +4660,12 @@ const DashboardPage = ({ user: userProp, view, onNavigate, profilePic, setProfil
         const saved = localStorage.getItem(STORAGE_KEY);
         if (saved) {
           const ws = JSON.parse(saved);
-          return ws.map(w => {
+          const savedMap = Object.fromEntries(ws.map(w => [w.id, w]));
+          // Always merge from INITIAL_WIDGETS so newly added widget IDs are included
+          return INITIAL_WIDGETS.map(w => {
+            const base = savedMap[w.id] ?? { ...w, enabled: false, isPublic: false };
             const wd = savedWidgetData[w.id];
-            return wd ? { ...w, data: { ...w.data, ...wd } } : w;
+            return wd ? { ...base, data: { ...base.data, ...wd } } : base;
           });
         }
       } catch {}
@@ -4746,7 +4749,12 @@ const DashboardPage = ({ user: userProp, view, onNavigate, profilePic, setProfil
             try {
               const ws = JSON.parse(lsData);
               console.log('[Nook] localStorage widgets, enabled:', ws.filter(w=>w.enabled).map(w=>w.id));
-              const merged = ws.map(w => savedWidgetData[w.id] ? { ...w, data: { ...w.data, ...savedWidgetData[w.id] } } : w);
+              const savedMap = Object.fromEntries(ws.map(w => [w.id, w]));
+              // Merge over INITIAL_WIDGETS so newly added widgets always appear
+              const merged = INITIAL_WIDGETS.map(w => {
+                const base = savedMap[w.id] ?? { ...w, enabled: false, isPublic: false };
+                return savedWidgetData[w.id] ? { ...base, data: { ...base.data, ...savedWidgetData[w.id] } } : base;
+              });
               setWidgets(merged);
               // Auto-save to widget_configs so public profiles can show these widgets.
               // This runs once when widget_configs is empty (first time or new account).
@@ -4785,7 +4793,11 @@ const DashboardPage = ({ user: userProp, view, onNavigate, profilePic, setProfil
             const saved = localStorage.getItem(STORAGE_KEY);
             if (saved) {
               const ws = JSON.parse(saved);
-              setWidgets(ws.map(w => savedWidgetData[w.id] ? { ...w, data: { ...w.data, ...savedWidgetData[w.id] } } : w));
+              const savedMap = Object.fromEntries(ws.map(w => [w.id, w]));
+              setWidgets(INITIAL_WIDGETS.map(w => {
+                const base = savedMap[w.id] ?? { ...w, enabled: false, isPublic: false };
+                return savedWidgetData[w.id] ? { ...base, data: { ...base.data, ...savedWidgetData[w.id] } } : base;
+              }));
             }
           } catch {}
         }
