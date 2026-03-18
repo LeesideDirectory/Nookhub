@@ -1071,6 +1071,8 @@ Fixed: was using `convo.conversation_members?.length` (nested array no longer pr
 
 - No online status infrastructure exists (no `last_seen` column, no presence channel). Rather than leave the toggle active with no effect, `ToggleRow` now accepts a `disabled` prop (renders at 45% opacity, click is a no-op). The "Show online status" row uses `disabled` with "coming soon" in the subtitle.
 
+3. **`NewConvoModal` updated** — after the profiles search returns, a second query fetches `priv_prefs` for all result user IDs. Users with `allowMessages: false` are added to a `dmBlocked` Set. In the DM tab: blocked users render at 50% opacity with a "Messages off" badge and cannot be selected. Group tab: unaffected. Existing conversations: unaffected (block only prevents starting new DMs).
+
 ---
 
 ### 55. Mood tracker widget — stuck on yesterday's date

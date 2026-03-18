@@ -3050,22 +3050,39 @@ const NewConvoModal = ({ onClose, onStart, currentUserId }) => {
   const [groupName, setGroupName] = useState("");
   const [results, setResults] = useState([]);
   const [searching, setSearching] = useState(false);
+  const [dmBlocked, setDmBlocked] = useState(new Set());
 
   // Debounced real search against profiles table
   useEffect(() => {
-    if (!search.trim()) { setResults([]); return; }
+    if (!search.trim()) { setResults([]); setDmBlocked(new Set()); return; }
     const timer = setTimeout(async () => {
       setSearching(true);
       try {
-                const q = search.trim().replace(/^@/, "");
+        const q = search.trim().replace(/^@/, "");
         const { data } = await supabase
           .from('profiles')
           .select('id, name, handle, avatar_color, bio')
           .neq('id', currentUserId || '')
           .or(`name.ilike.%${q}%,handle.ilike.%${q}%`)
           .limit(10);
-        setResults(data || []);
-      } catch { setResults([]); }
+        const profiles = data || [];
+        setResults(profiles);
+        // Check which users have allowMessages: false
+        if (profiles.length > 0) {
+          const ids = profiles.map(u => u.id);
+          const { data: privRows } = await supabase
+            .from('user_data')
+            .select('user_id, value')
+            .in('user_id', ids)
+            .eq('key', 'priv_prefs');
+          const blocked = new Set(
+            (privRows || []).filter(r => r.value?.allowMessages === false).map(r => r.user_id)
+          );
+          setDmBlocked(blocked);
+        } else {
+          setDmBlocked(new Set());
+        }
+      } catch { setResults([]); setDmBlocked(new Set()); }
       setSearching(false);
     }, 300);
     return () => clearTimeout(timer);
@@ -3075,6 +3092,7 @@ const NewConvoModal = ({ onClose, onStart, currentUserId }) => {
 
   const toggle = (u) => {
     if (tab === "dm") {
+      if (dmBlocked.has(u.id)) return; // can't DM this user
       setSelected([u.id]);
       setSelectedProfiles([u]);
     } else {
@@ -3132,14 +3150,18 @@ const NewConvoModal = ({ onClose, onStart, currentUserId }) => {
             <div style={{ padding: "28px", textAlign: "center", color: P.inkFaint, fontFamily: FF_S, fontSize: 13 }}>Start typing to find someone</div>
           ) : results.map(u => {
             const nu = norm(u);
+            const isBlocked = tab === "dm" && dmBlocked.has(u.id);
             return (
-              <div key={u.id} onClick={() => toggle(nu)} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 12px", borderRadius: 14, cursor: "pointer", background: selected.includes(u.id) ? P.lavenderLight : "transparent", transition: "background 0.15s" }}>
+              <div key={u.id} onClick={() => !isBlocked && toggle(nu)} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 12px", borderRadius: 14, cursor: isBlocked ? "default" : "pointer", background: selected.includes(u.id) ? P.lavenderLight : "transparent", opacity: isBlocked ? 0.5 : 1, transition: "background 0.15s" }}>
                 <UserAvatar user={nu} size={40} />
                 <div style={{ flex: 1 }}>
                   <div style={{ fontFamily: FF_S, fontSize: 14, fontWeight: 500, color: P.ink }}>{u.name || u.handle}</div>
                   <HandleBadge handle={u.handle} style={{ fontSize: 12, fontWeight: 400, color: P.inkFaint }} />
                 </div>
-                {selected.includes(u.id) && <div style={{ width: 20, height: 20, borderRadius: "50%", background: P.lavender, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, color: P.ink, fontWeight: 700 }}>✓</div>}
+                {isBlocked
+                  ? <span style={{ fontFamily: FF_S, fontSize: 11, color: P.inkFaint, background: P.lavenderLight, borderRadius: 20, padding: "2px 8px" }}>Messages off</span>
+                  : selected.includes(u.id) && <div style={{ width: 20, height: 20, borderRadius: "50%", background: P.lavender, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, color: P.ink, fontWeight: 700 }}>✓</div>
+                }
               </div>
             );
           })}
