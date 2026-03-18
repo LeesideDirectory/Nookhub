@@ -10539,7 +10539,7 @@ export default function App() {
   // If the logged-in user's account is suspended, show only the suspension notice.
   // profileLoading guard prevents a brief flash while the profile is fetched after login.
   if (user && !profileLoading && profile?.suspended) {
-    return <SuspendedPage onLogout={handleLogout} />;
+    return <SuspendedPage onLogout={logout} />;
   }
 
   return (
