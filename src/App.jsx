@@ -4217,15 +4217,15 @@ const WidgetCard = ({ widget, onTogglePublic, isOwnDashboard, dragHandleProps, o
   return (
     <>
     <div className="nook-widget-card" style={{ background: color.bg, borderRadius: 20, padding: "22px 24px", border: `1.5px solid ${color.accent}`, boxShadow: `0 4px 20px ${color.dot}18`, display: "flex", flexDirection: "column", gap: 16, animation: "fadeUp 0.4s ease both" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+      <div className="nook-widget-card-header" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <div className="nook-widget-card-title" style={{ display: "flex", alignItems: "center", gap: 10, flex: 1, minWidth: 0 }}>
           {isOwnDashboard && dragHandleProps && (
-            <div {...dragHandleProps} style={{ cursor: "grab", color: P.inkFaint, fontSize: 14, padding: "0 2px", userSelect: "none", lineHeight: 1 }} title="Drag to reorder">⠿</div>
+            <div {...dragHandleProps} style={{ cursor: "grab", color: P.inkFaint, fontSize: 14, padding: "0 2px", userSelect: "none", lineHeight: 1, flexShrink: 0 }} title="Drag to reorder">⠿</div>
           )}
-          <div style={{ width: 34, height: 34, borderRadius: 10, background: color.accent, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16 }}>{widget.icon}</div>
-          <span style={{ fontFamily: FF_D, fontSize: 17, color: P.ink, fontWeight: 400 }}>{widget.title}</span>
+          <div style={{ width: 34, height: 34, borderRadius: 10, background: color.accent, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, flexShrink: 0 }}>{widget.icon}</div>
+          <span style={{ fontFamily: FF_D, fontSize: 17, color: P.ink, fontWeight: 400, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{widget.title}</span>
         </div>
-        <div className="nook-widget-controls" style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <div className="nook-widget-controls" style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
           {isOwnDashboard && onToggleExpand && (
             <button
               onClick={onToggleExpand}
@@ -5625,9 +5625,9 @@ const DashboardPage = ({ user: userProp, view, onNavigate, profilePic, setProfil
                     <>
                       {pubGrid.length === 0 && !pubArchive
                         ? <div style={{ textAlign: "center", padding: "60px 0", color: P.inkLight }}><p style={{ fontSize: 32, margin: "0 0 12px" }}>🔒</p><p>All your widgets are private — toggle some to public in Customise.</p></div>
-                        : <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 20 }}>
+                        : <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 20 }}>
                             {pubGrid.map(w => (
-                              <div key={w.id} style={{ gridColumn: expandedWidgets.has(w.id) ? "1 / -1" : "auto" }}>
+                              <div key={w.id} style={{ gridColumn: expandedWidgets.has(w.id) ? "1 / -1" : "auto", minWidth: 0 }}>
                                 <WidgetCard widget={w} isOwnDashboard={false} liveData={getLiveData(w.id)} />
                               </div>
                             ))}
@@ -10512,7 +10512,7 @@ export default function App() {
         @keyframes popIn { from { opacity:0; transform:scale(0.95); } to { opacity:1; transform:scale(1); } }
         @keyframes bounce { 0%,60%,100% { transform:translateY(0); } 30% { transform:translateY(-5px); } }
         * { box-sizing: border-box; }
-        body { margin: 0; }
+        body { margin: 0; overflow-x: hidden; }
         ::-webkit-scrollbar { width: 4px; }
         ::-webkit-scrollbar-thumb { background: ${P.lavender}; border-radius: 4px; }
 
@@ -10533,14 +10533,21 @@ export default function App() {
         .nook-feed-layout { display: grid; grid-template-columns: 1fr 300px; gap: 32px; }
         .nook-feed-sidebar { display: block; }
 
-        .nook-dash-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
-        .nook-work-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
-        .nook-admin-grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
-        .nook-admin-grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
-        .nook-admin-grid4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
-        .nook-home-features { display: grid; grid-template-columns: repeat(3, 1fr); gap: 28px; }
+        .nook-dash-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
+        .nook-dash-grid > * { min-width: 0; }
+        .nook-work-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; }
+        .nook-work-grid > * { min-width: 0; }
+        .nook-admin-grid2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
+        .nook-admin-grid2 > * { min-width: 0; }
+        .nook-admin-grid3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+        .nook-admin-grid3 > * { min-width: 0; }
+        .nook-admin-grid4 { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
+        .nook-admin-grid4 > * { min-width: 0; }
+        .nook-home-features { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 28px; }
+        .nook-home-features > * { min-width: 0; }
         .nook-home-users { display: flex; gap: 16px; justify-content: center; flex-wrap: wrap; }
-        .nook-home-testimonials { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
+        .nook-home-testimonials { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; }
+        .nook-home-testimonials > * { min-width: 0; }
         .nook-settings-layout { display: flex; }
         .nook-settings-sidebar { width: 220px; flex-shrink: 0; }
         .nook-settings-content { flex: 1; padding: 40px 48px; max-width: 640px; }
@@ -10594,11 +10601,11 @@ export default function App() {
           .nook-msg-back { display: flex !important; }
 
           /* Grids → single column */
-          .nook-dash-grid { grid-template-columns: 1fr !important; }
-          .nook-work-grid { grid-template-columns: 1fr !important; }
-          .nook-admin-grid2 { grid-template-columns: 1fr !important; }
-          .nook-admin-grid3 { grid-template-columns: 1fr !important; }
-          .nook-admin-grid4 { grid-template-columns: 1fr 1fr !important; }
+          .nook-dash-grid { grid-template-columns: minmax(0, 1fr) !important; }
+          .nook-work-grid { grid-template-columns: minmax(0, 1fr) !important; }
+          .nook-admin-grid2 { grid-template-columns: minmax(0, 1fr) !important; }
+          .nook-admin-grid3 { grid-template-columns: minmax(0, 1fr) !important; }
+          .nook-admin-grid4 { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
           .nook-home-features { grid-template-columns: 1fr !important; }
           .nook-home-users { gap: 10px; }
           .nook-home-testimonials { grid-template-columns: 1fr !important; }
@@ -10642,8 +10649,11 @@ export default function App() {
           /* ── Nav: enlarge touch targets ── */
           .nook-nav-mobile-menu button { min-height: 44px; min-width: 44px; }
 
-          /* ── Widget cards: tighter padding ── */
-          .nook-widget-card { padding: 16px !important; }
+          /* ── Widget cards: tighter padding + contain overflow ── */
+          .nook-widget-card { padding: 16px !important; max-width: 100%; }
+          .nook-widget-card-header { flex-wrap: wrap !important; gap: 6px !important; }
+          .nook-widget-card-title { min-width: 0; overflow: hidden; }
+          .nook-widget-card-title span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block; }
 
           /* ── Widget controls: allow wrapping so header doesn't overflow ── */
           .nook-widget-controls { flex-wrap: wrap !important; gap: 4px !important; }
