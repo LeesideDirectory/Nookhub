@@ -81,20 +81,31 @@ export function useAdminData() {
   useEffect(() => { fetchAll() }, [fetchAll])
 
   const suspendUser = async (userId, suspended) => {
-    const { error } = await supabase
-      .from('profiles')
-      .update({ suspended })
-      .eq('id', userId)
-    if (!error) setUsers(us => us.map(u => u.id === userId ? { ...u, suspended } : u))
+    // Direct .update() is blocked by RLS (profiles_own_update: auth.uid() = id).
+    // Use the SECURITY DEFINER RPC which bypasses RLS after verifying is_admin.
+    const { error } = await supabase.rpc('admin_set_user_suspended', {
+      target_user_id: userId,
+      is_suspended: suspended,
+    })
+    if (error) {
+      console.error('[Admin] suspendUser error:', error)
+    } else {
+      setUsers(us => us.map(u => u.id === userId ? { ...u, suspended } : u))
+    }
     return { error }
   }
 
   const flagUser = async (userId, flagged) => {
-    const { error } = await supabase
-      .from('profiles')
-      .update({ flagged })
-      .eq('id', userId)
-    if (!error) setUsers(us => us.map(u => u.id === userId ? { ...u, flagged } : u))
+    // Same RLS issue — use SECURITY DEFINER RPC.
+    const { error } = await supabase.rpc('admin_set_user_flagged', {
+      target_user_id: userId,
+      is_flagged: flagged,
+    })
+    if (error) {
+      console.error('[Admin] flagUser error:', error)
+    } else {
+      setUsers(us => us.map(u => u.id === userId ? { ...u, flagged } : u))
+    }
     return { error }
   }
 
