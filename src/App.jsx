@@ -350,9 +350,9 @@ const TodoWidget = ({ data, color, onDataChange }) => {
                       {it.done && <span style={{ color: "#fff", fontSize: 11, fontWeight: 700 }}>✓</span>}
                     </div>
                     <span style={{ flex: 1, fontFamily: FF_S, fontSize: 13.5, color: P.ink, textDecoration: it.done ? "line-through" : "none", opacity: it.done ? 0.5 : 1, transition: "all 0.2s" }}>{it.text}</span>
-                    <button onClick={() => removeItem(group.id, i)} style={{ background: "none", border: "none", cursor: "pointer", color: P.inkFaint, fontSize: 14, padding: "0 2px", opacity: 0, transition: "opacity 0.15s" }}
+                    <button onClick={() => removeItem(group.id, i)} style={{ background: "none", border: "none", cursor: "pointer", color: P.inkFaint, fontSize: 14, padding: "0 2px", opacity: 0.35, transition: "opacity 0.15s" }}
                       onMouseEnter={e => e.currentTarget.style.opacity = 1}
-                      onMouseLeave={e => e.currentTarget.style.opacity = 0}>×</button>
+                      onMouseLeave={e => e.currentTarget.style.opacity = 0.35}>×</button>
                   </div>
                 ))}
                 <div style={{ display: "flex", gap: 6, marginTop: 6, paddingLeft: 16 }}>
@@ -5053,6 +5053,29 @@ const DashboardPage = ({ user: userProp, view, onNavigate, profilePic, setProfil
           // Supabase is the source of truth — it wins over localStorage so data is
           // consistent across devices and sessions.
           const dbDataMap = Object.fromEntries(data.filter(r => r.data).map(r => [r.widget_id, r.data]));
+
+          // One-time migration: if lifted-state widget data exists in localStorage but not yet
+          // in Supabase (added before cross-device save was implemented), push it up now so
+          // other devices (e.g. mobile) can load it on next login.
+          const LIFTED_KEYS = ['goals', 'reading', 'habitstreak', 'podcast', 'exercise'];
+          const toMigrate = LIFTED_KEYS.filter(k => savedWidgetData[k] && !dbDataMap[k]);
+          if (toMigrate.length > 0 && user?.id) {
+            const migrateRows = toMigrate.map(k => ({
+              user_id: user.id,
+              widget_id: k,
+              data: savedWidgetData[k],
+              updated_at: new Date().toISOString(),
+            }));
+            supabase.from('widget_configs')
+              .upsert(migrateRows, { onConflict: 'user_id,widget_id' })
+              .then(({ error }) => {
+                if (error) console.warn('[Nook] Lifted-state migration error:', error);
+                else console.log('[Nook] Migrated lifted-state data to Supabase:', toMigrate);
+              });
+            // Update dbDataMap immediately so the current load uses the migrated data
+            for (const k of toMigrate) dbDataMap[k] = savedWidgetData[k];
+          }
+
           const mergedData = { ...savedWidgetData, ...dbDataMap }; // Supabase overrides localStorage
           // Build config from Supabase
           const configMap = Object.fromEntries(data.map(r => [r.widget_id, r]));
