@@ -1,5 +1,5 @@
 # Nook — Developer Handoff Document
-*Last updated: 2026-03-18 (session 23)*
+*Last updated: 2026-03-18 (session 24)*
 
 ---
 
@@ -8,7 +8,7 @@
 **Nook** is a pastel-themed personal dashboard SPA. Users get a public-facing profile page with customisable widgets (to-dos, reading list, goals, notes, etc.), a private settings area, and a real-time messaging system (DMs + group chats).
 
 **Stack:**
-- React 18 + Vite, all inline styles (no CSS files), single file `src/App.jsx` (~10,352 lines)
+- React 18 + Vite, all inline styles (no CSS files), single file `src/App.jsx` (~10,550 lines)
 - Supabase (Postgres + Auth + Realtime)
 - Row Level Security (RLS) on all tables
 - `src/hooks/useAuth.js` — auth + profile state
@@ -112,6 +112,170 @@ CREATE POLICY "chat_messages_member_insert" ON public.chat_messages
 
 CREATE POLICY "chat_messages_member_delete" ON public.chat_messages
   FOR DELETE USING (auth.uid() = sender_id);
+```
+
+---
+
+## Changes Made This Session (session 26)
+
+### 65. Input sanitisation — URL and text hygiene across all save paths
+
+**Background:** React's JSX auto-escapes all `{variable}` expressions so raw HTML injection via text fields is not a risk. Supabase parameterises all queries so SQL injection is not a risk. The genuine attack surface is: (a) `href` attributes with user-supplied URLs — a stored `javascript:` URL executes on click; and (b) null bytes / ASCII control characters in text saved to the database — data hygiene.
+
+**Audit findings:**
+
+| Location | Risk | Before fix |
+|---|---|---|
+| `ArticlesWidget` `href={a.url \| "#"}` | XSS — raw user URL rendered with no sanitisation | ❌ |
+| `ensureHttps` | Accidentally safe (prepends `https://` to bare strings) but no explicit protocol allowlist | ⚠️ |
+| All other `href` sites | Routed through `ensureHttps` | ✅ |
+| All `{text}` renders in JSX | React auto-escapes HTML | ✅ |
+| `innerHTML` (TwitterWidget) | Only used to clear container; user content injected via DOM API | ✅ |
+
+**Changes — `src/App.jsx`:**
+
+- **`sanitizeUrl`** replaces the body of `ensureHttps` with an explicit scheme allowlist: only `https://`, `http://`, `mailto:`, and `tel:` are permitted. Any other scheme (e.g. `javascript:`, `data:`, `vbscript:`) returns `'#'`. `const ensureHttps = sanitizeUrl` keeps all 9 existing call-sites working.
+- **`sanitizeText(str)`** added — strips C0 ASCII control characters (null bytes, form feeds, etc.) while preserving `\t`, `\n`, `\r`. React handles HTML escaping automatically, so this is purely data hygiene.
+- **`ArticlesWidget` render fixed**: `href={a.url || "#"}` → `href={sanitizeUrl(a.url)}`.
+- **`ArticlesWidget` `add()` fixed**: title, URL, and note sanitised before storing.
+- **`sanitizeText` applied at all user-writable DB save boundaries:** profile `name` + `bio` (DashboardPage inline save, Settings page save, OnboardingWizard upsert), feed post `content` (`FeedPage.handlePost`), blog post `title` + `body` (`BlogPostModal.save`).
+
+**Changes — `src/hooks/useMessages.js`:**
+
+- `sanitizeText` defined locally (same implementation) and applied in `sendMessage` before the `chat_messages` insert. Optimistic local state also uses the cleaned value.
+
+**Not changed (already safe):** widget text fields (goals, habits, notes, etc.) — rendered only via React JSX. Social media usernames embedded in `https://platform.com/${handle}` template strings — React escapes attributes, no script execution possible.
+
+---
+
+## Changes Made This Session (session 25)
+
+### 64. Mobile responsiveness — full audit and fix
+
+**Problem:** The site looked poor on mobile. Several components had hardcoded pixel widths that overflowed on small screens, large padding values that wasted space, a two-column modal layout that couldn't fit on narrow viewports, and touch targets too small for reliable tapping.
+
+**All changes are in `src/App.jsx`.**
+
+#### Critical overflow bugs fixed (inline style changes)
+- **ShareWidgetModal** inner box: `width: 400` → `width: "100%", maxWidth: 400`. On a 375px phone with 24px overlay padding the old value pushed content off-screen.
+- **NewConvoModal** inner box: `width: 420` → `width: "100%", maxWidth: 420`. Same overflow issue.
+
+#### New CSS utility classNames added to JSX
+The following elements received a `className` so they can be targeted by the new `@media (max-width: 640px)` rules (CSS `!important` overrides inline styles):
+
+| className | Element | Mobile override |
+|---|---|---|
+| `nook-gallery-modal` | GalleryPostModal inner flex box | Stack media above detail (`flex-direction: column`), enable scroll |
+| `nook-gallery-modal-media` | GalleryPostModal left media pane | Full-width, fixed 200px height, removes 360px min-height |
+| `nook-auth-card` | AuthPage login/signup card | Padding 44px → 28px 20px |
+| `nook-sobriety-days` | SobrietyWidget day counter (`fontSize: 56`) | `clamp(36px, 12vw, 52px)` |
+| `nook-onboarding-inner` | OnboardingWizard content area | Padding 36px 40px → 24px 20px |
+| `nook-widget-card` | WidgetCard outer div | Padding 22px 24px → 16px |
+| `nook-widget-controls` | WidgetCard header controls row | `flex-wrap: wrap` so buttons don't overflow narrow cards |
+| `nook-blog-modal-header` | BlogPostModal header | Padding 20px 28px → 16px 20px |
+| `nook-blog-modal-body` | BlogPostModal body scroll area | Padding 24px 28px → 18px 20px |
+| `nook-profile-modal-header` | UserProfileModal header | Padding 28px 32px → 20px 20px |
+| `nook-request-modal-card` | WidgetRequestModal card | Padding 32px 36px → 24px 20px |
+
+#### New CSS rules added (all inside `@media (max-width: 640px)`)
+```css
+.nook-nav-mobile-menu button { min-height: 44px; min-width: 44px; }
+.nook-widget-card { padding: 16px !important; }
+.nook-widget-controls { flex-wrap: wrap !important; gap: 4px !important; }
+.nook-gallery-modal { flex-direction: column !important; overflow-y: auto !important; max-height: 95vh !important; }
+.nook-gallery-modal-media { width: 100% !important; height: 200px !important; max-height: 38vh !important; ... }
+.nook-auth-card { padding: 28px 20px !important; }
+.nook-onboarding-inner { padding: 24px 20px 20px !important; }
+.nook-sobriety-days { font-size: clamp(36px, 12vw, 52px) !important; }
+.nook-blog-modal-header { padding: 16px 20px 12px !important; }
+.nook-blog-modal-body { padding: 18px 20px !important; }
+.nook-profile-modal-header { padding: 20px 20px 16px !important; }
+.nook-request-modal-card { padding: 24px 20px !important; }
+```
+
+#### Pre-existing mobile handling (no changes needed)
+The following were already handled correctly:
+- Nav hamburger menu (`.nook-nav-links` hidden, `.nook-nav-mobile-menu` shown at ≤640px)
+- Dashboard/Work/Admin grids → single column at ≤640px
+- Work/Customize sidebar → horizontal icon grid at ≤640px
+- Messages panel switching (list → chat, back button)
+- Settings sidebar → horizontal scroll at ≤640px
+- Feed sidebar hidden at ≤900px
+- Home page hero/section padding → `clamp()` already in use
+- Most modals → already had `width: "100%", maxWidth: N` pattern
+- CalEventModal, WidgetRequestModal, ShareModal → already constrained
+
+---
+
+## Changes Made This Session (session 24)
+
+### 61. Forgot / reset password flow
+
+**Problem:** There was no "Forgot password?" link or reset flow. A user who forgot their password had no way to recover their account.
+
+**Fix — `src/hooks/useAuth.js`:**
+- Added `passwordRecovery` state (boolean).
+- In `onAuthStateChange`, added `PASSWORD_RECOVERY` event handling: sets `passwordRecovery = true`, stores the recovery-mode user, and returns early (no profile fetch needed yet).
+- Added `resetPassword(email)` — calls `supabase.auth.resetPasswordForEmail(email, { redirectTo: VITE_SITE_URL })`. Returns `{ error }`.
+- Added `updatePassword(password)` — calls `supabase.auth.updateUser({ password })`, clears `passwordRecovery` on success. Returns `{ error }`.
+- Updated `useAuth` return to export all four new values.
+
+**Fix — `src/App.jsx` (AuthPage):**
+- `AuthPage` now accepts `mode="forgot"` and `mode="reset"` in addition to `login`/`signup`.
+- `forgot` mode: shows email field + "Send reset link →" button. On success shows a "Check your inbox" confirmation screen.
+- `reset` mode: shows new password + confirm password fields. Validates min 8 chars and matching. On success navigates to login.
+- `login` mode: now shows a "Forgot password?" link (calls new `onForgot` prop) below the password field.
+- All modes: signup now validates `password.length >= 8` (was unchecked before), shows `(min 8 characters)` hint.
+
+**Fix — `src/App.jsx` (App component):**
+- Added `showPasswordReset` state — synchronously checks `window.location.hash` for `type=recovery` on initial render (same pattern as `showOnboarding`), so the reset form shows immediately even before `onAuthStateChange` fires.
+- Added `useEffect([passwordRecovery])` to set `showPasswordReset = true` when the async `PASSWORD_RECOVERY` event arrives.
+- Added `handleForgotPassword({ email })` and `handleResetPassword({ password })` handlers.
+- `handleResetPassword` clears the URL hash and navigates to `"login"` on success.
+- Added `"forgot"` page route to the render section.
+- `showPasswordReset` takes priority over all other pages when true — renders `<AuthPage mode="reset" />` globally.
+
+---
+
+### 63. Terms of Service and Privacy Policy pages
+
+**Problem:** No legal pages existed, which are required before accepting public sign-ups.
+
+**New components in `src/App.jsx` (inserted before `AuthPage`):**
+- `LegalSection({ title, children })` — shared heading + body wrapper for legal page sections
+- `TermsPage({ onNavigate })` — full Terms of Service page, styled on-brand. Covers: acceptance, description of service, account registration, user content, acceptable use, third-party services (Supabase), termination, disclaimers, liability, contact.
+- `PrivacyPage({ onNavigate })` — full GDPR-aware Privacy Policy. Covers: who we are, data collected (account, widget, social, usage, technical), how used, storage & security (Supabase + RLS + localStorage), sharing, user rights (access/rectification/erasure/portability/objection), cookies & localStorage, retention, children (16+), changes, contact.
+
+Both pages route back to `"home"` via their `onNavigate` prop. Contact email used throughout: `privacy@nook-hub.com` — **set this up as a forwarding address or inbox**.
+
+**Route additions in App render:**
+```jsx
+{page === "terms"   && <TermsPage onNavigate={navigate} />}
+{page === "privacy" && <PrivacyPage onNavigate={navigate} />}
+```
+Neither page is in `protectedPages`, so unauthenticated users can read them freely.
+
+**AuthPage updates:**
+- `AuthPage` now accepts `onNavigate` prop.
+- Signup form shows consent text below the submit button: "By creating your Nook, you agree to our Terms of Service and Privacy Policy" — both are in-app links calling `onNavigate("terms")` / `onNavigate("privacy")`.
+- Login page shows a subtle "Terms · Privacy" footer link row.
+
+---
+
+### 62. Handle uniqueness check in onboarding
+
+**Problem:** No uniqueness enforcement on `profiles.handle`. Two users could pick the same @handle.
+
+**Fix — `src/App.jsx` (OnboardingWizard):**
+- Added `handleErr` and `checkingHandle` state.
+- `next()` is now async. When transitioning from step 1 (profile setup), if a handle is entered, queries `profiles` for an existing row with that handle.
+- If the handle is taken (and not by the current user's own profile), sets `handleErr` and blocks progression.
+- The handle input shows a red border + error message when `handleErr` is set. Error clears on input change.
+- "Continue →" button shows "Checking…" and is disabled while the uniqueness check is in flight.
+
+**Note:** A `UNIQUE` constraint on `profiles.handle` at the DB level is also recommended as a belt-and-suspenders measure (the UI check alone doesn't prevent race conditions). SQL to run in Supabase:
+```sql
+ALTER TABLE profiles ADD CONSTRAINT profiles_handle_unique UNIQUE (handle);
 ```
 
 ---
@@ -1390,6 +1554,12 @@ Resolved automatically by fix #14 (session 19). Once the exercise widget saves t
 
 ### General
 - **Widget reordering**: Drag-and-drop exists but cross-device persistence may need verification.
+
+### Pre-launch / Production Readiness
+- ~~**Mobile responsiveness**~~ **FIXED (session 25)** — Full audit completed. Critical overflow bugs fixed (ShareWidgetModal, NewConvoModal hardcoded widths). Two-column GalleryPostModal now stacks on mobile. 11 new CSS utility classes added for padding reductions, touch target sizing (44px min on nav buttons), widget card tightening, widget controls wrapping, and responsive font sizes. All existing responsive groundwork (hamburger nav, single-column grids, sidebar stacking, settings horizontal scroll) was already in place.
+- ~~**Input sanitisation**~~ **FIXED (session 26)** — Full audit completed. The only genuine XSS vector was `ArticlesWidget` rendering `href={a.url}` without going through the URL sanitiser — fixed. `ensureHttps` upgraded to `sanitizeUrl` with an explicit scheme allowlist (blocks `javascript:`, `data:`, `vbscript:`, etc.). `sanitizeText` (control-char stripper) applied at all DB write boundaries: profile fields, feed posts, blog posts, messages. React's JSX auto-escaping handles all `{text}` render sites; no `dangerouslySetInnerHTML` is used with user content.
+- ~~**Rate limiting on auth routes**~~ **FIXED (session 27)** — Three-layer protection implemented. (1) **Client-side localStorage guard** in `useAuth.js`: sliding window per browser per operation (login 5/15min, signup 3/hr, reset-password 3/15min) — gives immediate UX feedback before any network call. (2) **Netlify Edge Function** (`netlify/edge-functions/auth-proxy.js`): Deno-based proxy at `/api/auth/{login,signup,reset-password}` with IP-based in-memory sliding window rate limiting (same limits); returns `429` with `Retry-After` header; prunes every 5 minutes. Real client IP via `x-nf-client-connection-ip`. (3) **Supabase's own** built-in auth rate limiting still applies as the final backstop. `netlify.toml` updated with three `[[edge_functions]]` blocks. `useAuth.js` updated so `signIn`, `signUp`, and `resetPassword` call the proxy first; on success tokens are injected via `supabase.auth.setSession()`; falls back to direct Supabase client on 404 (local dev without Netlify CLI). **Netlify env vars required**: `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` must be set in the Netlify dashboard (Site → Environment variables) — the edge function reads these via `Deno.env.get()`.
+- **Daily Summary widget** *(Priority: nice-to-have)* — A "What's On Today" widget that auto-aggregates data from other enabled widgets into a single morning briefing at the top of the dashboard. Would pull from: To-Do List (items due today), Habit Tracker (today's incomplete habits), Countdown (events within 7 days), Meal Planner (today's meals), Friend Birthdays (upcoming birthdays), Sleep Log (last night's sleep score), and Water/Daily Habits (today's progress vs targets). Should be pinned to the top of the dashboard and full-width by default. Read-only — no editing, just a smart summary.
 
 ---
 

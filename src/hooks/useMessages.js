@@ -2,6 +2,14 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from './useAuth'
 
+// Strip ASCII control characters (null bytes, form feeds, etc.) from user text.
+// React auto-escapes HTML in JSX so no HTML encoding is needed — this is purely
+// data hygiene to prevent null-byte / control-char smuggling into the database.
+const sanitizeText = (str) => {
+  if (!str || typeof str !== 'string') return str
+  return str.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '')
+}
+
 /**
  * useMessages — real Supabase chat matching your actual schema
  *
@@ -306,6 +314,7 @@ export function useMessages() {
     if (!supabase || !user || !activeConversationId) return { error: 'Not ready' }
     if (!content?.trim()) return { error: 'Message cannot be empty' }
 
+    const clean = sanitizeText(content.trim())
     const msgId = crypto.randomUUID()
     const { error: insertError } = await supabase
       .from('chat_messages')
@@ -313,7 +322,7 @@ export function useMessages() {
         id: msgId,
         conversation_id: activeConversationId,
         sender_id: user.id,
-        content: content.trim(),
+        content: clean,
       })
 
     if (insertError) return { error: insertError.message }
@@ -323,7 +332,7 @@ export function useMessages() {
       id: msgId,
       conversation_id: activeConversationId,
       sender_id: user.id,
-      content: content.trim(),
+      content: clean,
       created_at: new Date().toISOString(),
       profiles: profile ? {
         id: user.id,

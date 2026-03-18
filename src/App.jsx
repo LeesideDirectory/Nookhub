@@ -695,10 +695,37 @@ const MoodWidget = ({ data, color, onDataChange }) => {
   );
 };
 
-const ensureHttps = (url) => {
-  if (!url || url === '#') return url;
-  if (!/^https?:\/\//i.test(url)) return 'https://' + url;
-  return url;
+/**
+ * sanitizeUrl — ensures a URL is safe to use as an href.
+ * Blocks javascript:, data:, vbscript:, blob:, and all other non-safe
+ * URL schemes by returning '#' for anything that isn't https://, http://,
+ * mailto:, or tel:. Bare hostnames/paths get 'https://' prepended.
+ */
+const sanitizeUrl = (url) => {
+  if (!url || typeof url !== 'string') return '#';
+  const t = url.trim();
+  if (!t || t === '#') return '#';
+  // If the string contains a scheme, only allow the safe ones
+  if (/^[a-zA-Z][a-zA-Z0-9+\-.]*:/i.test(t)) {
+    if (!/^https?:/i.test(t) && !/^mailto:/i.test(t) && !/^tel:/i.test(t)) return '#';
+    return t;
+  }
+  // No scheme — assume https
+  return 'https://' + t;
+};
+// Legacy alias used throughout the codebase
+const ensureHttps = sanitizeUrl;
+
+/**
+ * sanitizeText — strips ASCII control characters (null bytes, form feeds,
+ * etc.) from user-supplied text before it is saved to the database.
+ * React's JSX auto-escapes HTML so no HTML encoding is needed here —
+ * this is purely for data hygiene (e.g. preventing null-byte smuggling).
+ */
+const sanitizeText = (str) => {
+  if (!str || typeof str !== 'string') return str;
+  // Remove C0 control chars except \t (0x09), \n (0x0A), \r (0x0D)
+  return str.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '');
 };
 
 const LinksWidget = ({ data, color, onDataChange }) => {
@@ -784,7 +811,7 @@ const SobrietyWidget = ({ data, color, onDataChange }) => {
   return (
     <div>
       <div style={{ textAlign: "center", padding: "10px 0 18px" }}>
-        <div style={{ fontFamily: FF_D, fontSize: 56, color: color.dot, lineHeight: 1 }}>{days}</div>
+        <div className="nook-sobriety-days" style={{ fontFamily: FF_D, fontSize: 56, color: color.dot, lineHeight: 1 }}>{days}</div>
         <div style={{ fontFamily: FF_S, fontSize: 13, color: P.inkLight, marginTop: 4 }}>days {data.label}</div>
       </div>
       <div style={{ marginBottom: 14 }}>
@@ -1720,13 +1747,19 @@ const ArticlesWidget = ({ data, color, onDataChange }) => {
   const save = (next) => { setArticles(next); onDataChange?.({ articles: next }); };
   const remove = (id) => save(articles.filter(a => a.id !== id));
   const cycleType = (id) => save(articles.map(a => a.id === id ? { ...a, type: TYPES[(TYPES.indexOf(a.type) + 1) % TYPES.length] } : a));
-  const add = () => { if (!draft.title.trim()) return; save([{ id: `a${Date.now()}`, ...draft }, ...articles]); setDraft({ title: "", url: "", type: "reading", date: "", note: "" }); setAdding(false); };
+  const add = () => {
+    if (!draft.title.trim()) return;
+    const entry = { id: `a${Date.now()}`, ...draft, title: sanitizeText(draft.title.trim()), url: sanitizeUrl(draft.url), note: sanitizeText(draft.note) };
+    save([entry, ...articles]);
+    setDraft({ title: "", url: "", type: "reading", date: "", note: "" });
+    setAdding(false);
+  };
   return (
     <div>
       {articles.map(a => (
         <div key={a.id} style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: "9px 0", borderBottom: `1px solid ${color.accent}55` }}>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <a href={a.url || "#"} target="_blank" rel="noreferrer" style={{ fontFamily: FF_S, fontSize: 13.5, color: P.ink, fontWeight: 500, textDecoration: "none", display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{a.title}</a>
+            <a href={sanitizeUrl(a.url)} target="_blank" rel="noreferrer" style={{ fontFamily: FF_S, fontSize: 13.5, color: P.ink, fontWeight: 500, textDecoration: "none", display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{a.title}</a>
             <div style={{ fontFamily: FF_S, fontSize: 11, color: P.inkFaint }}>{a.note}{a.date ? ` · ${a.date}` : ""}</div>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 5, flexShrink: 0 }}>
@@ -2129,10 +2162,10 @@ const GalleryPostModal = ({ post, onClose, onUpdate, onDelete, isOwner, color, a
 
   return (
     <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(30,24,48,0.65)", zIndex: 400, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
-      <div onClick={e => e.stopPropagation()} style={{ background: P.white, borderRadius: 24, width: "100%", maxWidth: 780, maxHeight: "90vh", overflow: "hidden", display: "flex", boxShadow: "0 20px 60px rgba(30,24,48,0.35)", animation: "popIn 0.2s ease" }}>
+      <div onClick={e => e.stopPropagation()} className="nook-gallery-modal" style={{ background: P.white, borderRadius: 24, width: "100%", maxWidth: 780, maxHeight: "90vh", overflow: "hidden", display: "flex", boxShadow: "0 20px 60px rgba(30,24,48,0.35)", animation: "popIn 0.2s ease" }}>
 
         {/* Left — media */}
-        <div style={{ width: 420, flexShrink: 0, background: post.mediaSrc ? "#111" : post.color + "cc", display: "flex", alignItems: "center", justifyContent: "center", minHeight: 360, position: "relative" }}>
+        <div className="nook-gallery-modal-media" style={{ width: 420, flexShrink: 0, background: post.mediaSrc ? "#111" : post.color + "cc", display: "flex", alignItems: "center", justifyContent: "center", minHeight: 360, position: "relative" }}>
           {post.mediaSrc
             ? post.mediaType === "video"
               ? <video src={post.mediaSrc} controls style={{ width: "100%", height: "100%", objectFit: "contain" }} />
@@ -2412,7 +2445,13 @@ const BlogPostModal = ({ post, onClose, onSave, onDelete, isOwner, color }) => {
 
   const save = () => {
     const tags = draft.tags.split(/[,\s]+/).map(t => t.trim().replace(/^#/, "")).filter(Boolean);
-    onSave({ ...post, ...draft, tags, readTime: Math.max(1, Math.ceil(draft.body.trim().split(/\s+/).filter(Boolean).length / 200)) });
+    onSave({
+      ...post, ...draft,
+      title: sanitizeText(draft.title),
+      body: sanitizeText(draft.body),
+      tags,
+      readTime: Math.max(1, Math.ceil(draft.body.trim().split(/\s+/).filter(Boolean).length / 200)),
+    });
     setEditing(false);
   };
 
@@ -2428,7 +2467,7 @@ const BlogPostModal = ({ post, onClose, onSave, onDelete, isOwner, color }) => {
         )}
 
         {/* Header */}
-        <div style={{ padding: "20px 28px 16px", borderBottom: `1px solid ${P.lavender}33`, flexShrink: 0, display: "flex", alignItems: "flex-start", gap: 14 }}>
+        <div className="nook-blog-modal-header" style={{ padding: "20px 28px 16px", borderBottom: `1px solid ${P.lavender}33`, flexShrink: 0, display: "flex", alignItems: "flex-start", gap: 14 }}>
           <div style={{ flex: 1 }}>
             {editing ? (
               <input value={draft.title} onChange={e => setDraft(d => ({ ...d, title: e.target.value }))} placeholder="Post title…" style={{ ...inp(), fontFamily: FF_D, fontSize: 22, background: "transparent", border: "none", borderBottom: `2px solid ${P.lavender}`, borderRadius: 0, padding: "4px 0", marginBottom: 0 }} />
@@ -2447,7 +2486,7 @@ const BlogPostModal = ({ post, onClose, onSave, onDelete, isOwner, color }) => {
         </div>
 
         {/* Body */}
-        <div style={{ flex: 1, overflowY: "auto", padding: "24px 28px" }}>
+        <div className="nook-blog-modal-body" style={{ flex: 1, overflowY: "auto", padding: "24px 28px" }}>
           {editing ? (
             <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
               <div style={{ display: "flex", gap: 10 }}>
@@ -3503,19 +3542,28 @@ const PlantTrackerWidget = ({ data, color, onDataChange }) => {
   const [draft, setDraft] = useState({ name: "", emoji: "🌿", waterEvery: 7 });
 
   const save = (next) => { setPlants(next); onDataChange?.({ plants: next }); };
+
+  // Use local date string (not UTC) so timezone differences don't shift the date
+  const localDateStr = () => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  };
+
   const addPlant = () => {
     if (!draft.name.trim()) return;
-    save([...plants, { id: `pl${Date.now()}`, name: draft.name.trim(), emoji: draft.emoji, waterEvery: parseInt(draft.waterEvery)||7, lastWatered: new Date().toISOString().slice(0,10) }]);
+    save([...plants, { id: `pl${Date.now()}`, name: draft.name.trim(), emoji: draft.emoji, waterEvery: Math.max(1, parseInt(draft.waterEvery)||7), lastWatered: localDateStr() }]);
     setDraft({ name: "", emoji: "🌿", waterEvery: 7 }); setAdding(false);
   };
-  const water = (id) => save(plants.map(p => p.id === id ? { ...p, lastWatered: new Date().toISOString().slice(0,10) } : p));
+  const water = (id) => save(plants.map(p => p.id === id ? { ...p, lastWatered: localDateStr() } : p));
   const remove = (id) => save(plants.filter(p => p.id !== id));
 
   const getDaysUntilWater = (p) => {
-    const last = new Date(p.lastWatered); last.setHours(0,0,0,0);
-    const today = new Date(); today.setHours(0,0,0,0);
-    const daysSince = Math.floor((today - last) / 86400000);
-    return p.waterEvery - daysSince;
+    if (!p.lastWatered) return 0;
+    // Parse date-only strings at noon local time to avoid UTC-midnight-to-local-date shift
+    const last = new Date(p.lastWatered + 'T12:00:00');
+    const today = new Date(); today.setHours(12, 0, 0, 0);
+    const daysSince = Math.round((today - last) / 86400000);
+    return (p.waterEvery || 7) - daysSince;
   };
 
   const PLANT_EMOJIS = ["🌿","🌵","🪴","🌱","🌺","🌻","🌴","🎋","🌾","🍀","🌸","🌳","🌲","🪷"];
@@ -4082,7 +4130,7 @@ const ShareWidgetModal = ({ widget, onClose, handle }) => {
 
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(61,53,80,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 300, backdropFilter: "blur(5px)" }} onClick={onClose}>
-      <div onClick={e => e.stopPropagation()} style={{ background: P.white, borderRadius: 26, width: 400, boxShadow: "0 24px 64px rgba(61,53,80,0.22)", border: `1.5px solid ${P.lavender}55`, overflow: "hidden", animation: "popIn 0.2s ease" }}>
+      <div onClick={e => e.stopPropagation()} style={{ background: P.white, borderRadius: 26, width: "100%", maxWidth: 400, boxShadow: "0 24px 64px rgba(61,53,80,0.22)", border: `1.5px solid ${P.lavender}55`, overflow: "hidden", animation: "popIn 0.2s ease" }}>
 
         {/* Header */}
         <div style={{ background: color.bg, padding: "22px 24px 18px", borderBottom: `1px solid ${color.accent}` }}>
@@ -4168,7 +4216,7 @@ const WidgetCard = ({ widget, onTogglePublic, isOwnDashboard, dragHandleProps, o
   const [showShare, setShowShare] = useState(false);
   return (
     <>
-    <div style={{ background: color.bg, borderRadius: 20, padding: "22px 24px", border: `1.5px solid ${color.accent}`, boxShadow: `0 4px 20px ${color.dot}18`, display: "flex", flexDirection: "column", gap: 16, animation: "fadeUp 0.4s ease both" }}>
+    <div className="nook-widget-card" style={{ background: color.bg, borderRadius: 20, padding: "22px 24px", border: `1.5px solid ${color.accent}`, boxShadow: `0 4px 20px ${color.dot}18`, display: "flex", flexDirection: "column", gap: 16, animation: "fadeUp 0.4s ease both" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           {isOwnDashboard && dragHandleProps && (
@@ -4177,7 +4225,7 @@ const WidgetCard = ({ widget, onTogglePublic, isOwnDashboard, dragHandleProps, o
           <div style={{ width: 34, height: 34, borderRadius: 10, background: color.accent, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16 }}>{widget.icon}</div>
           <span style={{ fontFamily: FF_D, fontSize: 17, color: P.ink, fontWeight: 400 }}>{widget.title}</span>
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <div className="nook-widget-controls" style={{ display: "flex", alignItems: "center", gap: 8 }}>
           {isOwnDashboard && onToggleExpand && (
             <button
               onClick={onToggleExpand}
@@ -4281,7 +4329,7 @@ const NewConvoModal = ({ onClose, onStart, currentUserId }) => {
 
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(61,53,80,0.35)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 200, backdropFilter: "blur(4px)" }} onClick={onClose}>
-      <div onClick={e => e.stopPropagation()} style={{ background: P.white, borderRadius: 24, width: 420, maxHeight: "80vh", boxShadow: "0 20px 60px rgba(61,53,80,0.2)", border: `1.5px solid ${P.lavender}55`, display: "flex", flexDirection: "column", overflow: "hidden", animation: "popIn 0.2s ease" }}>
+      <div onClick={e => e.stopPropagation()} style={{ background: P.white, borderRadius: 24, width: "100%", maxWidth: 420, maxHeight: "80vh", boxShadow: "0 20px 60px rgba(61,53,80,0.2)", border: `1.5px solid ${P.lavender}55`, display: "flex", flexDirection: "column", overflow: "hidden", animation: "popIn 0.2s ease" }}>
         <div style={{ padding: "22px 24px 0" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18 }}>
             <h3 style={{ fontFamily: FF_D, fontSize: 20, color: P.ink, margin: 0, fontWeight: 400 }}>New conversation</h3>
@@ -4560,53 +4608,313 @@ const HomePage = ({ onNavigate, profilePic }) => {
   );
 };
 
-const AuthPage = ({ mode, onSwitch, onEnter }) => {
-  const [form, setForm] = useState({ name: "", email: "", password: "" });
+// ─────────────────────────────────────────────────────────────────────────────
+// Legal pages
+// ─────────────────────────────────────────────────────────────────────────────
+
+const LegalSection = ({ title, children }) => (
+  <div style={{ marginBottom: 32 }}>
+    <h2 style={{ fontFamily: FF_D, fontSize: 22, color: P.ink, margin: "0 0 12px", fontWeight: 400 }}>{title}</h2>
+    <div style={{ fontFamily: FF_S, fontSize: 14, color: P.inkLight, lineHeight: 1.8 }}>{children}</div>
+  </div>
+);
+
+const TermsPage = ({ onNavigate }) => (
+  <div style={{ minHeight: "calc(100vh - 61px)", background: P.bg, padding: "48px 24px 80px" }}>
+    <div style={{ maxWidth: 740, margin: "0 auto" }}>
+      <button onClick={() => onNavigate("home")} style={{ background: "none", border: "none", cursor: "pointer", fontFamily: FF_S, fontSize: 13, color: P.inkLight, marginBottom: 32, padding: 0, display: "flex", alignItems: "center", gap: 6 }}>← Back</button>
+      <div style={{ background: P.white, borderRadius: 24, padding: "48px 52px", boxShadow: "0 4px 24px rgba(61,53,80,0.07)", border: `1.5px solid ${P.lavender}33` }}>
+        <div style={{ marginBottom: 36 }}>
+          <h1 style={{ fontFamily: FF_D, fontSize: 36, color: P.ink, margin: "0 0 8px", fontWeight: 400 }}>Terms of Service</h1>
+          <p style={{ fontFamily: FF_S, fontSize: 13, color: P.inkFaint, margin: 0 }}>Last updated: March 2026</p>
+        </div>
+
+        <LegalSection title="1. Acceptance of Terms">
+          <p>By creating an account on Nook ("the Service", "we", "us") at nook-hub.com, you agree to be bound by these Terms of Service. If you do not agree to these terms, please do not use the Service. We may update these terms from time to time — continued use of the Service after changes are posted constitutes your acceptance of the revised terms.</p>
+        </LegalSection>
+
+        <LegalSection title="2. Description of Service">
+          <p>Nook is a personal dashboard platform that lets you create a customisable profile, track personal goals and habits, log media and activities, and connect with others through a social feed and direct messages. Some parts of your profile and widgets may be made publicly visible at your choice.</p>
+        </LegalSection>
+
+        <LegalSection title="3. Account Registration">
+          <p style={{ marginBottom: 10 }}>To use Nook you must create an account with a valid email address. You are responsible for:</p>
+          <ul style={{ margin: "0 0 10px", paddingLeft: 20 }}>
+            <li style={{ marginBottom: 6 }}>Providing accurate and truthful information during registration</li>
+            <li style={{ marginBottom: 6 }}>Keeping your password secure and not sharing it with others</li>
+            <li style={{ marginBottom: 6 }}>All activity that occurs under your account</li>
+            <li style={{ marginBottom: 6 }}>Notifying us immediately at <a href="mailto:nook-hub@outlook.com" style={{ color: "#9B85D8" }}>nook-hub@outlook.com</a> if you suspect unauthorised access</li>
+          </ul>
+          <p>You must be at least 16 years old to use Nook. By registering, you confirm that you meet this requirement.</p>
+        </LegalSection>
+
+        <LegalSection title="4. Your Content">
+          <p style={{ marginBottom: 10 }}>You retain full ownership of all content you add to your Nook (posts, notes, widget data, photos, etc.). By posting content on Nook you grant us a limited, non-exclusive, royalty-free licence to store and display that content solely for the purpose of operating the Service.</p>
+          <p>You are solely responsible for your content. We do not endorse any user content and take no responsibility for it. You must not post content that is illegal, harmful, defamatory, harassing, or infringes third-party rights.</p>
+        </LegalSection>
+
+        <LegalSection title="5. Acceptable Use">
+          <p style={{ marginBottom: 10 }}>When using Nook you agree not to:</p>
+          <ul style={{ margin: 0, paddingLeft: 20 }}>
+            <li style={{ marginBottom: 6 }}>Post content that is illegal, abusive, threatening, or harassing</li>
+            <li style={{ marginBottom: 6 }}>Impersonate any person or entity</li>
+            <li style={{ marginBottom: 6 }}>Use the Service for spam or unsolicited commercial communications</li>
+            <li style={{ marginBottom: 6 }}>Attempt to gain unauthorised access to other users' accounts or data</li>
+            <li style={{ marginBottom: 6 }}>Use automated tools to scrape or bulk-access the Service</li>
+            <li style={{ marginBottom: 6 }}>Interfere with or disrupt the integrity or performance of the Service</li>
+          </ul>
+        </LegalSection>
+
+        <LegalSection title="6. Third-Party Services">
+          <p>Nook uses Supabase as its database and authentication provider. Your data is stored on Supabase's infrastructure. By using Nook, you acknowledge this. We take care to ensure Supabase is configured securely, but we encourage you to review <a href="https://supabase.com/privacy" target="_blank" rel="noopener noreferrer" style={{ color: "#9B85D8" }}>Supabase's privacy policy</a>.</p>
+        </LegalSection>
+
+        <LegalSection title="7. Termination">
+          <p>We reserve the right to suspend or terminate your account at our discretion if we believe you have violated these Terms, with or without notice. You may delete your account at any time by contacting us at <a href="mailto:nook-hub@outlook.com" style={{ color: "#9B85D8" }}>nook-hub@outlook.com</a>. Upon deletion, your data will be removed in accordance with our Privacy Policy.</p>
+        </LegalSection>
+
+        <LegalSection title="8. Disclaimers">
+          <p>Nook is provided on an "as is" and "as available" basis without warranties of any kind, either express or implied. We do not guarantee that the Service will be uninterrupted, error-free, or completely secure. We are not responsible for any loss of data.</p>
+        </LegalSection>
+
+        <LegalSection title="9. Limitation of Liability">
+          <p>To the fullest extent permitted by law, Nook and its operators shall not be liable for any indirect, incidental, special, or consequential damages arising out of or in connection with your use of the Service, even if advised of the possibility of such damages.</p>
+        </LegalSection>
+
+        <LegalSection title="10. Contact">
+          <p>If you have questions about these Terms, please contact us at <a href="mailto:nook-hub@outlook.com" style={{ color: "#9B85D8" }}>nook-hub@outlook.com</a>.</p>
+        </LegalSection>
+      </div>
+    </div>
+  </div>
+);
+
+const PrivacyPage = ({ onNavigate }) => (
+  <div style={{ minHeight: "calc(100vh - 61px)", background: P.bg, padding: "48px 24px 80px" }}>
+    <div style={{ maxWidth: 740, margin: "0 auto" }}>
+      <button onClick={() => onNavigate("home")} style={{ background: "none", border: "none", cursor: "pointer", fontFamily: FF_S, fontSize: 13, color: P.inkLight, marginBottom: 32, padding: 0, display: "flex", alignItems: "center", gap: 6 }}>← Back</button>
+      <div style={{ background: P.white, borderRadius: 24, padding: "48px 52px", boxShadow: "0 4px 24px rgba(61,53,80,0.07)", border: `1.5px solid ${P.lavender}33` }}>
+        <div style={{ marginBottom: 36 }}>
+          <h1 style={{ fontFamily: FF_D, fontSize: 36, color: P.ink, margin: "0 0 8px", fontWeight: 400 }}>Privacy Policy</h1>
+          <p style={{ fontFamily: FF_S, fontSize: 13, color: P.inkFaint, margin: 0 }}>Last updated: March 2026</p>
+        </div>
+
+        <LegalSection title="1. Who We Are">
+          <p>Nook is a personal dashboard platform available at nook-hub.com. This Privacy Policy explains what personal data we collect when you use Nook, how we use it, and your rights in relation to it. If you have any questions, contact us at <a href="mailto:nook-hub@outlook.com" style={{ color: "#9B85D8" }}>nook-hub@outlook.com</a>.</p>
+        </LegalSection>
+
+        <LegalSection title="2. Data We Collect">
+          <p style={{ marginBottom: 10 }}>When you create and use a Nook account, we collect:</p>
+          <ul style={{ margin: "0 0 10px", paddingLeft: 20 }}>
+            <li style={{ marginBottom: 6 }}><strong style={{ color: P.ink }}>Account data</strong> — your email address, name, @handle, bio, and optional profile photo</li>
+            <li style={{ marginBottom: 6 }}><strong style={{ color: P.ink }}>Widget data</strong> — content you voluntarily add to your widgets, such as to-do items, goals, reading lists, mood entries, habit logs, journal entries, and any other personal information you choose to record</li>
+            <li style={{ marginBottom: 6 }}><strong style={{ color: P.ink }}>Social data</strong> — posts, comments, and direct messages you send through the platform</li>
+            <li style={{ marginBottom: 6 }}><strong style={{ color: P.ink }}>Usage data</strong> — which widgets you have enabled, your dashboard preferences, and notification settings</li>
+            <li style={{ marginBottom: 6 }}><strong style={{ color: P.ink }}>Technical data</strong> — your IP address and browser type, collected automatically by our infrastructure provider for security purposes</li>
+          </ul>
+          <p>We do not collect financial information or sell advertising.</p>
+        </LegalSection>
+
+        <LegalSection title="3. How We Use Your Data">
+          <p style={{ marginBottom: 10 }}>We use your data to:</p>
+          <ul style={{ margin: 0, paddingLeft: 20 }}>
+            <li style={{ marginBottom: 6 }}>Create and maintain your account</li>
+            <li style={{ marginBottom: 6 }}>Display your public profile to other users where you have chosen to make content public</li>
+            <li style={{ marginBottom: 6 }}>Deliver the core features of the Service (dashboard, messaging, feed)</li>
+            <li style={{ marginBottom: 6 }}>Send transactional emails such as email confirmation and password reset links</li>
+            <li style={{ marginBottom: 6 }}>Improve and maintain the Service</li>
+          </ul>
+        </LegalSection>
+
+        <LegalSection title="4. Data Storage & Security">
+          <p>Your data is stored securely using <strong style={{ color: P.ink }}>Supabase</strong>, a managed database and authentication platform. Data is stored in the EU by default. Supabase implements encryption in transit (TLS) and at rest. All database tables have Row Level Security (RLS) enabled, meaning your private data can only be read by your own authenticated session.</p>
+          <p style={{ marginTop: 10 }}>Your dashboard preferences and widget data are also cached in your browser's localStorage for faster load times. This data never leaves your device except as part of normal sync with our database.</p>
+        </LegalSection>
+
+        <LegalSection title="5. Sharing Your Data">
+          <p style={{ marginBottom: 10 }}>We do not sell your personal data. We share data only in the following circumstances:</p>
+          <ul style={{ margin: 0, paddingLeft: 20 }}>
+            <li style={{ marginBottom: 6 }}><strong style={{ color: P.ink }}>With other Nook users</strong> — content you mark as public on your profile is visible to other registered users. Private widgets are never shared.</li>
+            <li style={{ marginBottom: 6 }}><strong style={{ color: P.ink }}>With Supabase</strong> — as our infrastructure provider and data processor, Supabase processes data on our behalf under appropriate data processing agreements.</li>
+            <li style={{ marginBottom: 6 }}><strong style={{ color: P.ink }}>Legal obligations</strong> — we may disclose data if required to do so by law or in response to valid legal processes.</li>
+          </ul>
+        </LegalSection>
+
+        <LegalSection title="6. Your Rights">
+          <p style={{ marginBottom: 10 }}>Under GDPR and applicable data protection law, you have the right to:</p>
+          <ul style={{ margin: "0 0 10px", paddingLeft: 20 }}>
+            <li style={{ marginBottom: 6 }}><strong style={{ color: P.ink }}>Access</strong> — request a copy of the personal data we hold about you</li>
+            <li style={{ marginBottom: 6 }}><strong style={{ color: P.ink }}>Rectification</strong> — correct inaccurate data (most data can be updated directly in your profile settings)</li>
+            <li style={{ marginBottom: 6 }}><strong style={{ color: P.ink }}>Erasure</strong> — request deletion of your account and all associated data</li>
+            <li style={{ marginBottom: 6 }}><strong style={{ color: P.ink }}>Portability</strong> — request a copy of your data in a structured, machine-readable format</li>
+            <li style={{ marginBottom: 6 }}><strong style={{ color: P.ink }}>Objection</strong> — object to processing of your data in certain circumstances</li>
+          </ul>
+          <p>To exercise any of these rights, email us at <a href="mailto:nook-hub@outlook.com" style={{ color: "#9B85D8" }}>nook-hub@outlook.com</a>. We will respond within 30 days.</p>
+        </LegalSection>
+
+        <LegalSection title="7. Cookies & Local Storage">
+          <p>Nook does not use tracking cookies or third-party advertising cookies. We use browser localStorage to cache your session and dashboard preferences for performance. This data is local to your device and is cleared when you log out.</p>
+        </LegalSection>
+
+        <LegalSection title="8. Data Retention">
+          <p>We retain your personal data for as long as your account is active. If you delete your account, we will delete your personal data within 30 days, except where we are required to retain it by law.</p>
+        </LegalSection>
+
+        <LegalSection title="9. Children">
+          <p>Nook is not directed at children under the age of 16. We do not knowingly collect personal data from anyone under 16. If you believe a child under 16 has provided us with personal data, please contact us and we will delete it promptly.</p>
+        </LegalSection>
+
+        <LegalSection title="10. Changes to This Policy">
+          <p>We may update this Privacy Policy from time to time. We will notify registered users of significant changes by email. The "Last updated" date at the top of this page reflects the most recent revision.</p>
+        </LegalSection>
+
+        <LegalSection title="11. Contact">
+          <p>For any privacy-related questions or requests, contact us at <a href="mailto:nook-hub@outlook.com" style={{ color: "#9B85D8" }}>nook-hub@outlook.com</a>.</p>
+        </LegalSection>
+      </div>
+    </div>
+  </div>
+);
+
+const AuthPage = ({ mode, onSwitch, onForgot, onEnter, onNavigate }) => {
+  const [form, setForm] = useState({ name: "", email: "", password: "", confirmPassword: "" });
   const [err, setErr] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [sent, setSent] = useState(false);
   const isLogin = mode === "login";
+  const isForgot = mode === "forgot";
+  const isReset  = mode === "reset";
+
+  const inputStyle = { width: "100%", border: `1.5px solid ${P.lavender}`, borderRadius: 12, padding: "10px 14px", fontFamily: FF_S, fontSize: 14, background: P.lavenderLight, color: P.ink, outline: "none", boxSizing: "border-box" };
 
   const handleSubmit = async () => {
     setErr("");
+    if (isForgot) {
+      if (!form.email) { setErr("Please enter your email."); return; }
+      setSubmitting(true);
+      const result = await onEnter({ email: form.email });
+      if (result?.error) setErr(result.error);
+      else setSent(true);
+      setSubmitting(false);
+      return;
+    }
+    if (isReset) {
+      if (!form.password || form.password.length < 8) { setErr("Password must be at least 8 characters."); return; }
+      if (form.password !== form.confirmPassword) { setErr("Passwords do not match."); return; }
+      setSubmitting(true);
+      const result = await onEnter({ password: form.password });
+      if (result?.error) setErr(result.error);
+      setSubmitting(false);
+      return;
+    }
     if (!form.email || !form.password) { setErr("Please fill in all fields."); return; }
+    if (!isLogin && form.password.length < 8) { setErr("Password must be at least 8 characters."); return; }
     setSubmitting(true);
     const result = await onEnter({ email: form.email, password: form.password, name: form.name });
     if (result?.error) setErr(result.error);
     setSubmitting(false);
   };
 
+  // Forgot-mode success screen
+  if (isForgot && sent) return (
+    <div style={{ minHeight: "calc(100vh - 61px)", background: P.bg, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
+      <div style={{ background: P.white, borderRadius: 24, padding: "48px 44px", border: `1.5px solid ${P.lavender}55`, boxShadow: "0 8px 40px rgba(201,184,240,0.2)", width: "100%", maxWidth: 420, textAlign: "center" }}>
+        <div style={{ fontSize: 48, marginBottom: 20 }}>✉️</div>
+        <h2 style={{ fontFamily: FF_D, fontSize: 26, color: P.ink, margin: "0 0 12px", fontWeight: 400 }}>Check your inbox</h2>
+        <p style={{ fontFamily: FF_S, fontSize: 14, color: P.inkLight, lineHeight: 1.6, margin: "0 0 28px" }}>
+          We sent a reset link to <strong style={{ color: P.ink }}>{form.email}</strong>. Click the link to set a new password.
+        </p>
+        <button onClick={onSwitch} style={{ background: P.lavenderLight, border: `1.5px solid ${P.lavender}`, borderRadius: 14, padding: "11px 28px", cursor: "pointer", fontFamily: FF_S, fontSize: 14, color: P.ink, fontWeight: 600 }}>
+          Back to login
+        </button>
+      </div>
+    </div>
+  );
+
   return (
     <div style={{ minHeight: "calc(100vh - 61px)", background: P.bg, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
-      <div style={{ background: P.white, borderRadius: 24, padding: "44px", border: `1.5px solid ${P.lavender}55`, boxShadow: "0 8px 40px rgba(201,184,240,0.2)", width: "100%", maxWidth: 420 }}>
-        <h2 style={{ fontFamily: FF_D, fontSize: 28, color: P.ink, margin: "0 0 6px", fontWeight: 400 }}>{isLogin ? "Welcome back" : "Create your Nook"}</h2>
-        <p style={{ color: P.inkLight, fontSize: 14, margin: "0 0 28px" }}>{isLogin ? "Sign in to your personal dashboard" : "Your cosy corner of the internet awaits"}</p>
-        {!isLogin && (
+      <div className="nook-auth-card" style={{ background: P.white, borderRadius: 24, padding: "44px", border: `1.5px solid ${P.lavender}55`, boxShadow: "0 8px 40px rgba(201,184,240,0.2)", width: "100%", maxWidth: 420 }}>
+        {isReset  && <><h2 style={{ fontFamily: FF_D, fontSize: 28, color: P.ink, margin: "0 0 6px", fontWeight: 400 }}>Set new password</h2><p style={{ color: P.inkLight, fontSize: 14, margin: "0 0 28px" }}>Choose a strong new password for your Nook</p></>}
+        {isForgot && <><h2 style={{ fontFamily: FF_D, fontSize: 28, color: P.ink, margin: "0 0 6px", fontWeight: 400 }}>Reset password</h2><p style={{ color: P.inkLight, fontSize: 14, margin: "0 0 28px" }}>Enter your email and we'll send a reset link</p></>}
+        {!isReset && !isForgot && <><h2 style={{ fontFamily: FF_D, fontSize: 28, color: P.ink, margin: "0 0 6px", fontWeight: 400 }}>{isLogin ? "Welcome back" : "Create your Nook"}</h2><p style={{ color: P.inkLight, fontSize: 14, margin: "0 0 28px" }}>{isLogin ? "Sign in to your personal dashboard" : "Your cosy corner of the internet awaits"}</p></>}
+
+        {/* Name — signup only */}
+        {!isLogin && !isForgot && !isReset && (
           <div style={{ marginBottom: 14 }}>
             <label style={{ display: "block", fontFamily: FF_S, fontSize: 13, color: P.inkLight, marginBottom: 5 }}>Name</label>
-            <input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} placeholder="Margot Ellison"
-              style={{ width: "100%", border: `1.5px solid ${P.lavender}`, borderRadius: 12, padding: "10px 14px", fontFamily: FF_S, fontSize: 14, background: P.lavenderLight, color: P.ink, outline: "none", boxSizing: "border-box" }} />
+            <input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} placeholder="Margot Ellison" style={inputStyle} />
           </div>
         )}
-        <div style={{ marginBottom: 14 }}>
-          <label style={{ display: "block", fontFamily: FF_S, fontSize: 13, color: P.inkLight, marginBottom: 5 }}>Email</label>
-          <input value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} placeholder="hello@example.com" type="email"
-            onKeyDown={e => e.key === "Enter" && handleSubmit()}
-            style={{ width: "100%", border: `1.5px solid ${P.lavender}`, borderRadius: 12, padding: "10px 14px", fontFamily: FF_S, fontSize: 14, background: P.lavenderLight, color: P.ink, outline: "none", boxSizing: "border-box" }} />
-        </div>
-        <div style={{ marginBottom: 20 }}>
-          <label style={{ display: "block", fontFamily: FF_S, fontSize: 13, color: P.inkLight, marginBottom: 5 }}>Password</label>
-          <input value={form.password} onChange={e => setForm({ ...form, password: e.target.value })} placeholder="••••••••" type="password"
-            onKeyDown={e => e.key === "Enter" && handleSubmit()}
-            style={{ width: "100%", border: `1.5px solid ${P.lavender}`, borderRadius: 12, padding: "10px 14px", fontFamily: FF_S, fontSize: 14, background: P.lavenderLight, color: P.ink, outline: "none", boxSizing: "border-box" }} />
-        </div>
+
+        {/* Email — login, signup, forgot */}
+        {!isReset && (
+          <div style={{ marginBottom: 14 }}>
+            <label style={{ display: "block", fontFamily: FF_S, fontSize: 13, color: P.inkLight, marginBottom: 5 }}>Email</label>
+            <input value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} placeholder="hello@example.com" type="email"
+              onKeyDown={e => e.key === "Enter" && handleSubmit()} style={inputStyle} />
+          </div>
+        )}
+
+        {/* Password — login, signup, reset */}
+        {!isForgot && (
+          <div style={{ marginBottom: isLogin ? 4 : 14 }}>
+            <label style={{ display: "block", fontFamily: FF_S, fontSize: 13, color: P.inkLight, marginBottom: 5 }}>
+              {isReset ? "New password" : "Password"}
+              {!isLogin && !isReset && <span style={{ color: P.inkFaint, fontWeight: 400 }}> (min 8 characters)</span>}
+            </label>
+            <input value={form.password} onChange={e => setForm({ ...form, password: e.target.value })} placeholder="••••••••" type="password"
+              onKeyDown={e => e.key === "Enter" && handleSubmit()} style={inputStyle} />
+          </div>
+        )}
+
+        {/* Confirm password — reset only */}
+        {isReset && (
+          <div style={{ marginBottom: 20 }}>
+            <label style={{ display: "block", fontFamily: FF_S, fontSize: 13, color: P.inkLight, marginBottom: 5 }}>Confirm password</label>
+            <input value={form.confirmPassword} onChange={e => setForm({ ...form, confirmPassword: e.target.value })} placeholder="••••••••" type="password"
+              onKeyDown={e => e.key === "Enter" && handleSubmit()} style={inputStyle} />
+          </div>
+        )}
+
+        {/* Forgot password link — login only */}
+        {isLogin && (
+          <div style={{ textAlign: "right", marginBottom: 18 }}>
+            <span style={{ color: "#9B85D8", fontSize: 13, cursor: "pointer" }} onClick={onForgot}>Forgot password?</span>
+          </div>
+        )}
+        {!isLogin && !isForgot && <div style={{ marginBottom: 6 }} />}
+
         {err && <div style={{ background: "#FDF0F0", border: "1.5px solid #F0B8C8", borderRadius: 10, padding: "10px 14px", marginBottom: 16, fontFamily: FF_S, fontSize: 13, color: "#C04060" }}>{err}</div>}
+
         <button onClick={handleSubmit} disabled={submitting} style={{ width: "100%", background: submitting ? P.lavenderLight : P.lavender, border: "none", borderRadius: 14, padding: "13px", cursor: submitting ? "default" : "pointer", fontSize: 15, fontWeight: 600, color: P.ink, boxShadow: `0 4px 16px ${P.lavender}80` }}>
-          {submitting ? "Please wait…" : isLogin ? "Sign in →" : "Create my Nook →"}
+          {submitting ? "Please wait…" : isReset ? "Set new password →" : isForgot ? "Send reset link →" : isLogin ? "Sign in →" : "Create my Nook →"}
         </button>
-        <p style={{ textAlign: "center", color: P.inkLight, fontSize: 13, marginTop: 20 }}>
-          {isLogin ? "Don't have a Nook?" : "Already have a Nook?"}{" "}
-          <span style={{ color: "#9B85D8", cursor: "pointer", fontWeight: 600 }} onClick={onSwitch}>{isLogin ? "Sign up" : "Log in"}</span>
-        </p>
+
+        {!isReset && (
+          <p style={{ textAlign: "center", color: P.inkLight, fontSize: 13, marginTop: 20 }}>
+            {isForgot ? "Remember your password?" : isLogin ? "Don't have a Nook?" : "Already have a Nook?"}{" "}
+            <span style={{ color: "#9B85D8", cursor: "pointer", fontWeight: 600 }} onClick={onSwitch}>{isForgot ? "Sign in" : isLogin ? "Sign up" : "Log in"}</span>
+          </p>
+        )}
+
+        {/* Consent text — signup only */}
+        {!isLogin && !isForgot && !isReset && (
+          <p style={{ textAlign: "center", color: P.inkFaint, fontSize: 12, marginTop: 16, lineHeight: 1.6 }}>
+            By creating your Nook, you agree to our{" "}
+            <span style={{ color: "#9B85D8", cursor: "pointer" }} onClick={() => onNavigate?.("terms")}>Terms of Service</span>
+            {" "}and{" "}
+            <span style={{ color: "#9B85D8", cursor: "pointer" }} onClick={() => onNavigate?.("privacy")}>Privacy Policy</span>
+          </p>
+        )}
+
+        {/* Legal links — login page footer */}
+        {isLogin && (
+          <p style={{ textAlign: "center", color: P.inkFaint, fontSize: 12, marginTop: 20 }}>
+            <span style={{ cursor: "pointer" }} onClick={() => onNavigate?.("terms")}>Terms</span>
+            {" · "}
+            <span style={{ cursor: "pointer" }} onClick={() => onNavigate?.("privacy")}>Privacy</span>
+          </p>
+        )}
       </div>
     </div>
   );
@@ -5211,7 +5519,7 @@ const DashboardPage = ({ user: userProp, view, onNavigate, profilePic, setProfil
             {editBio ? (
               <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
                 <textarea value={bio} onChange={e => setBio(e.target.value)} rows={2} style={{ flex: 1, border: `1.5px solid ${P.lavender}`, borderRadius: 10, padding: "8px 12px", fontFamily: FF_S, fontSize: 14, background: P.lavenderLight, color: P.ink, outline: "none", resize: "none" }} />
-                <button onClick={async () => { setEditBio(false); try { await updateProfile({ bio }); } catch {} }} style={{ background: P.lavender, border: "none", borderRadius: 10, padding: "0 14px", cursor: "pointer", fontFamily: FF_S, fontSize: 13, fontWeight: 600, color: P.ink }}>Save</button>
+                <button onClick={async () => { setEditBio(false); try { await updateProfile({ bio: sanitizeText(bio) }); } catch {} }} style={{ background: P.lavender, border: "none", borderRadius: 10, padding: "0 14px", cursor: "pointer", fontFamily: FF_S, fontSize: 13, fontWeight: 600, color: P.ink }}>Save</button>
               </div>
             ) : (
               <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
@@ -7491,7 +7799,7 @@ const WidgetRequestModal = ({ onClose, onSubmit, handle }) => {
   };
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(61,53,80,0.35)", zIndex: 300, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }} onClick={onClose}>
-      <div onClick={e => e.stopPropagation()} style={{ background: P.white, borderRadius: 24, padding: "32px 36px", width: "100%", maxWidth: 440, boxShadow: "0 12px 48px rgba(61,53,80,0.2)", animation: "popIn 0.2s ease" }}>
+      <div onClick={e => e.stopPropagation()} className="nook-request-modal-card" style={{ background: P.white, borderRadius: 24, padding: "32px 36px", width: "100%", maxWidth: 440, boxShadow: "0 12px 48px rgba(61,53,80,0.2)", animation: "popIn 0.2s ease" }}>
         {submitted ? (
           <div style={{ textAlign: "center", padding: "16px 0" }}>
             <div style={{ fontSize: 36, marginBottom: 12 }}>✨</div>
@@ -8652,7 +8960,7 @@ const FeedPage = ({ onNavigate, onViewUser, following, toggleFollowApp }) => {
   const handlePost = async () => {
     if (!newPostText.trim()) return;
     setPosting(true);
-    await createPost(newPostText);
+    await createPost(sanitizeText(newPostText));
     setNewPostText("");
     setShowCompose(false);
     setPosting(false);
@@ -9119,7 +9427,7 @@ const UserProfileModal = ({ user, following, toggleFollow, onClose, onMessage })
         <div style={{ height: 6, background: user.color, borderRadius: "28px 28px 0 0" }} />
 
         {/* Profile header */}
-        <div style={{ padding: "28px 32px 20px", background: P.white }}>
+        <div className="nook-profile-modal-header" style={{ padding: "28px 32px 20px", background: P.white }}>
           <div style={{ display: "flex", alignItems: "flex-start", gap: 18 }}>
             <UserAvatar user={user} size={72} showStatus />
             <div style={{ flex: 1 }}>
@@ -9196,7 +9504,7 @@ const SettingsPage = ({ profilePic, setProfilePic, onLogout, accent = "#C9B8F0",
     const cleanHandle = handle.trim()
       ? (handle.trim().startsWith('@') ? handle.trim() : '@' + handle.trim())
       : handle;
-    try { await updateProfile({ name, handle: cleanHandle }); setHandle(cleanHandle); } catch {}
+    try { await updateProfile({ name: sanitizeText(name), handle: cleanHandle }); setHandle(cleanHandle); } catch {}
     setSaved(true); setTimeout(() => setSaved(false), 2500);
   };
 
@@ -9380,8 +9688,26 @@ const OnboardingWizard = ({ onComplete, profilePic, setProfilePic }) => {
     { title: "You're all set! 🌿", sub: "Your Nook is ready. Let's go." },
   ];
 
+  const [handleErr, setHandleErr] = useState("");
+  const [checkingHandle, setCheckingHandle] = useState(false);
+
   const toggle = (id) => setChosen(cs => cs.includes(id) ? cs.filter(c => c !== id) : [...cs, id]);
-  const next = () => step < 3 ? setStep(s => s + 1) : onComplete(name, handle, bio, chosen);
+  const next = async () => {
+    if (step === 1 && handle.trim()) {
+      // Check handle uniqueness before moving to next step
+      setHandleErr("");
+      setCheckingHandle(true);
+      const cleanH = handle.trim().startsWith('@') ? handle.trim() : '@' + handle.trim();
+      const { data: existing } = await supabase.from('profiles').select('id').eq('handle', cleanH).maybeSingle();
+      setCheckingHandle(false);
+      const { data: { user: authUser } } = await supabase.auth.getUser();
+      if (existing && existing.id !== authUser?.id) {
+        setHandleErr("This handle is already taken — try another!");
+        return;
+      }
+    }
+    if (step < 3) { setStep(s => s + 1); } else { onComplete(name, handle, bio, chosen); }
+  };
 
   const progressPct = (step / 3) * 100;
 
@@ -9393,7 +9719,7 @@ const OnboardingWizard = ({ onComplete, profilePic, setProfilePic }) => {
           <div style={{ height: "100%", background: P.lavender, width: `${progressPct}%`, transition: "width 0.4s ease", borderRadius: "0 4px 4px 0" }} />
         </div>
 
-        <div style={{ padding: "36px 40px 32px" }}>
+        <div className="nook-onboarding-inner" style={{ padding: "36px 40px 32px" }}>
           <div style={{ fontFamily: FF_S, fontSize: 11, color: P.inkFaint, fontWeight: 600, textTransform: "uppercase", letterSpacing: 1, marginBottom: 12 }}>Step {step + 1} of 4</div>
           <h2 style={{ fontFamily: FF_D, fontSize: 28, color: P.ink, margin: "0 0 8px", fontWeight: 400 }}>{STEPS[step].title}</h2>
           <p style={{ fontFamily: FF_S, fontSize: 14, color: P.inkLight, margin: "0 0 28px", lineHeight: 1.6 }}>{STEPS[step].sub}</p>
@@ -9423,10 +9749,12 @@ const OnboardingWizard = ({ onComplete, profilePic, setProfilePic }) => {
                 </div>
                 <div style={{ fontFamily: FF_S, fontSize: 13, color: P.inkFaint }}>Click to upload a profile photo <span style={{ color: P.inkFaint }}>(optional)</span></div>
               </div>
-              {[["Your name", name, setName, "Margot Ellison"], ["Your @handle", handle, setHandle, "@margot"], ["A short bio", bio, setBio, "Designer & dreamer 🌿"]].map(([label, val, setter, ph]) => (
+              {[["Your name", name, setName, "Margot Ellison", false], ["Your @handle", handle, setHandle, "@margot", true], ["A short bio", bio, setBio, "Designer & dreamer 🌿", false]].map(([label, val, setter, ph, isHandle]) => (
                 <div key={label}>
                   <label style={{ display: "block", fontFamily: FF_S, fontSize: 12, color: P.inkFaint, fontWeight: 600, marginBottom: 6 }}>{label}</label>
-                  <input value={val} onChange={e => setter(e.target.value)} placeholder={ph} style={{ border: `1.5px solid ${P.lavender}`, borderRadius: 12, padding: "10px 14px", fontFamily: FF_S, fontSize: 14, background: P.lavenderLight, color: P.ink, outline: "none", width: "100%", boxSizing: "border-box" }} />
+                  <input value={val} onChange={e => { setter(e.target.value); if (isHandle) setHandleErr(""); }} placeholder={ph}
+                    style={{ border: `1.5px solid ${isHandle && handleErr ? "#F0B8C8" : P.lavender}`, borderRadius: 12, padding: "10px 14px", fontFamily: FF_S, fontSize: 14, background: P.lavenderLight, color: P.ink, outline: "none", width: "100%", boxSizing: "border-box" }} />
+                  {isHandle && handleErr && <div style={{ fontFamily: FF_S, fontSize: 12, color: "#C04060", marginTop: 5 }}>{handleErr}</div>}
                 </div>
               ))}
             </div>
@@ -9466,8 +9794,8 @@ const OnboardingWizard = ({ onComplete, profilePic, setProfilePic }) => {
               ? <button onClick={() => setStep(s => s - 1)} style={{ background: "none", border: "none", cursor: "pointer", fontFamily: FF_S, fontSize: 13, color: P.inkFaint }}>← Back</button>
               : <div />
             }
-            <button onClick={next} style={{ background: P.lavender, border: "none", borderRadius: 14, padding: "11px 32px", cursor: "pointer", fontFamily: FF_S, fontSize: 14, fontWeight: 600, color: P.ink, boxShadow: `0 4px 16px ${P.lavender}80` }}>
-              {step === 3 ? "Go to my Nook →" : step === 2 ? (chosen.length > 0 ? `Add ${chosen.length} widget${chosen.length !== 1 ? "s" : ""} →` : "Skip →") : "Continue →"}
+            <button onClick={next} disabled={checkingHandle} style={{ background: checkingHandle ? P.lavenderLight : P.lavender, border: "none", borderRadius: 14, padding: "11px 32px", cursor: checkingHandle ? "default" : "pointer", fontFamily: FF_S, fontSize: 14, fontWeight: 600, color: P.ink, boxShadow: `0 4px 16px ${P.lavender}80` }}>
+              {checkingHandle ? "Checking…" : step === 3 ? "Go to my Nook →" : step === 2 ? (chosen.length > 0 ? `Add ${chosen.length} widget${chosen.length !== 1 ? "s" : ""} →` : "Skip →") : "Continue →"}
             </button>
           </div>
         </div>
@@ -9603,7 +9931,7 @@ const HomePageNew = ({ onNavigate, profilePic }) => {
 };
 
 export default function App() {
-  const { user, profile, loading: authLoading, profileLoading, signIn, signUp, signOut } = useAuth();
+  const { user, profile, loading: authLoading, profileLoading, signIn, signUp, signOut, passwordRecovery, resetPassword, updatePassword } = useAuth();
   const [page, setPage] = useState(() => {
     try {
       const saved = sessionStorage.getItem("nook_page");
@@ -9652,6 +9980,18 @@ export default function App() {
     } catch {}
     return false;
   });
+
+  // Detect password-recovery redirect (Supabase sends type=recovery in the hash).
+  // This covers the synchronous initial render before onAuthStateChange fires.
+  const [showPasswordReset, setShowPasswordReset] = useState(() => {
+    try {
+      const hash = window.location.hash;
+      if (hash && (hash.includes('type=recovery') || hash.includes('type=password_recovery'))) return true;
+    } catch {}
+    return false;
+  });
+  // Also react to the async PASSWORD_RECOVERY auth event from useAuth
+  useEffect(() => { if (passwordRecovery) setShowPasswordReset(true); }, [passwordRecovery]);
   const [widgetReloadKey, setWidgetReloadKey] = useState(0);
   const dashboardEverMounted = useRef(false);
   const messagesEverMounted  = useRef(false);
@@ -10036,13 +10376,29 @@ export default function App() {
     }
     return { error };
   };
+
+  const handleForgotPassword = async ({ email }) => {
+    const { error } = await resetPassword(email);
+    return { error };
+  };
+
+  const handleResetPassword = async ({ password }) => {
+    const { error } = await updatePassword(password);
+    if (!error) {
+      // Clear hash and go to login — the session is live but we want a clean login experience
+      try { window.history.replaceState(null, '', window.location.pathname); } catch {}
+      setShowPasswordReset(false);
+      navigate("login");
+    }
+    return { error };
+  };
   const completeOnboarding = async (name, handle, bio, chosenIds) => {
     try {
       if (user && (name || bio || handle)) {
         const cleanHandle = handle.trim()
           ? (handle.trim().startsWith('@') ? handle.trim() : '@' + handle.trim())
           : ('@' + (user.email?.split('@')[0] || 'user'));
-        await supabase.from('profiles').update({ name, bio, handle: cleanHandle }).eq('id', user.id);
+        await supabase.from('profiles').update({ name: sanitizeText(name), bio: sanitizeText(bio), handle: cleanHandle }).eq('id', user.id);
       }
       // Save initial widget choices to Supabase right away
       if (user) {
@@ -10282,6 +10638,48 @@ export default function App() {
 
           /* Work section header */
           .nook-work-header { padding: 14px 18px !important; }
+
+          /* ── Nav: enlarge touch targets ── */
+          .nook-nav-mobile-menu button { min-height: 44px; min-width: 44px; }
+
+          /* ── Widget cards: tighter padding ── */
+          .nook-widget-card { padding: 16px !important; }
+
+          /* ── Widget controls: allow wrapping so header doesn't overflow ── */
+          .nook-widget-controls { flex-wrap: wrap !important; gap: 4px !important; }
+
+          /* ── Gallery / photo-post modal: stack media above detail on mobile ── */
+          .nook-gallery-modal {
+            flex-direction: column !important;
+            overflow-y: auto !important;
+            max-height: 95vh !important;
+          }
+          .nook-gallery-modal-media {
+            width: 100% !important;
+            flex-shrink: 0 !important;
+            min-height: unset !important;
+            height: 200px !important;
+            max-height: 38vh !important;
+          }
+
+          /* ── Auth card: reduce padding ── */
+          .nook-auth-card { padding: 28px 20px !important; }
+
+          /* ── Onboarding inner: reduce padding ── */
+          .nook-onboarding-inner { padding: 24px 20px 20px !important; }
+
+          /* ── Sobriety days: responsive font size ── */
+          .nook-sobriety-days { font-size: clamp(36px, 12vw, 52px) !important; }
+
+          /* ── Blog modal: reduce padding on header and body ── */
+          .nook-blog-modal-header { padding: 16px 20px 12px !important; }
+          .nook-blog-modal-body { padding: 18px 20px !important; }
+
+          /* ── User profile modal header: reduce padding ── */
+          .nook-profile-modal-header { padding: 20px 20px 16px !important; }
+
+          /* ── Widget request modal: reduce padding ── */
+          .nook-request-modal-card { padding: 24px 20px !important; }
         }
       `}</style>
 
@@ -10304,8 +10702,12 @@ export default function App() {
       />
 
       {page === "home"    && <HomePageNew onNavigate={navigate} profilePic={profilePic} />}
-      {page === "login"   && !user && <AuthPage mode="login"  onSwitch={() => navigate("signup")} onEnter={handleLogin} />}
-      {page === "signup"  && !user && !pendingEmail && <AuthPage mode="signup" onSwitch={() => navigate("login")}  onEnter={handleSignup} />}
+      {page === "login"   && !user && !showPasswordReset && <AuthPage mode="login"  onSwitch={() => navigate("signup")} onForgot={() => navigate("forgot")} onEnter={handleLogin} onNavigate={navigate} />}
+      {page === "signup"  && !user && !pendingEmail && <AuthPage mode="signup" onSwitch={() => navigate("login")} onEnter={handleSignup} onNavigate={navigate} />}
+      {page === "forgot"  && !user && !showPasswordReset && <AuthPage mode="forgot" onSwitch={() => navigate("login")} onEnter={handleForgotPassword} onNavigate={navigate} />}
+      {showPasswordReset && <AuthPage mode="reset" onEnter={handleResetPassword} onNavigate={navigate} />}
+      {page === "terms"   && <TermsPage onNavigate={navigate} />}
+      {page === "privacy" && <PrivacyPage onNavigate={navigate} />}
       {pendingEmail && !user && (
         <div style={{ minHeight: "calc(100vh - 61px)", background: P.bg, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
           <div style={{ background: P.white, borderRadius: 28, padding: "48px 44px", maxWidth: 440, width: "100%", textAlign: "center", boxShadow: "0 8px 40px rgba(61,53,80,0.10)", border: `1.5px solid ${P.lavender}44` }}>

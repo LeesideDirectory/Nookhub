@@ -2,6 +2,18 @@
   command = "npm run build"
   publish = "dist"
 
+[[edge_functions]]
+  path = "/api/auth/login"
+  function = "auth-proxy"
+
+[[edge_functions]]
+  path = "/api/auth/signup"
+  function = "auth-proxy"
+
+[[edge_functions]]
+  path = "/api/auth/reset-password"
+  function = "auth-proxy"
+
 [[redirects]]
   from = "/*"
   to = "/index.html"
