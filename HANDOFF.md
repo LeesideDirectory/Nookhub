@@ -1,5 +1,5 @@
 # Nook — Developer Handoff Document
-*Last updated: 2026-03-17 (session 21)*
+*Last updated: 2026-03-18 (session 22)*
 
 ---
 
@@ -1050,6 +1050,82 @@ Fixed: was using `convo.conversation_members?.length` (nested array no longer pr
 
 ---
 
+## Session 22 Changes (2026-03-18)
+
+### 56. Settings privacy toggles — allowMessages + defaultPublic wired up; showOnline marked coming soon
+
+**Problem:** All three Privacy section toggles in Settings were saving to Supabase correctly but had no effect on the app — they were pure stubs.
+
+**`allowMessages` fix (two parts):**
+
+1. **New SQL file `supabase-priv-prefs-public-read.sql`** — replaces the existing `user_data_bio_links_public_read` policy with a broader `user_data_public_keys_read` policy that allows reading both `bio_links` AND `priv_prefs` for any user. Required so `PublicProfilePage` can read the target user's preferences. **Action required: run this in Supabase SQL Editor.**
+
+2. **`PublicProfilePage` updated** — the `Promise.all` now fetches `user_data` for both `bio_links` and `priv_prefs` in a single query (`.in('key', ['bio_links', 'priv_prefs'])`). New `allowMessages` state (defaults `true`). If `priv_prefs.allowMessages === false`, the ✉ Message button is replaced with a greyed-out "✉ Messages off" pill (non-clickable, with tooltip).
+
+**`defaultPublic` fix:**
+
+- `DashboardPage` now accepts a `privPrefs` prop (passed from App).
+- `toggleEnabled` updated: when turning a widget **on**, if `privPrefs?.defaultPublic` is `true`, the widget is also set to `isPublic: true` in the same update. Turning widgets off is unchanged.
+
+**`showOnline` — marked coming soon:**
+
+- No online status infrastructure exists (no `last_seen` column, no presence channel). Rather than leave the toggle active with no effect, `ToggleRow` now accepts a `disabled` prop (renders at 45% opacity, click is a no-op). The "Show online status" row uses `disabled` with "coming soon" in the subtitle.
+
+---
+
+### 55. Mood tracker widget — stuck on yesterday's date
+
+**Problem:** The mood tracker showed yesterday as "Today" and blocked the user from logging today's mood.
+
+**Root cause:** The `useState` initializer loaded `data.history` directly:
+```js
+const [history, setHistory] = useState(() => data.history || buildHistory());
+```
+`data.history` is a frozen array saved at the time of last use. `today` is `history[history.length - 1]` — the last element. If data was saved yesterday, `today.date` was yesterday's ISO string. `buildHistory()` was only called when `data.history` was falsy (first-ever use), so returning users always got the stale frozen array.
+
+**Fix — `mergeHistory` helper** (replaces the raw `data.history` load):
+```js
+const mergeHistory = (saved) => {
+  if (!saved || saved.length === 0) return buildHistory();
+  const fresh = buildHistory();  // 30-day window anchored to real today
+  const savedMap = {};
+  saved.forEach(d => { savedMap[d.date] = d; });
+  return fresh.map(d => savedMap[d.date] ? { ...savedMap[d.date] } : d);
+};
+const [history, setHistory] = useState(() => mergeHistory(data.history));
+```
+On every mount, generates a fresh date window then overlays saved mood entries by date string. Today is always today; all past logged moods are preserved.
+
+---
+
+### 54. Admin panel — click into user dashboards/profiles
+
+**Problem:** The admin Users section showed a table of all users with Name, Email, and a Suspend/Restore action, but there was no way to actually view or inspect a specific user's dashboard or public profile from the admin panel.
+
+**Fix — two locations:**
+
+1. **`AdminPage` — added `useContext(ProfileViewContext)`** at the top of the component (line ~6303):
+```js
+const openUserProfile = useContext(ProfileViewContext);
+```
+`ProfileViewContext` is the app-wide context that exposes the `openUserProfile(handleOrId)` function. Since `AdminPage` renders inside the `<ProfileViewContext.Provider>` in App's JSX tree, it can consume this directly — no prop changes needed.
+
+2. **`UsersSection` — grid columns widened + "👁 View" button added:**
+   - Grid template changed from `"2fr 2fr 120px"` → `"2fr 2fr 180px"` to accommodate the extra button.
+   - A `👁 View` button added before the Suspend/Restore button:
+```jsx
+<button onClick={() => openUserProfile && openUserProfile(u.id)}
+  style={{ background: P.lavenderLight, border: `1.5px solid ${P.lavender}`, ... }}
+  title="View this user's dashboard">👁 View</button>
+```
+   Clicking it navigates to the user's `PublicProfilePage` (same as clicking any handle anywhere in the app). Guard `openUserProfile &&` ensures graceful no-op if context is somehow unavailable.
+
+3. **Overview section "Recent signups" list** — added a small `👁` icon-only button to each row in the Recent Signups card so admins can jump to a user's profile directly from the Overview too.
+
+**No new props, no SQL changes, no new state** — the fix purely wires up the existing `ProfileViewContext` within `AdminPage`.
+
+---
+
 ## Session 21 Changes (2026-03-17)
 
 ### 52. Notification click — post detail modal
@@ -1174,48 +1250,61 @@ Resolved automatically by fix #14 (session 19). Once the exercise widget saves t
 | `supabase-messaging-fix3.sql` | Superseded | Failed |
 | `supabase-policies-only.sql` | **Applied** | Clean policies + chat_messages table |
 | `supabase-members-policy-fix.sql` | **Applied** | SECURITY DEFINER fix for member visibility |
-| `supabase-admin-columns.sql`      | **Pending** | Adds `suspended` + `flagged` columns to `profiles` |
-| `supabase-signup-fix.sql`         | **Pending** | Adds `created_at` to `profiles`, backfills real dates from `auth.users`, adds trigger for future inserts |
-| `supabase-follows-realtime.sql`   | **Pending** | Adds `follows` table to `supabase_realtime` publication — required for follower notifications |
-| `supabase-widget-configs-fix.sql` | **Pending** | Creates `widget_configs` table with RLS: public SELECT, owner-only write — required for public profiles to show widgets |
-| `supabase-bio-links-public-read.sql` | **Pending** | Adds SELECT policy on `user_data` for `key = 'bio_links'` — required for bio links/email to appear on public profiles |
-| `supabase-calendar-contributions-v2.sql` | **Pending** | Creates `calendar_contributions` table with RLS policies for shared calendar events (session 14) |
-| `supabase-notifications.sql` | **Pending** | Creates `notifications` table with RLS — required for bell-icon notifications to persist across refreshes (session 16) |
+| `supabase-admin-columns.sql`      | **Applied** | Adds `suspended` + `flagged` columns to `profiles` |
+| `supabase-signup-fix.sql`         | **Applied** | Adds `created_at` to `profiles`, backfills real dates from `auth.users`, adds trigger for future inserts |
+| `supabase-follows-realtime.sql`   | **Applied** | Adds `follows` table to `supabase_realtime` publication — required for follower notifications |
+| `supabase-widget-configs-fix.sql` | **Applied** | Creates `widget_configs` table with RLS: public SELECT, owner-only write — required for public profiles to show widgets |
+| `supabase-bio-links-public-read.sql` | **Applied** | Adds SELECT policy on `user_data` for `key = 'bio_links'` — required for bio links/email to appear on public profiles |
+| `supabase-calendar-contributions-v2.sql` | **Applied** | Creates `calendar_contributions` table with RLS policies for shared calendar events (session 14) |
+| `supabase-notifications.sql` | **Applied** | Creates `notifications` table with RLS — required for bell-icon notifications to persist across refreshes (session 16) |
 | `supabase-feed-events.sql` | **Applied** | Adds `posts`, `likes`, `comments` to `supabase_realtime` publication + adds `content`/`image_url` columns to `posts`. Confirmed applied — all three tables already in publication. |
 | `supabase-feed-notification-triggers.sql` | **Applied** | Creates DB triggers on `likes` and `comments` that insert into `notifications` table. Also adds `notifications` to Realtime publication. (session 20) |
 | `supabase-notification-source-id.sql` | **Applied** | Adds `source_id TEXT` column to `notifications`; updates `notify_on_like` and `notify_on_comment` trigger functions to populate it with the post ID. Required for notification click → post detail modal. (session 21) |
+| `supabase-priv-prefs-public-read.sql` | **Pending** | Replaces `user_data_bio_links_public_read` policy with a broader policy covering both `bio_links` and `priv_prefs` — required for `allowMessages` to work on public profiles. (session 22) |
 
 ---
 
 ## Known Remaining Issues / Next Steps
 
-- **⚠️ DEPLOY PENDING — run `git push origin main`** from your Windows machine to push commit `1860501` to GitHub and trigger a Netlify rebuild. Until this is done, nook-hub.com is running old code without Calendar, the sidebar fixes, or the Supabase persistence fix.
+### Messaging
 - **Realtime for deleted messages**: If user A deletes a message, user B's view doesn't update until refresh. Need to subscribe to DELETE events on `chat_messages` in the realtime channel handler.
 - **Realtime for deleted conversations**: Same — deletion not broadcast to other participants.
 - **Unread count accuracy**: Current unread count counts ALL messages not from the current user since the beginning of time, not since last read. Should store a `last_read_at` per user per conversation.
-- **Message read receipts**: No read receipts implemented.
+- **Message read receipts**: Not implemented.
 - **Image/file attachments in messages**: Not implemented.
 - **Push notifications**: Not implemented.
-- **Mobile responsiveness of messages**: The two-panel layout uses CSS classes `nook-msg-layout`, `nook-msg-sidebar`, `nook-msg-hidden` — check these are defined.
-- **Settings page**: Accent colour, bio links, notification prefs, and privacy prefs now all persist cross-device. Remaining stub: `allowMessages` controls the Message button on public profiles, but requires fetching the target user's `priv_prefs` at profile-view time — not yet implemented.
-- **Settings props need a proper home**: `notifPrefs`/`privPrefs` (and setters) are currently passed as props from App → SettingsPage. This is a temporary arrangement — before adding more settings sections, these should be moved into a `UserPrefsContext` (or similar global store) so any component can read/write prefs without prop-drilling.
-- **Widget reordering**: Drag-and-drop exists but persistence may need verification.
-- **Admin panel**: Restored and wired to real data. **Action required: run `supabase-admin-columns.sql`** in Supabase SQL Editor to add `suspended` + `flagged` columns — until then, suspend/flag actions will silently fail.
-- **`lastSeen`, `widgets`, `posts` counts** in admin Users table: no data source in schema; currently show blank/zero for real users. Decide whether to track these.
-- **Action required — run `supabase-notifications.sql`** to create the `notifications` table + RLS. Until this is run, the bell icon will load no past notifications and `addNotif` inserts will silently fail.
-- **New follower notification** — code is fixed (session 12 second pass). **Action required: run `supabase-follows-realtime.sql`** in Supabase SQL Editor to add `follows` to the Realtime publication. Without this one SQL line, `postgres_changes` on `follows` will never fire.
-- **Feed like/comment notifications** — DB triggers + notifications subscription added (session 20, #51). **Action required: run `supabase-feed-notification-triggers.sql`** in Supabase SQL Editor. This creates the server-side triggers and adds `notifications` to Realtime. Without this, like/comment notifications will not appear.
-- ~~**In-session notifications only**~~ **FIXED (session 16)** — see #48 above. Notifications now persist to Supabase and survive refresh.
-- ~~**Note auto-focus after create — STILL UNRESOLVED**~~ **FIXED (session 16)** — see #50 above. `editorKey` + native `autoFocus` bypasses StrictMode entirely.
-- **Public profile page widget data**: `PublicProfilePage` reads widget data from the `data` column of `widget_configs`. Widget configs are now auto-saved to Supabase on dashboard load if missing, but the `data` field (widget content) is only saved via `onDataChange` (triggered by user edits). If a user has never edited a widget's content, `data` will be null and the widget renders empty on their public profile. Note: goals, reading list, habit tracker, podcast picks, and exercise log now save via the `saveToDb` wrapper in `getLiveData` (session 19 fix #14).
-- **Action required — run `supabase-widget-configs-fix.sql`** for public profiles to show widgets (RLS fix).
-- **Action required — run `supabase-bio-links-public-read.sql`** for bio links/email to appear on public profiles.
-- **Action required — run `supabase-calendar-contributions-v2.sql`** for shared calendar events to work (session 14).
-- ~~**Work data lost on new-browser login**~~ **FIXED (session 15)** — `saveWorkData` now passes raw objects (correct for `jsonb`); load effect migrates `localStorage` data to Supabase on first login from any new browser.
-- ~~**Calendar section missing from Work sidebar**~~ **FIXED (session 15)** — was caused by uncommitted code; committed as `1860501`. Push required (see above).
-- ~~**Signup chart always zero**~~ **FIXED (session 3)** — see `supabase-signup-fix.sql`. Action required: run that file in Supabase SQL Editor.
-- ~~**Handle clicks opened popup with fake data**~~ **FIXED (session 6)** — now navigates to `PublicProfilePage` with real Supabase data.
-- ~~**No follower visibility**~~ **FIXED (session 6)** — Feed sidebar has Following/Followers tabs; Dashboard bio shows follower count.
+- **Mobile responsiveness of messages**: The two-panel layout uses CSS classes `nook-msg-layout`, `nook-msg-sidebar`, `nook-msg-hidden` — verify these are defined.
+
+### Settings
+- **`showOnline` privacy pref**: Marked "coming soon" and disabled in Settings UI. Requires online presence infrastructure (a `last_seen` column on `profiles` updated on login/activity, plus display on public profiles and in messages). Not yet built.
+- **Action required — run `supabase-priv-prefs-public-read.sql`** for `allowMessages` to work on public profiles. Until this is run, `priv_prefs` is not publicly readable and the Message button will always show.
+- **Settings props need a proper home**: `notifPrefs`/`privPrefs` (and setters) are passed as props from App → SettingsPage. Before adding more settings sections, move these into a `UserPrefsContext` so any component can access prefs without prop-drilling.
+
+### Admin
+- **`lastSeen`, `widgets`, `posts` counts** in admin Users table: no data source in schema; currently show blank/zero. Decide whether to track these.
+
+### Public profiles
+- **Widget data on public profiles**: If a user has never edited a widget's content, `data` will be null in `widget_configs` and the widget renders empty on their public profile. Goals, reading list, habit tracker, podcast picks, and exercise log are handled (save via `saveToDb` in `getLiveData`), but other widgets only save on explicit user edit.
+
+### General
+- **Widget reordering**: Drag-and-drop exists but cross-device persistence may need verification.
+
+---
+
+### ~~Resolved — no longer pending~~
+- ~~**All SQL migrations pending**~~ **ALL APPLIED (session 22)** — admin columns, signup backfill, follows realtime, widget_configs RLS, bio links public read, calendar contributions, notifications table.
+- ~~**DEPLOY PENDING**~~ **DEPLOYED (session 22)** — commit `1860501` pushed to GitHub; Netlify rebuilt with Calendar section, sidebar fixes, and Supabase persistence fix.
+- ~~**Email confirmation link going to localhost**~~ **FIXED (session 22)** — `emailRedirectTo: 'https://nook-hub.com'` added to `signUp` in `useAuth.js`; Supabase Site URL updated in dashboard.
+- ~~**Mood tracker stuck on yesterday**~~ **FIXED (session 22)** — `mergeHistory()` now rebuilds a fresh 30-day window on every mount and overlays saved entries by date string.
+- ~~**Admin panel — no way to view user dashboards**~~ **FIXED (session 22)** — `👁 View` button added to Users section and Overview recent signups list; uses `ProfileViewContext` (no new props needed).
+- ~~**allowMessages / defaultPublic toggles were stubs**~~ **FIXED (session 22)** — both now enforced. `allowMessages` hides the Message button on public profiles; `defaultPublic` sets new widgets to public on enable. `showOnline` marked coming soon (no infrastructure yet).
+- ~~**Work data lost on new-browser login**~~ **FIXED (session 15)**
+- ~~**Calendar section missing from Work sidebar**~~ **FIXED (session 15)**
+- ~~**Signup chart always zero**~~ **FIXED (session 3)**
+- ~~**Handle clicks opened popup with fake data**~~ **FIXED (session 6)**
+- ~~**No follower visibility**~~ **FIXED (session 6)**
+- ~~**In-session notifications only**~~ **FIXED (session 16)**
+- ~~**Note auto-focus after create**~~ **FIXED (session 16)**
 
 ---
 

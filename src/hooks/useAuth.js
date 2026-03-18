@@ -82,7 +82,10 @@ export function useAuth() {
       const { data, error } = await supabase.auth.signUp({
         email,
         password,
-        options: { data: { name, handle } }
+        options: {
+          data: { name, handle },
+          emailRedirectTo: import.meta.env.VITE_SITE_URL || 'https://nook-hub.com',
+        }
       })
       if (error) return { error: error.message }
 

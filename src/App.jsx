@@ -540,7 +540,18 @@ const MoodWidget = ({ data, color, onDataChange }) => {
     return history;
   };
 
-  const [history, setHistory] = useState(() => data.history || buildHistory());
+  // Merge saved mood entries into a fresh 30-day window anchored to today.
+  // This ensures the widget always shows today as the last entry, even if the
+  // saved history was last written yesterday (or earlier).
+  const mergeHistory = (saved) => {
+    if (!saved || saved.length === 0) return buildHistory();
+    const fresh = buildHistory();
+    const savedMap = {};
+    saved.forEach(d => { savedMap[d.date] = d; });
+    return fresh.map(d => savedMap[d.date] ? { ...savedMap[d.date] } : d);
+  };
+
+  const [history, setHistory] = useState(() => mergeHistory(data.history));
   const [tab, setTab]         = useState("week");
   const [editIdx, setEditIdx] = useState(null);
   const [noteVal, setNoteVal] = useState("");
@@ -3424,7 +3435,7 @@ const WidgetToggleCard = ({ w, onToggle }) => {
   );
 };
 
-const DashboardPage = ({ user: userProp, view, onNavigate, profilePic, setProfilePic, widgetRequests, setWidgetRequests, following, toggleFollow, widgetReloadKey = 0}) => {
+const DashboardPage = ({ user: userProp, view, onNavigate, profilePic, setProfilePic, widgetRequests, setWidgetRequests, following, toggleFollow, widgetReloadKey = 0, privPrefs }) => {
   const { user: authUser, profile, updateProfile } = useAuth();
   const user = userProp || authUser;
 
@@ -3795,9 +3806,13 @@ const DashboardPage = ({ user: userProp, view, onNavigate, profilePic, setProfil
     saveWidgetConfig(updated, widgetOrder);
   };
   const toggleEnabled = (id) => {
-    const updated = widgets.map(x => x.id === id ? { ...x, enabled: !x.enabled } : x);
     const w = widgets.find(x => x.id === id);
-    const updatedOrder = (w && !w.enabled)
+    const turningOn = w && !w.enabled;
+    const updated = widgets.map(x => x.id === id
+      ? { ...x, enabled: !x.enabled, ...(turningOn && privPrefs?.defaultPublic ? { isPublic: true } : {}) }
+      : x
+    );
+    const updatedOrder = turningOn
       ? (widgetOrder.includes(id) ? widgetOrder : [...widgetOrder, id])
       : widgetOrder;
     setWidgets(updated);
@@ -6300,6 +6315,7 @@ const WidgetRequestModal = ({ onClose, onSubmit, handle }) => {
 
 const AdminPage = ({ widgetRequests, setWidgetRequests }) => {
   const { user } = useAuth();
+  const openUserProfile = useContext(ProfileViewContext);
   const {
     users: adminUsers, setUsers: setAdminUsers,
     signupsByDay, widgetUsage, loading: adminLoading, error: adminError,
@@ -6442,6 +6458,7 @@ const AdminPage = ({ widgetRequests, setWidgetRequests }) => {
                       <div style={{ fontFamily: FF_S, fontSize: 13, fontWeight: 600, color: P.ink }}>{u.name || u.email?.split('@')[0]} <span style={{ color: P.inkFaint, fontWeight: 400 }}>{u.handle}</span></div>
                     </div>
                     <span style={{ background: u.suspended ? "#F0B8C833" : P.lavenderLight, color: u.suspended ? "#D8708A" : "#3BAA80", borderRadius: 20, padding: "2px 10px", fontFamily: FF_S, fontSize: 11, fontWeight: 600 }}>{u.suspended ? "suspended" : "active"}</span>
+                    <button onClick={() => openUserProfile && openUserProfile(u.id)} style={{ background: "transparent", border: `1px solid ${P.lavender}`, borderRadius: 8, padding: "3px 8px", cursor: "pointer", fontFamily: FF_S, fontSize: 10, color: P.inkLight, fontWeight: 600 }} title="View dashboard">👁</button>
                   </div>
                 ))}
               </div>
@@ -6554,13 +6571,13 @@ const AdminPage = ({ widgetRequests, setWidgetRequests }) => {
           <div style={{ padding: "40px", textAlign: "center", color: P.inkFaint, fontFamily: FF_S, fontSize: 14 }}>No users found</div>
         ) : card(
           <div>
-            <div style={{ display: "grid", gridTemplateColumns: "2fr 2fr 120px", gap: 10, padding: "0 4px 10px", borderBottom: `1px solid ${P.lavender}33`, marginBottom: 12 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "2fr 2fr 180px", gap: 10, padding: "0 4px 10px", borderBottom: `1px solid ${P.lavender}33`, marginBottom: 12 }}>
               {["User","Email","Actions"].map(h => (
                 <span key={h} style={{ fontFamily: FF_S, fontSize: 11, fontWeight: 700, color: P.inkFaint, textTransform: "uppercase", letterSpacing: 0.5 }}>{h}</span>
               ))}
             </div>
             {filtered.map(u => (
-              <div key={u.id} style={{ display: "grid", gridTemplateColumns: "2fr 2fr 120px", gap: 10, padding: "10px 4px", borderBottom: `1px solid ${P.lavender}11`, alignItems: "center" }}>
+              <div key={u.id} style={{ display: "grid", gridTemplateColumns: "2fr 2fr 180px", gap: 10, padding: "10px 4px", borderBottom: `1px solid ${P.lavender}11`, alignItems: "center" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                   <UserAvatar user={{ ...u, color: u.avatar_color }} size={32} />
                   <div>
@@ -6572,7 +6589,8 @@ const AdminPage = ({ widgetRequests, setWidgetRequests }) => {
                   </div>
                 </div>
                 <span style={{ fontFamily: FF_S, fontSize: 12, color: P.inkLight, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{u.email || '—'}</span>
-                <div style={{ display: "flex", gap: 5 }}>
+                <div style={{ display: "flex", gap: 5, alignItems: "center" }}>
+                  <button onClick={() => openUserProfile && openUserProfile(u.id)} style={{ background: P.lavenderLight, border: `1.5px solid ${P.lavender}`, borderRadius: 8, padding: "4px 9px", cursor: "pointer", fontFamily: FF_S, fontSize: 10, color: P.ink, fontWeight: 600, display: "flex", alignItems: "center", gap: 3 }} title="View this user's dashboard">👁 View</button>
                   <button onClick={() => suspendUser(u.id, !u.suspended)} style={{ background: u.suspended ? "#F0B8C888" : P.lavenderLight, border: "none", borderRadius: 8, padding: "4px 8px", cursor: "pointer", fontFamily: FF_S, fontSize: 10, color: u.suspended ? "#D8708A" : P.inkFaint, fontWeight: 600 }} title={u.suspended ? "Unsuspend" : "Suspend"}>{u.suspended ? "↩ Restore" : "⊘ Suspend"}</button>
                 </div>
               </div>
@@ -7758,6 +7776,7 @@ const PublicProfilePage = ({ userId, onBack, following, toggleFollow, onMessage 
   const [followingCount, setFollowingCount] = useState(0);
   const [bioEmail, setBioEmail] = useState("");
   const [bioLinks, setBioLinks] = useState([]);
+  const [allowMessages, setAllowMessages] = useState(true);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -7768,14 +7787,17 @@ const PublicProfilePage = ({ userId, onBack, following, toggleFollow, onMessage 
       supabase.from('widget_configs').select('widget_id, color_idx, sort_order, data').eq('user_id', userId).eq('enabled', true).eq('public', true).order('sort_order', { ascending: true }),
       supabase.from('follows').select('follower_id', { count: 'exact', head: true }).eq('following_id', userId),
       supabase.from('follows').select('following_id', { count: 'exact', head: true }).eq('follower_id', userId),
-      supabase.from('user_data').select('value').eq('user_id', userId).eq('key', 'bio_links').maybeSingle(),
-    ]).then(([{ data: prof }, { data: wConfigs }, { count: fCount }, { count: ingCount }, { data: bioData }]) => {
+      supabase.from('user_data').select('key, value').eq('user_id', userId).in('key', ['bio_links', 'priv_prefs']),
+    ]).then(([{ data: prof }, { data: wConfigs }, { count: fCount }, { count: ingCount }, { data: userData }]) => {
       setProfile(prof || null);
       setFollowerCount(fCount || 0);
       setFollowingCount(ingCount || 0);
-      if (bioData?.value) {
-        if (bioData.value.email) setBioEmail(bioData.value.email);
-        if (bioData.value.links) setBioLinks(bioData.value.links);
+      if (userData) {
+        const bioData  = userData.find(r => r.key === 'bio_links');
+        const privData = userData.find(r => r.key === 'priv_prefs');
+        if (bioData?.value?.email) setBioEmail(bioData.value.email);
+        if (bioData?.value?.links) setBioLinks(bioData.value.links);
+        if (privData?.value?.allowMessages === false) setAllowMessages(false);
       }
       if (wConfigs && wConfigs.length > 0) {
         const built = wConfigs.map(wc => {
@@ -7840,9 +7862,15 @@ const PublicProfilePage = ({ userId, onBack, following, toggleFollow, onMessage 
                   <button onClick={() => toggleFollow(userId)} style={{ background: isFollowingUser ? P.lavenderLight : P.lavender, border: `1.5px solid ${P.lavender}`, borderRadius: 12, padding: "8px 22px", cursor: "pointer", fontFamily: FF_S, fontSize: 13, fontWeight: 600, color: isFollowingUser ? P.inkFaint : P.ink, transition: "all 0.2s" }}>
                     {isFollowingUser ? "✓ Following" : "+ Follow"}
                   </button>
-                  <button onClick={() => onMessage(userId)} style={{ background: P.white, border: `1.5px solid ${P.lavender}`, borderRadius: 12, padding: "8px 18px", cursor: "pointer", fontFamily: FF_S, fontSize: 13, color: P.inkLight, transition: "all 0.2s" }}>
-                    ✉ Message
-                  </button>
+                  {allowMessages ? (
+                    <button onClick={() => onMessage(userId)} style={{ background: P.white, border: `1.5px solid ${P.lavender}`, borderRadius: 12, padding: "8px 18px", cursor: "pointer", fontFamily: FF_S, fontSize: 13, color: P.inkLight, transition: "all 0.2s" }}>
+                      ✉ Message
+                    </button>
+                  ) : (
+                    <div title="This user has turned off direct messages" style={{ background: P.lavenderLight, border: `1.5px solid ${P.lavender}44`, borderRadius: 12, padding: "8px 18px", fontFamily: FF_S, fontSize: 13, color: P.inkFaint, cursor: "default", userSelect: "none" }}>
+                      ✉ Messages off
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -7972,13 +8000,13 @@ const SettingsPage = ({ profilePic, setProfilePic, onLogout, accent = "#C9B8F0",
     { id: "danger",        icon: "⚠", label: "Danger zone"    },
   ];
 
-  const ToggleRow = ({ label, sub, on, onChange }) => (
-    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 0", borderBottom: `1px solid ${P.lavender}22` }}>
+  const ToggleRow = ({ label, sub, on, onChange, disabled }) => (
+    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 0", borderBottom: `1px solid ${P.lavender}22`, opacity: disabled ? 0.45 : 1 }}>
       <div>
         <div style={{ fontFamily: FF_S, fontSize: 14, color: P.ink, fontWeight: 500 }}>{label}</div>
         {sub && <div style={{ fontFamily: FF_S, fontSize: 12, color: P.inkFaint, marginTop: 2 }}>{sub}</div>}
       </div>
-      <Toggle on={on} onChange={onChange} small />
+      <Toggle on={on} onChange={disabled ? () => {} : onChange} small />
     </div>
   );
 
@@ -8091,7 +8119,7 @@ const SettingsPage = ({ profilePic, setProfilePic, onLogout, accent = "#C9B8F0",
             <p style={{ fontFamily: FF_S, fontSize: 14, color: P.inkLight, margin: "0 0 32px" }}>Control who can see and interact with you</p>
             <div style={{ background: P.white, borderRadius: 16, padding: "4px 22px", border: `1px solid ${P.lavender}33` }}>
               <ToggleRow label="Default widgets to public" sub="New widgets will be public unless you set them private" on={privPrefs.defaultPublic} onChange={() => setPrivPrefs(p => ({ ...p, defaultPublic: !p.defaultPublic }))} />
-              <ToggleRow label="Show online status" sub="Let others see when you're active" on={privPrefs.showOnline} onChange={() => setPrivPrefs(p => ({ ...p, showOnline: !p.showOnline }))} />
+              <ToggleRow label="Show online status" sub="Let others see when you're active — coming soon" on={false} onChange={() => {}} disabled />
               <ToggleRow label="Allow direct messages" sub="Let other Nook users message you" on={privPrefs.allowMessages} onChange={() => setPrivPrefs(p => ({ ...p, allowMessages: !p.allowMessages }))} />
             </div>
           </div>
@@ -9086,7 +9114,7 @@ export default function App() {
           Uses lastKnownUserRef so a brief auth null-flicker doesn't unmount and wipe widget state. */}
       {dashboardEverMounted.current && lastKnownUserRef.current && (
         <div style={{ display: user && ["dashboard","customize"].includes(page) ? "block" : "none" }}>
-          <DashboardPage user={lastKnownUserRef.current} view={page} onNavigate={navigate} profilePic={profilePic} setProfilePic={setProfilePic} widgetRequests={widgetRequests} setWidgetRequests={setWidgetRequests} following={following} toggleFollow={toggleFollow} onViewUser={openUserProfile} widgetReloadKey={widgetReloadKey} />
+          <DashboardPage user={lastKnownUserRef.current} view={page} onNavigate={navigate} profilePic={profilePic} setProfilePic={setProfilePic} widgetRequests={widgetRequests} setWidgetRequests={setWidgetRequests} following={following} toggleFollow={toggleFollow} onViewUser={openUserProfile} widgetReloadKey={widgetReloadKey} privPrefs={privPrefs} />
         </div>
       )}
       {page === "messages" && user && <MessagesPage requests={requests} setRequests={setRequests} pendingDmUserId={pendingDmUserId} onPendingDmHandled={() => setPendingDmUserId(null)} />}
