@@ -1,5 +1,5 @@
 # Nook — Developer Handoff Document
-*Last updated: 2026-03-18 (session 24)*
+*Last updated: 2026-03-19 (session 27)*
 
 ---
 
@@ -22,7 +22,7 @@
 ## Supabase Schema (current state)
 
 ### Core tables (pre-existing)
-- `profiles` — id, name, handle, bio, avatar_color, avatar_url, created_at
+- `profiles` — id, name, handle, bio, avatar_color, avatar_url, created_at, suspended (boolean), flagged (boolean), is_admin (boolean)
 - `user_data` — id, user_id, key (text), value (jsonb), created_at — generic key/value store
 - `widget_configs` — widget configuration per user
 
@@ -39,7 +39,8 @@ conversation_members (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   conversation_id UUID REFERENCES conversations(id) ON DELETE CASCADE,
   user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
-  joined_at TIMESTAMPTZ DEFAULT NOW()
+  joined_at TIMESTAMPTZ DEFAULT NOW(),
+  last_read_at TIMESTAMPTZ  -- added session 27; tracks per-device read state cross-device
 )
 
 chat_messages (
@@ -112,6 +113,136 @@ CREATE POLICY "chat_messages_member_insert" ON public.chat_messages
 
 CREATE POLICY "chat_messages_member_delete" ON public.chat_messages
   FOR DELETE USING (auth.uid() = sender_id);
+```
+
+---
+
+## Changes Made This Session (session 27)
+
+### 70. Goals / lifted-state widgets not loading on mobile — cross-device data migration
+
+**Problem:** The Goals for the Year widget (and potentially Reading List, Habits, Podcast, Exercise) appeared empty on mobile even though data existed on desktop. These "lifted-state" widgets (data lives in `DashboardPage` React state, not inside the widget itself) were saving to Supabase via `saveToDb` only when the user *edited* data — not on initial load. Any data entered before `saveToDb` was implemented (session 19) existed only in desktop localStorage. On mobile (no localStorage), the DB row had `data: null` so there was nothing to load.
+
+**Root cause traced through data flow:**
+- `savedWidgetData` built from `localStorage.getItem('nook_widget_data_${userId}')` — empty on mobile
+- `dbDataMap` = rows where `r.data` is truthy — goals row exists but `data: null`, so excluded
+- `mergedData.goals?.items` is undefined → `setGoals` never called → widget shows empty
+
+**Fix — `src/App.jsx` (DashboardPage load effect, after `dbDataMap` is built):**
+
+Added a one-time migration block that runs automatically on first desktop login after the update. It finds any lifted-state widget that has data in localStorage but is missing from Supabase, upserts it to `widget_configs`, and also updates `dbDataMap` inline so the current load uses the migrated data immediately:
+
+```js
+const LIFTED_KEYS = ['goals', 'reading', 'habitstreak', 'podcast', 'exercise'];
+const toMigrate = LIFTED_KEYS.filter(k => savedWidgetData[k] && !dbDataMap[k]);
+if (toMigrate.length > 0 && user?.id) {
+  const migrateRows = toMigrate.map(k => ({
+    user_id: user.id, widget_id: k,
+    data: savedWidgetData[k], updated_at: new Date().toISOString(),
+  }));
+  supabase.from('widget_configs')
+    .upsert(migrateRows, { onConflict: 'user_id,widget_id' })
+    .then(({ error }) => { ... });
+  for (const k of toMigrate) dbDataMap[k] = savedWidgetData[k]; // immediate effect
+}
+```
+
+**To activate:** Log into Nook on desktop once. The migration runs silently in the background (check console for `[Nook] Migrated lifted-state data to Supabase: [...]`). Subsequent mobile logins will load all lifted-state widget data from Supabase normally.
+
+---
+
+### 69. To-do list delete button invisible
+
+**Problem:** The delete (`×`) button on to-do items had `opacity: 0` at rest, making it completely invisible even on hover (the hover handler was setting opacity to `1` but it requires mouse-entering a 0-opacity target, which is unreliable).
+
+**Fix — `src/App.jsx` (TodoWidget):**
+- Rest opacity: `0` → `0.35` (subtle, always visible)
+- Hover opacity: unchanged (`1.0`)
+- Leave opacity: `0` → `0.35`
+
+---
+
+### 68. Suspension UX — frozen dashboard for suspended accounts
+
+**Problem:** No UX existed for suspended users. Suspending a user had no visible effect on their session.
+
+**New component — `SuspendedPage` (added to `src/App.jsx` before `LegalSection`):**
+- Full-screen, on-brand pastel notice page explaining the account is suspended.
+- "✉ Appeal this suspension" mailto link → `nook-hub@outlook.com` with pre-filled subject.
+- "Log out" button.
+
+**Render-gate added to App component (`src/App.jsx`):**
+```jsx
+if (user && !profileLoading && profile?.suspended) {
+  return <SuspendedPage onLogout={logout} />;
+}
+```
+Placed after the `authLoading` guard but before any page routing. The `profileLoading` guard prevents a flash during normal login while the async profile fetch is in-flight. Reinstatement (admin sets `suspended = false`) is automatically applied on next login.
+
+---
+
+### 67. Admin "Suspend user" / "Flag user" buttons not persisting
+
+**Problem:** Clicking "Suspend user" in the admin panel appeared to work (button state toggled) but the change reverted on navigation. The `profiles_own_update` RLS policy (`auth.uid() = id`) silently blocked admins from updating *other* users' rows — Supabase returned no error, so optimistic local state made it look successful.
+
+**New SQL migration — `supabase-admin-rpc.sql` (run in Supabase SQL editor):**
+```sql
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS is_admin BOOLEAN DEFAULT false;
+UPDATE public.profiles SET is_admin = true WHERE id = '<your-admin-uuid>';
+
+CREATE OR REPLACE FUNCTION public.admin_set_user_suspended(target_user_id UUID, is_suspended BOOLEAN)
+RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND is_admin = true)
+    THEN RAISE EXCEPTION 'Access denied: admin only'; END IF;
+  UPDATE public.profiles SET suspended = is_suspended WHERE id = target_user_id;
+END; $$;
+
+CREATE OR REPLACE FUNCTION public.admin_set_user_flagged(target_user_id UUID, is_flagged BOOLEAN)
+RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND is_admin = true)
+    THEN RAISE EXCEPTION 'Access denied: admin only'; END IF;
+  UPDATE public.profiles SET flagged = is_flagged WHERE id = target_user_id;
+END; $$;
+```
+
+**Fix — `src/hooks/useAdminData.js`:**
+- `suspendUser` and `flagUser` now call `supabase.rpc('admin_set_user_suspended', ...)` / `supabase.rpc('admin_set_user_flagged', ...)` instead of direct `.update()`.
+- Both functions log errors to console and only update local state on success.
+
+---
+
+### 66. Cross-device unread message tracking
+
+**Problem:** Messages marked as read on desktop were re-marked as unread when logging in on a different device (e.g. mobile). Read state was stored only in localStorage (`nook_read_${userId}`), which is device-local.
+
+**New SQL migration — `supabase-messaging-read-tracking.sql` (run in Supabase SQL editor):**
+```sql
+ALTER TABLE public.conversation_members
+  ADD COLUMN IF NOT EXISTS last_read_at TIMESTAMPTZ;
+
+CREATE POLICY "conv_members_update_own" ON public.conversation_members
+  FOR UPDATE USING (user_id = auth.uid()) WITH CHECK (user_id = auth.uid());
+```
+
+**Fix — `src/hooks/useMessages.js`:**
+
+`fetchConversations` now selects `conversation_id, last_read_at` from `conversation_members` and builds a `dbReadTimestamps` map. This is merged with localStorage timestamps (DB wins) before calculating unread counts:
+```js
+const dbReadTimestamps = Object.fromEntries(
+  (memberData || []).map(m => [m.conversation_id, m.last_read_at]).filter(([, ts]) => ts)
+)
+const readTimestamps = { ...getReadTimestamps(user.id), ...dbReadTimestamps }
+```
+
+`selectConversation` now also writes `last_read_at` to Supabase (fire-and-forget) in addition to the existing localStorage write:
+```js
+supabase.from('conversation_members')
+  .update({ last_read_at: new Date().toISOString() })
+  .eq('conversation_id', conversationId)
+  .eq('user_id', user.id)
+  .then(...)
 ```
 
 ---
