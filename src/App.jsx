@@ -5,6 +5,7 @@ import { useFeed } from './hooks/useFeed'
 import { useMessages } from './hooks/useMessages'
 import { useAdminData } from './hooks/useAdminData'
 import { supabase } from './lib/supabase'
+import { MorningNookWidget, MorningNookPage } from './MorningNook'
 
 
 const P = {
@@ -83,6 +84,7 @@ const INITIAL_WIDGETS = [
   { id: "studylog",    title: "Study & Focus Log",        icon: "📚", enabled: false, isPublic: false, colorIdx: 0, category: "productivity",     data: { sessions: [], subjects: [] }},
   { id: "skillprog",   title: "Skill Progress",           icon: "⚡", enabled: false, isPublic: false, colorIdx: 4, category: "productivity",     data: { skills: [] }},
   { id: "mealplanner", title: "Meal Planner",             icon: "🍽", enabled: false, isPublic: false, colorIdx: 2, category: "lifestyle",        data: { weeks: {} }},
+  { id: "morning",     title: "Morning Nook",             icon: "☀",  enabled: false, isPublic: false, colorIdx: 3, category: "lifestyle",        data: {}},
 ];
 
 function fmtTime(ts) {
@@ -194,7 +196,7 @@ const Nav = ({ page, onNavigate, onLogout, unreadCount, isLoggedIn, isAdmin, me,
         <div className="nook-nav-links">
           {isLoggedIn ? (
             <>
-              {[["dashboard","My Dashboard"],["feed","Feed"],["messages","Messages"],["work","Work 🔒"],["customize","Customise"]].map(([v, label]) => (
+              {[["dashboard","My Dashboard"],["morning","Morning"],["feed","Feed"],["messages","Messages"],["work","Work 🔒"],["customize","Customise"]].map(([v, label]) => (
                 <button key={v} onClick={() => onNavigate(v)} style={{ background: page === v ? accent : "transparent", border: `1.5px solid ${page === v ? accent : accent + "66"}`, borderRadius: 10, padding: "7px 15px", cursor: "pointer", fontFamily: FF_S, fontSize: 13, color: P.ink, fontWeight: page === v ? 600 : 400, transition: "all 0.2s", display: "flex", alignItems: "center", gap: 6 }}>
                   {label}
                   {v === "messages" && unreadCount > 0 && <span style={{ background: P.rose, borderRadius: 20, padding: "1px 7px", fontSize: 10, fontWeight: 700, color: P.ink }}>{unreadCount}</span>}
@@ -246,7 +248,7 @@ const Nav = ({ page, onNavigate, onLogout, unreadCount, isLoggedIn, isAdmin, me,
         <div style={{ borderTop: `1px solid ${P.lavender}33`, background: P.white, padding: "12px 16px 20px" }}>
           {isLoggedIn ? (
             <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-              {[["dashboard","🏠 My Dashboard"],["feed","✦ Feed"],["messages","✉ Messages"],["work","🔒 Work"],["customize","⊞ Customise"],["settings","⚙ Settings"],...(isAdmin ? [["admin","◈ Admin"]] : [])].map(([v, label]) => (
+              {[["dashboard","🏠 My Dashboard"],["morning","☀ Morning"],["feed","✦ Feed"],["messages","✉ Messages"],["work","🔒 Work"],["customize","⊞ Customise"],["settings","⚙ Settings"],...(isAdmin ? [["admin","◈ Admin"]] : [])].map(([v, label]) => (
                 <button key={v} onClick={() => { onNavigate(v); close(); }} style={{ background: page === v ? accentLight : "transparent", border: `1px solid ${page === v ? accent : "transparent"}`, borderRadius: 12, padding: "12px 16px", cursor: "pointer", fontFamily: FF_S, fontSize: 14, color: P.ink, fontWeight: page === v ? 600 : 400, textAlign: "left", display: "flex", alignItems: "center", gap: 8, justifyContent: "space-between" }}>
                   <span>{label}</span>
                   {v === "messages" && unreadCount > 0 && <span style={{ background: P.rose, borderRadius: 20, padding: "1px 8px", fontSize: 11, fontWeight: 700, color: P.ink }}>{unreadCount}</span>}
@@ -4107,6 +4109,7 @@ const WIDGET_RENDERERS = {
   sleeplog: SleepLogWidget, waterring: WaterRingWidget, quotes: QuotesWidget,
   plants: PlantTrackerWidget, birthdays: BirthdaysWidget, studylog: StudyLogWidget,
   skillprog: SkillProgressWidget, mealplanner: MealPlannerWidget,
+  morning: MorningNookWidget,
 };
 
 const ShareWidgetModal = ({ widget, onClose, handle }) => {
@@ -5208,7 +5211,7 @@ const DashboardPage = ({ user: userProp, view, onNavigate, profilePic, setProfil
         if (s) return new Set(JSON.parse(s));
       } catch {}
     }
-    return new Set(["gallery", "blog", "finance", "mealplanner"]);
+    return new Set(["gallery", "blog", "finance", "mealplanner", "morning"]);
   });
   const [widgetSearch, setWidgetSearch] = useState("");
   const [dragId, setDragId] = useState(null);
@@ -5423,6 +5426,13 @@ const DashboardPage = ({ user: userProp, view, onNavigate, profilePic, setProfil
           { onConflict: 'user_id,widget_id', ignoreDuplicates: false }
         )
         .then(({ error }) => { if (error) console.warn('[Nook] lifted-state save error', widgetId, error); });
+    };
+
+    // Morning Nook keeps its own prefs in user_data (shared with the full page),
+    // so it only needs to know who is logged in and how to open the page.
+    if (id === "morning") return {
+      userId: user?.id,
+      onOpenPage: () => onNavigate("morning"),
     };
     if (id === "reading") return {
       items: readingItems,
@@ -9458,7 +9468,10 @@ const PublicProfilePage = ({ userId, onBack, following, toggleFollow, onMessage 
               <div className="nook-dash-grid" style={{ gap: 20 }}>
                 {widgets.filter(w => w.id !== "archive").map(w => (
                   <div key={w.id} style={{ minWidth: 0 }}>
-                    <WidgetCard widget={w} isOwnDashboard={false} />
+                    {/* Morning Nook needs the profile owner's id so visitors see
+                        THEIR chosen sources, not the defaults. isOwnDashboard={false}
+                        puts the widget in read-only mode. */}
+                    <WidgetCard widget={w} isOwnDashboard={false} liveData={w.id === "morning" ? { userId } : undefined} />
                   </div>
                 ))}
               </div>
@@ -10537,7 +10550,7 @@ export default function App() {
     }
   }, [showOnboarding, user, authLoading]);
 
-  const protectedPages = ["dashboard","customize","messages","feed","work","admin","settings","profile"];
+  const protectedPages = ["dashboard","customize","messages","feed","work","admin","settings","profile","morning"];
   useEffect(() => {
     if (authLoading) return;
     if (showOnboarding) return;
@@ -10634,6 +10647,10 @@ export default function App() {
 
         /* ── Mobile (≤ 640px) ── */
         @media (max-width: 640px) {
+          /* Morning Nook → single column */
+          .nook-morning-grid { grid-template-columns: minmax(0, 1fr) !important; }
+          .nook-morning-source-grid { grid-template-columns: minmax(0, 1fr) !important; }
+
           /* Nav */
           .nook-nav-links { display: none; }
           .nook-nav-mobile-menu { display: flex; align-items: center; gap: 8px; }
@@ -10813,6 +10830,7 @@ export default function App() {
           <MessagesPage requests={requests} setRequests={setRequests} pendingDmUserId={pendingDmUserId} onPendingDmHandled={() => setPendingDmUserId(null)} onUnreadChange={setMsgUnread} />
         </div>
       )}
+      {page === "morning"  && user && <MorningNookPage userId={user.id} displayName={profile?.name} onNavigate={navigate} />}
       {page === "feed"     && user && <FeedPage onNavigate={navigate} onViewUser={openUserProfile} following={following} toggleFollowApp={toggleFollow} />}
       {page === "work"     && user && <WorkPage />}
       {page === "admin"    && isAdmin && <AdminPage widgetRequests={widgetRequests} setWidgetRequests={setWidgetRequests} />}
