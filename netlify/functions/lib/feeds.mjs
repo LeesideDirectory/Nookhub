@@ -293,6 +293,15 @@ export function parseExplodingTopics(html, limit) {
   const titleCase = (slug) =>
     slug.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
 
+  // Exploding Topics slugs are just the kebab-cased name:
+  //   "20K PowerBank" → 20k-powerbank, "wolf haircut" → wolf-haircut
+  const slugify = (name) => String(name)
+    .toLowerCase()
+    .replace(/['’]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 60);
+
   const push = (slug, title, growth, volume, path = 'topic', desc = '') => {
     if (!slug || seen.has(slug) || out.length >= limit) return;
     // Reject obvious non-topic slugs picked up from nav/footer links.
@@ -419,6 +428,60 @@ export function parseExplodingTopics(html, limit) {
   }
   if (out.length) return out;
 
+  // ── Strategy 3b: read the visible card text, ignoring links entirely ────
+  // /topic renders every card as static text in the shape
+  //   "<name> <volume> Volume <growth> Growth <description>"
+  // so this works even if the cards aren't anchors, use onClick handlers, or
+  // wrap the link in markup we don't recognise. Slugs on Exploding Topics are
+  // just the kebab-cased name, so the URL can be rebuilt from the name alone.
+  {
+    const flat = spacedText(html, 0);
+    const cardRe = /([^.!?|]{2,80}?)\s+(\d[\d,.]*\s*[KMB]?)\s*Volume\s*([+\-]?\d[\d,.]*\s*%)\s*Growth\b/gi;
+    const hits = [...flat.matchAll(cardRe)];
+
+    for (let i = 0; i < hits.length; i++) {
+      const m = hits[i];
+
+      // Name: the last handful of words before the figure. Anything earlier
+      // belongs to the previous card's description — or, for the first card,
+      // to the page's own furniture (the filter row sits right above it).
+      let raw = m[1].trim();
+      // Drop everything up to the last bit of page chrome, so the filter
+      // labels don't get glued onto the first topic's name.
+      const chrome = [...raw.matchAll(CHROME_RE)];
+      if (chrome.length) {
+        const last = chrome[chrome.length - 1];
+        const after = raw.slice(last.index + last[0].length).trim();
+        const words = after.split(/\s+/).filter(Boolean).length;
+        if (after && words <= 6) raw = after;
+      }
+      const name = raw.split(/\s+/).slice(-6).join(' ')
+        .replace(/^[^A-Za-z0-9]+/, '')
+        .trim();
+      if (!name || name.length < 2) continue;
+
+      const slug = slugify(name);
+      if (!slug) continue;
+
+      // Description: everything up to where the next card starts.
+      const from = m.index + m[0].length;
+      const to = i + 1 < hits.length ? hits[i + 1].index : Math.min(flat.length, from + 400);
+      let desc = flat.slice(from, to)
+        .replace(/\b(19|20)\d{2}\b/g, ' ')
+        .replace(/\s{2,}/g, ' ')
+        .trim();
+      // Trim the trailing fragment that actually belongs to the next card.
+      const lastStop = desc.search(/[.!?](?=[^.!?]*$)/);
+      if (lastStop > 20) desc = desc.slice(0, lastStop + 1);
+      desc = clean(desc, 180);
+      if (desc.split(' ').length < 4) desc = '';
+
+      push(slug, name, m[3].trim(), m[2].trim(), 'topic', desc);
+      if (out.length >= limit) return out;
+    }
+  }
+  if (out.length) return out;
+
   // ── Strategy 4: bare slugs anywhere in the markup ────────────────────────
   // Last resort for the topic pages — no titles or figures, but a real,
   // working link is better than an empty card.
@@ -440,6 +503,10 @@ export function parseExplodingTopics(html, limit) {
 
   return out;
 }
+
+// Page furniture on /topic — the filter row, headings and table labels. Used
+// to stop the first card's name absorbing the UI text that precedes it.
+const CHROME_RE = /(?:Past\s+\d+\s+Years?|All\s+Categories|Search\s+Trends|Discover\s+Trending\s+Topics(?:\s+And\s+Products)?|Sort\s+By|Stable|Volume|Growth|PRO)/gi;
 
 // Nav, footer and marketing links that live on the same pages as real topics.
 const SLUG_BLOCKLIST = new Set([
@@ -473,12 +540,17 @@ export async function fetchSource(source) {
           items,
           fetched_at: new Date().toISOString(),
           ok: true,
-          error: null,
+          // Succeeded — but if we had to fall back, keep the trail. The UI only
+          // reads `error` when ok === false, so this is invisible to users and
+          // available in the table when something needs explaining.
+          error: attempts.length
+            ? `ok via ${url} after: ${attempts.join(' | ')}`.slice(0, 600)
+            : null,
           _ms: Date.now() - started,
           _via: url,
         };
       }
-      attempts.push(`${url} → fetched ${body.length} bytes but found no items`);
+      attempts.push(`${url} → fetched ${body.length} bytes, no items matched`);
     } catch (err) {
       attempts.push(`${url} → ${String(err?.message || err)}`);
     }
