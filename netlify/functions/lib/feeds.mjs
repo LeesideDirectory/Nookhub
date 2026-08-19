@@ -75,7 +75,17 @@ export const SOURCES = [
     id: 'exploding',
     name: 'Exploding Topics',
     kind: 'exploding',            // custom scraper — no RSS feed exists
-    url: 'https://explodingtopics.com/',
+    // Tried in order, first one that yields items wins.
+    //   /topics — the trending directory, the good stuff, changes daily
+    //   /       — homepage, shows a smaller featured set
+    //   /blog   — real articles; less timely but stable, so the card is
+    //             never empty just because the topic markup changed
+    urls: [
+      'https://explodingtopics.com/topics',
+      'https://explodingtopics.com/',
+      'https://explodingtopics.com/blog',
+    ],
+    url: 'https://explodingtopics.com/topics',   // kept for logging
     limit: 8,
   },
   {
@@ -121,7 +131,15 @@ async function fetchText(url) {
   const timer = setTimeout(() => ctrl.abort(), FETCH_TIMEOUT_MS);
   try {
     const res = await fetch(url, { headers: FETCH_HEADERS, signal: ctrl.signal, redirect: 'follow' });
-    if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText}`);
+    if (!res.ok) {
+      // Distinguish "they blocked us" from "we parsed it wrong" — this ends up
+      // in daily_feed.error, so make it say something useful.
+      const hint =
+        res.status === 403 ? ' (blocked — likely bot protection on the data-centre IP)' :
+        res.status === 404 ? ' (page moved?)' :
+        res.status === 429 ? ' (rate limited)' : '';
+      throw new Error(`HTTP ${res.status} ${res.statusText}${hint}`);
+    }
     return await res.text();
   } finally {
     clearTimeout(timer);
@@ -269,14 +287,21 @@ export function parseExplodingTopics(html, limit) {
   const out = [];
   const seen = new Set();
 
-  const push = (slug, title, growth, volume) => {
-    if (!slug || seen.has(slug)) return;
+  const titleCase = (slug) =>
+    slug.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+
+  const push = (slug, title, growth, volume, path = 'topic') => {
+    if (!slug || seen.has(slug) || out.length >= limit) return;
+    // Reject obvious non-topic slugs picked up from nav/footer links.
+    if (SLUG_BLOCKLIST.has(slug)) return;
     seen.add(slug);
+    const bits = [];
+    if (growth) bits.push(`${growth} growth`);
+    if (volume) bits.push(`${volume} monthly searches`);
     out.push({
-      title: title || slug.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
-      url: `https://explodingtopics.com/topic/${slug}`,
-      summary: [growth ? `${growth} growth` : '', volume ? `${volume} monthly searches` : '']
-        .filter(Boolean).join(' · '),
+      title: title || titleCase(slug),
+      url: `https://explodingtopics.com/${path}/${slug}`,
+      summary: bits.join(' · '),
       image: null,
       author: null,
       publishedAt: null,
@@ -284,64 +309,113 @@ export function parseExplodingTopics(html, limit) {
     });
   };
 
-  // Strategy 1 — Next.js pages-router payload.
+  // Tags become spaces, not nothing — otherwise adjacent <span>s fuse
+  // ("PowerBank" + "2.4K" → "PowerBank2.4K") and the figures stop matching.
+  const spacedText = (frag, maxLen) => clean(String(frag).replace(/<[^>]*>/g, ' '), maxLen);
+
+  const asGrowth = (v) => {
+    if (v == null || v === '') return '';
+    if (typeof v === 'number') return `${v > 0 ? '+' : ''}${Math.round(v)}%`;
+    const t = String(v).trim();
+    return /%$/.test(t) ? t : `${t}%`;
+  };
+
+  // ── Strategy 1: Next.js pages-router payload ─────────────────────────────
   const nextData = html.match(/<script id="__NEXT_DATA__"[^>]*>([\s\S]*?)<\/script>/i);
   if (nextData) {
     try {
-      const json = JSON.parse(nextData[1]);
       const found = [];
       (function walk(node, depth) {
-        if (!node || depth > 8 || found.length >= limit * 3) return;
+        if (!node || depth > 10 || found.length >= limit * 4) return;
         if (Array.isArray(node)) { node.forEach(n => walk(n, depth + 1)); return; }
         if (typeof node !== 'object') return;
         const slug = node.slug || node.topicSlug || node.permalink;
-        const name = node.name || node.title || node.topic;
+        const name = node.name || node.title || node.topic || node.keyword;
         if (typeof slug === 'string' && typeof name === 'string' && slug.length < 80) {
           found.push({
-            slug,
-            name,
-            growth: node.growth ?? node.growthRate ?? node.change ?? null,
-            volume: node.volume ?? node.searchVolume ?? null,
+            slug, name,
+            growth: node.growth ?? node.growthRate ?? node.change ?? node.growth_pct ?? null,
+            volume: node.volume ?? node.searchVolume ?? node.search_volume ?? null,
           });
         }
         Object.values(node).forEach(v => walk(v, depth + 1));
-      })(json, 0);
+      })(JSON.parse(nextData[1]), 0);
 
       for (const f of found) {
-        const growth = f.growth == null ? '' :
-          (typeof f.growth === 'number' ? `+${Math.round(f.growth)}%` : String(f.growth));
-        const volume = f.volume == null ? '' : String(f.volume);
-        push(f.slug, clean(f.name, 120), growth, volume);
+        push(f.slug, clean(f.name, 120), asGrowth(f.growth), f.volume == null ? '' : String(f.volume));
         if (out.length >= limit) return out;
       }
     } catch { /* fall through */ }
   }
   if (out.length) return out;
 
-  // Strategy 2 — App-router streamed payload: pull slug/name pairs out of the
-  // flight data embedded in self.__next_f.push("...") chunks.
-  // Quotes may be backslash-escaped (the JSON is embedded inside a JS string).
+  // ── Strategy 2: app-router streamed payload ──────────────────────────────
+  // The JSON is embedded inside a JS string, so quotes may be backslash-escaped.
+  // Keys also appear in either order, so try both.
   const Q = '\\\\?"';
-  const flightRe = new RegExp(
-    `${Q}slug${Q}\\s*:\\s*${Q}([a-z0-9-]{2,60})${Q}\\s*,\\s*${Q}name${Q}\\s*:\\s*${Q}((?:[^"\\\\]|\\\\.){2,120}?)${Q}`,
-    'gi'
-  );
-  for (const m of html.matchAll(flightRe)) {
-    push(m[1], clean(m[2].replace(/\\"/g, '"'), 120), '', '');
+  const pairPatterns = [
+    `${Q}slug${Q}\\s*:\\s*${Q}([a-z0-9-]{2,60})${Q}[^}]{0,200}?${Q}(?:name|title)${Q}\\s*:\\s*${Q}((?:[^"\\\\]|\\\\.){2,120}?)${Q}`,
+    `${Q}(?:name|title)${Q}\\s*:\\s*${Q}((?:[^"\\\\]|\\\\.){2,120}?)${Q}[^}]{0,200}?${Q}slug${Q}\\s*:\\s*${Q}([a-z0-9-]{2,60})${Q}`,
+  ];
+  for (let i = 0; i < pairPatterns.length; i++) {
+    for (const m of html.matchAll(new RegExp(pairPatterns[i], 'gi'))) {
+      const slug = i === 0 ? m[1] : m[2];
+      const name = i === 0 ? m[2] : m[1];
+      push(slug, clean(name.replace(/\\"/g, '"'), 120), '', '');
+      if (out.length >= limit) return out;
+    }
+    if (out.length) return out;
+  }
+
+  // ── Strategy 3: plain HTML anchors to /topic/<slug> ──────────────────────
+  // Pull the anchor plus a chunk of following markup so we can scavenge the
+  // growth / volume figures that sit in sibling elements on the card.
+  const anchorRe = /href="(?:https:\/\/explodingtopics\.com)?\/topic\/([a-z0-9-]{2,60})"[^>]*>([\s\S]{0,600}?)<\/a>/gi;
+  for (const m of html.matchAll(anchorRe)) {
+    const chunk = m[2] || '';
+    const text = spacedText(chunk, 160);
+    const growth = (chunk.match(/([+\-]?\d[\d,.]*\s*%)/) || [])[1] || '';
+    const volume = (chunk.match(/\b(\d[\d,.]*\s*[KMB]?)\s*(?:volume|searches|\/mo)/i) || [])[1] || '';
+    // The anchor text often includes the figures; strip them off the title.
+    const title = text
+      .replace(/[+\-]?\d[\d,.]*\s*%/g, '')
+      .replace(/\b\d[\d,.]*\s*[KMB]?\s*(?:volume|searches)/gi, '')
+      .replace(/\b(?:growth|volume|view topic|searches)\b/gi, '')
+      .replace(/\s{2,}/g, ' ')
+      .trim();
+    push(m[1], title, growth, volume);
     if (out.length >= limit) return out;
   }
   if (out.length) return out;
 
-  // Strategy 3 — plain HTML: every /topic/<slug> anchor on the page.
-  const anchors = html.match(/href="\/topic\/([a-z0-9-]{2,60})"[^>]*>([\s\S]{0,160}?)<\/a>/gi) || [];
-  for (const a of anchors) {
-    const m = a.match(/href="\/topic\/([a-z0-9-]+)"[^>]*>([\s\S]*?)<\/a>/i);
-    if (m) push(m[1], clean(m[2], 120), '', '');
+  // ── Strategy 4: bare slugs anywhere in the markup ────────────────────────
+  // Last resort for the topic pages — no titles or figures, but a real,
+  // working link is better than an empty card.
+  for (const m of html.matchAll(/\/topic\/([a-z0-9][a-z0-9-]{2,59})\b/gi)) {
+    push(m[1], '', '', '');
+    if (out.length >= limit) return out;
+  }
+  if (out.length) return out;
+
+  // ── Strategy 5: blog articles ────────────────────────────────────────────
+  // Reached when we were handed /blog, or when the topic markup changed
+  // entirely. Still genuine Exploding Topics content, clearly linked.
+  const blogRe = /href="(?:https:\/\/explodingtopics\.com)?\/blog\/([a-z0-9-]{3,80})"[^>]*>([\s\S]{0,300}?)<\/a>/gi;
+  for (const m of html.matchAll(blogRe)) {
+    const title = spacedText(m[2] || '', 160);
+    push(m[1], title, '', '', 'blog');
     if (out.length >= limit) return out;
   }
 
   return out;
 }
+
+// Nav, footer and marketing links that live on the same pages as real topics.
+const SLUG_BLOCKLIST = new Set([
+  'all', 'new', 'top', 'trending', 'pricing', 'about', 'login', 'signup',
+  'blog', 'topics', 'contact', 'privacy', 'terms', 'api', 'meta-trends',
+  'categories', 'search', 'dashboard', 'faq', 'help',
+]);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Fetch one source
@@ -349,34 +423,47 @@ export function parseExplodingTopics(html, limit) {
 
 export async function fetchSource(source) {
   const started = Date.now();
-  try {
-    const body = await fetchText(source.url);
-    const items = source.kind === 'exploding'
-      ? parseExplodingTopics(body, source.limit || 8)
-      : parseFeed(body, source.limit || 8);
+  const parse = source.kind === 'exploding' ? parseExplodingTopics : parseFeed;
+  const limit = source.limit || 8;
 
-    if (!items.length) throw new Error('Feed returned no readable items');
+  // Most sources have one URL. Exploding Topics has several, tried in order,
+  // because it has no feed and its markup is not a contract.
+  const urls = source.urls?.length ? source.urls : [source.url];
+  const attempts = [];
 
-    return {
-      source_id: source.id,
-      source_name: source.name,
-      items,
-      fetched_at: new Date().toISOString(),
-      ok: true,
-      error: null,
-      _ms: Date.now() - started,
-    };
-  } catch (err) {
-    return {
-      source_id: source.id,
-      source_name: source.name,
-      items: [],
-      fetched_at: new Date().toISOString(),
-      ok: false,
-      error: String(err?.message || err).slice(0, 300),
-      _ms: Date.now() - started,
-    };
+  for (const url of urls) {
+    try {
+      const body = await fetchText(url);
+      const items = parse(body, limit);
+      if (items.length) {
+        return {
+          source_id: source.id,
+          source_name: source.name,
+          items,
+          fetched_at: new Date().toISOString(),
+          ok: true,
+          error: null,
+          _ms: Date.now() - started,
+          _via: url,
+        };
+      }
+      attempts.push(`${url} → fetched ${body.length} bytes but found no items`);
+    } catch (err) {
+      attempts.push(`${url} → ${String(err?.message || err)}`);
+    }
   }
+
+  return {
+    source_id: source.id,
+    source_name: source.name,
+    items: [],
+    fetched_at: new Date().toISOString(),
+    ok: false,
+    // Every attempt, so daily_feed.error tells you what actually happened
+    // rather than just "no items".
+    error: attempts.join(' | ').slice(0, 600),
+    _ms: Date.now() - started,
+  };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -414,7 +501,7 @@ async function supabaseRequest(path, { method = 'GET', body, prefer } = {}) {
 
 /** Upsert every source row in one round-trip. */
 export async function writeResults(rows) {
-  const payload = rows.map(({ _ms, ...r }) => r); // strip timing field
+  const payload = rows.map(({ _ms, _via, ...r }) => r); // strip debug-only fields
   await supabaseRequest('daily_feed?on_conflict=source_id', {
     method: 'POST',
     body: payload,
@@ -450,7 +537,9 @@ export async function refreshAll({ trigger = 'schedule', only = null } = {}) {
   await writeResults(rows);
 
   const summary = Object.fromEntries(
-    rows.map(r => [r.source_id, r.ok ? `${r.items.length} items (${r._ms}ms)` : `FAILED: ${r.error}`])
+    rows.map(r => [r.source_id, r.ok
+      ? `${r.items.length} items (${r._ms}ms)${r._via && r._via !== SOURCES.find(s => s.id === r.source_id)?.url ? ` via ${r._via}` : ''}`
+      : `FAILED: ${r.error}`])
   );
   const durationMs = Date.now() - started;
   const allOk = rows.every(r => r.ok);
