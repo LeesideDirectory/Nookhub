@@ -286,6 +286,61 @@ export function parseFeed(xml, limit) {
 // every other source keeps working.
 // ─────────────────────────────────────────────────────────────────────────────
 
+// Exploding Topics ships its data as a `__NEXT_DATA__ = {…}` assignment.
+// Pull it out by brace-matching (a regex can't balance braces, and the payload
+// is ~250KB of nested JSON).
+function extractNextData(html) {
+  const marker = html.indexOf('__NEXT_DATA__');
+  if (marker === -1) return null;
+  const start = html.indexOf('{', marker);
+  if (start === -1) return null;
+
+  let depth = 0, inStr = false, esc = false;
+  for (let p = start; p < html.length; p++) {
+    const c = html[p];
+    if (inStr) {
+      if (esc) esc = false;
+      else if (c === '\\') esc = true;
+      else if (c === '"') inStr = false;
+      continue;
+    }
+    if (c === '"') { inStr = true; continue; }
+    if (c === '{') depth++;
+    else if (c === '}') {
+      depth--;
+      if (depth === 0) {
+        try { return JSON.parse(html.slice(start, p + 1)); } catch { return null; }
+      }
+    }
+  }
+  return null;
+}
+
+/** 2400 → "2.4K", 165000 → "165K", 1830000 → "1.83M" — as the site shows them. */
+function formatVolume(n) {
+  if (typeof n !== 'number' || !isFinite(n) || n <= 0) return '';
+  if (n < 1000) return String(Math.round(n));
+  if (n < 1e6) {
+    const k = n / 1000;
+    return `${k < 10 || k % 1 >= 0.05 ? Number(k.toFixed(1)) : Math.round(k)}K`;
+  }
+  return `${Number((n / 1e6).toFixed(2))}M`;
+}
+
+/** growth is a multiplier keyed by period: {"24": 2.33} → "+233%". */
+function formatGrowth(growth) {
+  if (growth == null) return '';
+  let v = growth;
+  if (typeof v === 'object') {
+    // Prefer the longest period available (24 months), else whatever is there.
+    const keys = Object.keys(v).sort((a, b) => Number(b) - Number(a));
+    v = keys.length ? v[keys[0]] : null;
+  }
+  if (typeof v !== 'number' || !isFinite(v)) return '';
+  const pct = Math.round(v * 100);
+  return pct > 0 ? `+${pct}%` : `${pct}%`;
+}
+
 export function parseExplodingTopics(html, limit) {
   const out = [];
   const seen = new Set();
@@ -293,8 +348,9 @@ export function parseExplodingTopics(html, limit) {
   const titleCase = (slug) =>
     slug.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
 
-  // Exploding Topics slugs are just the kebab-cased name:
-  //   "20K PowerBank" → 20k-powerbank, "wolf haircut" → wolf-haircut
+  // Fallback only. Real topic paths come from the payload, because some carry
+  // a disambiguating suffix ("Pdrn serum" → pdrn-serum-nLoLq6tz) that can't be
+  // derived from the name.
   const slugify = (name) => String(name)
     .toLowerCase()
     .replace(/['’]/g, '')
@@ -302,10 +358,13 @@ export function parseExplodingTopics(html, limit) {
     .replace(/^-+|-+$/g, '')
     .slice(0, 60);
 
+  // Tags become spaces, not nothing — otherwise adjacent <span>s fuse
+  // ("PowerBank" + "2.4K" → "PowerBank2.4K") and the figures stop matching.
+  const spacedText = (frag, maxLen) => clean(String(frag).replace(/<[^>]*>/g, ' '), maxLen);
+
   const push = (slug, title, growth, volume, path = 'topic', desc = '') => {
     if (!slug || seen.has(slug) || out.length >= limit) return;
-    // Reject obvious non-topic slugs picked up from nav/footer links.
-    if (SLUG_BLOCKLIST.has(slug)) return;
+    if (path === 'topic' && SLUG_BLOCKLIST.has(slug)) return;
     seen.add(slug);
     const bits = [];
     if (growth) bits.push(`${growth} growth`);
@@ -323,78 +382,80 @@ export function parseExplodingTopics(html, limit) {
     });
   };
 
-  // Tags become spaces, not nothing — otherwise adjacent <span>s fuse
-  // ("PowerBank" + "2.4K" → "PowerBank2.4K") and the figures stop matching.
-  const spacedText = (frag, maxLen) => clean(String(frag).replace(/<[^>]*>/g, ' '), maxLen);
-
-  const asGrowth = (v) => {
-    if (v == null || v === '') return '';
-    if (typeof v === 'number') return `${v > 0 ? '+' : ''}${Math.round(v)}%`;
-    const t = String(v).trim();
-    return /%$/.test(t) ? t : `${t}%`;
-  };
-
-  // ── Strategy 1: Next.js pages-router payload ─────────────────────────────
-  const nextData = html.match(/<script id="__NEXT_DATA__"[^>]*>([\s\S]*?)<\/script>/i);
+  // ── Strategy 1: the __NEXT_DATA__ payload, read precisely ────────────────
+  // props.pageProps.data.trends is the main grid (30 entries, sorted by
+  // growth); trendingDesktopData.trends is the smaller featured strip. Each
+  // entry gives us everything the card shows:
+  //   keyword · path · growth{"24"} · keywordDataGlobal.vol · briefDescription
+  const nextData = extractNextData(html);
   if (nextData) {
-    try {
-      const found = [];
-      (function walk(node, depth) {
-        if (!node || depth > 10 || found.length >= limit * 4) return;
-        if (Array.isArray(node)) { node.forEach(n => walk(n, depth + 1)); return; }
-        if (typeof node !== 'object') return;
-        const slug = node.slug || node.topicSlug || node.permalink;
-        const name = node.name || node.title || node.topic || node.keyword;
-        if (typeof slug === 'string' && typeof name === 'string' && slug.length < 80) {
-          found.push({
-            slug, name,
-            growth: node.growth ?? node.growthRate ?? node.change ?? node.growth_pct ?? null,
-            volume: node.volume ?? node.searchVolume ?? node.search_volume ?? null,
-          });
-        }
-        Object.values(node).forEach(v => walk(v, depth + 1));
-      })(JSON.parse(nextData[1]), 0);
+    const pp = nextData?.props?.pageProps || {};
+    const lists = [pp?.data?.trends, pp?.trendingDesktopData?.trends].filter(Array.isArray);
 
-      for (const f of found) {
-        push(f.slug, clean(f.name, 120), asGrowth(f.growth), f.volume == null ? '' : String(f.volume));
+    for (const list of lists) {
+      for (const t of list) {
+        if (!t || typeof t !== 'object') continue;
+        const name = t.keyword || t.name || t.title;
+        const slug = t.path || t.slug;
+        if (typeof name !== 'string' || typeof slug !== 'string') continue;
+        push(
+          slug,
+          clean(name, 120),
+          formatGrowth(t.growth ?? t.growthRate),
+          formatVolume(t.keywordDataGlobal?.vol ?? t.volume ?? t.searchVolume),
+          'topic',
+          clean(t.briefDescription || t.description || '', 180)
+        );
         if (out.length >= limit) return out;
       }
-    } catch { /* fall through */ }
+      if (out.length) return out;
+    }
   }
-  if (out.length) return out;
 
-  // ── Strategy 2: app-router streamed payload ──────────────────────────────
-  // The JSON is embedded inside a JS string, so quotes may be backslash-escaped.
-  // Keys also appear in either order, so try both.
-  const Q = '\\\\?"';
-  const pairPatterns = [
-    `${Q}slug${Q}\\s*:\\s*${Q}([a-z0-9-]{2,60})${Q}[^}]{0,200}?${Q}(?:name|title)${Q}\\s*:\\s*${Q}((?:[^"\\\\]|\\\\.){2,120}?)${Q}`,
-    `${Q}(?:name|title)${Q}\\s*:\\s*${Q}((?:[^"\\\\]|\\\\.){2,120}?)${Q}[^}]{0,200}?${Q}slug${Q}\\s*:\\s*${Q}([a-z0-9-]{2,60})${Q}`,
-  ];
-  for (let i = 0; i < pairPatterns.length; i++) {
-    for (const m of html.matchAll(new RegExp(pairPatterns[i], 'gi'))) {
-      const slug = i === 0 ? m[1] : m[2];
-      const name = i === 0 ? m[2] : m[1];
-      push(slug, clean(name.replace(/\\"/g, '"'), 120), '', '');
+  // ── Strategy 2: generic scan of any embedded JSON ────────────────────────
+  // Deliberately strict. An earlier version accepted any object with a
+  // slug + title, which happily matched blogDesktopData.latestBlogPosts and
+  // emitted blog articles under /topic/… — right-looking titles, dead links.
+  // A trend must look like a trend.
+  if (nextData) {
+    const found = [];
+    (function walk(node, depth) {
+      if (!node || depth > 10 || found.length >= limit * 4) return;
+      if (Array.isArray(node)) { node.forEach(n => walk(n, depth + 1)); return; }
+      if (typeof node !== 'object') return;
+      const name = node.keyword || node.name;
+      const slug = node.path || node.slug;
+      const looksLikeTrend =
+        typeof name === 'string' && typeof slug === 'string' &&
+        (node.growth != null || node.keywordDataGlobal != null || node.searchHistory != null);
+      if (looksLikeTrend) found.push(node);
+      Object.values(node).forEach(v => walk(v, depth + 1));
+    })(nextData, 0);
+
+    for (const t of found) {
+      push(
+        t.path || t.slug,
+        clean(t.keyword || t.name, 120),
+        formatGrowth(t.growth ?? t.growthRate),
+        formatVolume(t.keywordDataGlobal?.vol ?? t.volume ?? t.searchVolume),
+        'topic',
+        clean(t.briefDescription || t.description || '', 180)
+      );
       if (out.length >= limit) return out;
     }
     if (out.length) return out;
   }
 
   // ── Strategy 3: card scan around each /topic/<slug> link ────────────────
-  // The cards on /topic read, in DOM order:
-  //   title · "2.4K Volume" · "+233% Growth" · sparkline (with 2025/2026
-  //   axis labels) · one-line description
-  // The description sits outside the <a>, so scan a window of markup after
-  // each link rather than only the anchor's own contents.
-  const linkRe = /href="(?:https:\/\/explodingtopics\.com)?\/topic\/([a-z0-9-]{2,60})"/gi;
+  // For when the payload shape changes. The cards read, in DOM order:
+  //   title · "2.4K Volume" · "+233% Growth" · sparkline · description.
+  const linkRe = /href="(?:https:\/\/explodingtopics\.com)?\/topic\/([a-zA-Z0-9-]{2,70})"/g;
   for (const m of html.matchAll(linkRe)) {
     const slug = m[1];
     if (seen.has(slug) || SLUG_BLOCKLIST.has(slug)) continue;
 
-    // Start the window *after* the opening tag closes, otherwise the leftover
-    // attributes (class="…" etc.) aren't inside <> and survive tag-stripping,
-    // gluing markup onto the title.
+    // Start the window after the opening tag closes, or leftover attributes
+    // survive tag-stripping and get glued onto the title.
     const rest = html.slice(m.index + m[0].length, m.index + m[0].length + 1700);
     const gt = rest.indexOf('>');
     const text = spacedText(gt > -1 ? rest.slice(gt + 1) : rest, 0);
@@ -403,20 +464,14 @@ export function parseExplodingTopics(html, limit) {
     const growth = (text.match(/([+\-]?\d[\d,.]*\s*%)\s*Growth\b/i) || [])[1]
                 || (text.match(/([+\-]?\d[\d,.]*\s*%)/) || [])[1] || '';
 
-    // Title: whatever sits before the first figure. Falls back to the slug.
     const figureAt = text.search(/\d[\d,.]*\s*[KMB]?\s*(?:Volume|searches)|[+\-]?\d[\d,.]*\s*%/i);
     let title = (figureAt > 0 ? text.slice(0, figureAt) : '').trim();
     if (!title || title.length > 90 || /^[\d\s.,%+-]*$/.test(title)) title = '';
 
-    // Description: the prose after the figures and the chart's year labels.
     let desc = '';
     const growthAt = text.search(/Growth\b/i);
     if (growthAt > -1) {
-      desc = text.slice(growthAt + 6)
-        .replace(/\b(19|20)\d{2}\b/g, ' ')        // sparkline axis years
-        .replace(/\s{2,}/g, ' ')
-        .trim();
-      // Keep the first sentence or so, and only if it reads like prose.
+      desc = text.slice(growthAt + 6).replace(/\b(19|20)\d{2}\b/g, ' ').replace(/\s{2,}/g, ' ').trim();
       const stop = desc.search(/(?<=[.!?])\s/);
       if (stop > 20) desc = desc.slice(0, stop + 1);
       desc = clean(desc, 180);
@@ -429,11 +484,6 @@ export function parseExplodingTopics(html, limit) {
   if (out.length) return out;
 
   // ── Strategy 3b: read the visible card text, ignoring links entirely ────
-  // /topic renders every card as static text in the shape
-  //   "<name> <volume> Volume <growth> Growth <description>"
-  // so this works even if the cards aren't anchors, use onClick handlers, or
-  // wrap the link in markup we don't recognise. Slugs on Exploding Topics are
-  // just the kebab-cased name, so the URL can be rebuilt from the name alone.
   {
     const flat = spacedText(html, 0);
     const cardRe = /([^.!?|]{2,80}?)\s+(\d[\d,.]*\s*[KMB]?)\s*Volume\s*([+\-]?\d[\d,.]*\s*%)\s*Growth\b/gi;
@@ -441,36 +491,21 @@ export function parseExplodingTopics(html, limit) {
 
     for (let i = 0; i < hits.length; i++) {
       const m = hits[i];
-
-      // Name: the last handful of words before the figure. Anything earlier
-      // belongs to the previous card's description — or, for the first card,
-      // to the page's own furniture (the filter row sits right above it).
       let raw = m[1].trim();
-      // Drop everything up to the last bit of page chrome, so the filter
-      // labels don't get glued onto the first topic's name.
       const chrome = [...raw.matchAll(CHROME_RE)];
       if (chrome.length) {
         const last = chrome[chrome.length - 1];
         const after = raw.slice(last.index + last[0].length).trim();
-        const words = after.split(/\s+/).filter(Boolean).length;
-        if (after && words <= 6) raw = after;
+        if (after && after.split(/\s+/).filter(Boolean).length <= 6) raw = after;
       }
-      const name = raw.split(/\s+/).slice(-6).join(' ')
-        .replace(/^[^A-Za-z0-9]+/, '')
-        .trim();
+      const name = raw.split(/\s+/).slice(-6).join(' ').replace(/^[^A-Za-z0-9]+/, '').trim();
       if (!name || name.length < 2) continue;
-
       const slug = slugify(name);
       if (!slug) continue;
 
-      // Description: everything up to where the next card starts.
       const from = m.index + m[0].length;
       const to = i + 1 < hits.length ? hits[i + 1].index : Math.min(flat.length, from + 400);
-      let desc = flat.slice(from, to)
-        .replace(/\b(19|20)\d{2}\b/g, ' ')
-        .replace(/\s{2,}/g, ' ')
-        .trim();
-      // Trim the trailing fragment that actually belongs to the next card.
+      let desc = flat.slice(from, to).replace(/\b(19|20)\d{2}\b/g, ' ').replace(/\s{2,}/g, ' ').trim();
       const lastStop = desc.search(/[.!?](?=[^.!?]*$)/);
       if (lastStop > 20) desc = desc.slice(0, lastStop + 1);
       desc = clean(desc, 180);
@@ -483,21 +518,18 @@ export function parseExplodingTopics(html, limit) {
   if (out.length) return out;
 
   // ── Strategy 4: bare slugs anywhere in the markup ────────────────────────
-  // Last resort for the topic pages — no titles or figures, but a real,
-  // working link is better than an empty card.
-  for (const m of html.matchAll(/\/topic\/([a-z0-9][a-z0-9-]{2,59})\b/gi)) {
+  for (const m of html.matchAll(/\/topic\/([a-zA-Z0-9][a-zA-Z0-9-]{2,69})\b/g)) {
     push(m[1], '', '', '');
     if (out.length >= limit) return out;
   }
   if (out.length) return out;
 
-  // ── Strategy 5: blog articles ────────────────────────────────────────────
-  // Reached when we were handed /blog, or when the topic markup changed
-  // entirely. Still genuine Exploding Topics content, clearly linked.
+  // ── Strategy 5: blog articles, correctly labelled as /blog/ ─────────────
+  // Last resort. Still genuine Exploding Topics content, and crucially the
+  // links actually resolve.
   const blogRe = /href="(?:https:\/\/explodingtopics\.com)?\/blog\/([a-z0-9-]{3,80})"[^>]*>([\s\S]{0,300}?)<\/a>/gi;
   for (const m of html.matchAll(blogRe)) {
-    const title = spacedText(m[2] || '', 160);
-    push(m[1], title, '', '', 'blog');
+    push(m[1], spacedText(m[2] || '', 160), '', '', 'blog');
     if (out.length >= limit) return out;
   }
 
