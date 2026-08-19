@@ -5754,6 +5754,7 @@ const DashboardPage = ({ user: userProp, view, onNavigate, profilePic, setProfil
 
         {view === "customize" && (() => {
           const CATEGORIES = [
+            { id: "daily",            label: "Daily Updates",      emoji: "📰", ids: ["morning"] },
             { id: "productivity",     label: "Productivity",      emoji: "⚡", ids: ["todo", "goals", "links", "bookmarks", "studylog", "skillprog"] },
             { id: "lifestyle",        label: "Lifestyle",          emoji: "🌿", ids: ["habitstreak", "sobriety", "mood", "gratitude", "hobbies", "archive", "sleeplog", "waterring", "plants", "countdown", "birthdays"] },
             { id: "finance",          label: "Finance",            emoji: "💰", ids: ["finance"] },
@@ -10650,6 +10651,8 @@ export default function App() {
           /* Morning Nook → single column */
           .nook-morning-grid { grid-template-columns: minmax(0, 1fr) !important; }
           .nook-morning-source-grid { grid-template-columns: minmax(0, 1fr) !important; }
+          .nook-morning-banner { flex-wrap: wrap !important; gap: 12px !important; }
+          .nook-morning-banner-cta { width: 100% !important; justify-content: center !important; }
 
           /* Nav */
           .nook-nav-links { display: none; }

@@ -529,17 +529,6 @@ export const MorningNookPage = ({ userId, displayName, onNavigate, readOnly = fa
             </div>
           </div>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            {!readOnly && (
-            <button
-              onClick={() => setShowSettings(v => !v)}
-              style={{
-                background: showSettings ? P.lavender : P.white,
-                border: `1.5px solid ${P.lavender}`, borderRadius: 12,
-                padding: '9px 16px', cursor: 'pointer', fontFamily: FF_S,
-                fontSize: 13, color: P.ink, fontWeight: 500, minHeight: 44,
-              }}
-            >⚙ Sources ({enabledIds.length})</button>
-            )}
             <button
               onClick={refresh}
               disabled={refreshing}
@@ -554,6 +543,62 @@ export const MorningNookPage = ({ userId, displayName, onNavigate, readOnly = fa
         </div>
       </div>
 
+      {/* ── Customise banner ─────────────────────────────────────────────── */}
+      {/* Sits directly under the greeting so changing sources is impossible to
+          miss. The whole strip is the button. */}
+      {!readOnly && (
+        <button
+          onClick={() => setShowSettings(v => !v)}
+          className="nook-morning-banner"
+          style={{
+            width: '100%', display: 'flex', alignItems: 'center', gap: 14,
+            textAlign: 'left', cursor: 'pointer', marginBottom: 22,
+            background: showSettings ? P.lavenderLight : P.white,
+            border: `1.5px solid ${P.lavender}`, borderRadius: 20,
+            padding: '16px 20px', fontFamily: FF_S,
+            boxShadow: showSettings ? 'none' : '0 3px 14px rgba(201,184,240,0.16)',
+            transition: 'all 0.18s',
+          }}
+          onMouseEnter={e => { e.currentTarget.style.background = P.lavenderLight; }}
+          onMouseLeave={e => { e.currentTarget.style.background = showSettings ? P.lavenderLight : P.white; }}
+        >
+          <span style={{
+            width: 40, height: 40, borderRadius: 13, background: P.lavender,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: 19, flexShrink: 0,
+          }}>⚙</span>
+
+          <span style={{ minWidth: 0, flex: 1 }}>
+            <span style={{
+              display: 'block', fontFamily: FF_D, fontSize: 17, color: P.ink, lineHeight: 1.25,
+            }}>
+              {showSettings ? 'Done choosing sources' : 'Customise your sources'}
+            </span>
+            <span style={{
+              display: 'block', fontSize: 12.5, color: P.inkLight, marginTop: 3,
+              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+            }}>
+              {enabledIds.length === 0
+                ? `Nothing switched on yet — ${MORNING_NOOK_SOURCES.length} to choose from`
+                : `${enabledIds.length} of ${MORNING_NOOK_SOURCES.length} on · ${enabledIds.map(id => SOURCE_BY_ID[id]?.name).filter(Boolean).join(', ')}`}
+            </span>
+          </span>
+
+          <span className="nook-morning-banner-cta" style={{
+            flexShrink: 0, background: P.lavender, borderRadius: 11,
+            padding: '9px 15px', fontSize: 12.5, color: P.ink, fontWeight: 600,
+            display: 'flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap',
+          }}>
+            {showSettings ? 'Close' : 'Choose sources'}
+            <span style={{
+              display: 'inline-block', fontSize: 11,
+              transform: showSettings ? 'rotate(180deg)' : 'none',
+              transition: 'transform 0.2s',
+            }}>▾</span>
+          </span>
+        </button>
+      )}
+
       {/* ── Source picker ────────────────────────────────────────────────── */}
       {showSettings && !readOnly && (
         <div style={{
@@ -565,7 +610,7 @@ export const MorningNookPage = ({ userId, displayName, onNavigate, readOnly = fa
             Your sources
           </div>
           <div style={{ fontFamily: FF_S, fontSize: 12.5, color: P.inkLight, marginBottom: 18 }}>
-            Switch on whatever you'd like waiting for you each morning. Changes save straight away and follow you across devices.
+            Tap any source to switch it on or off. Changes save straight away and follow you across devices.
           </div>
 
           <MorningNookSourcePicker prefs={prefs} onToggle={toggleSource} columns={2} />
@@ -652,7 +697,7 @@ export const MorningNookPage = ({ userId, displayName, onNavigate, readOnly = fa
               marginTop: 14, background: P.lavender, border: 'none', borderRadius: 12,
               padding: '10px 22px', cursor: 'pointer', fontFamily: FF_S, fontSize: 13,
               color: P.ink, fontWeight: 600,
-            }}>Choose sources</button>
+            }}>Choose sources ↑</button>
           )}
         </EmptyNote>
       ) : prefs.view === 'mixed' ? (
