@@ -76,16 +76,19 @@ export const SOURCES = [
     name: 'Exploding Topics',
     kind: 'exploding',            // custom scraper — no RSS feed exists
     // Tried in order, first one that yields items wins.
-    //   /topics — the trending directory, the good stuff, changes daily
-    //   /       — homepage, shows a smaller featured set
+    //   /topic  — the trending directory ("Discover Trending Topics And
+    //             Products"). Singular. /topics 404s — and its 404 page
+    //             happens to show trending cards too, which is why a broken
+    //             URL still returned data.
+    //   /       — homepage, smaller featured set
     //   /blog   — real articles; less timely but stable, so the card is
     //             never empty just because the topic markup changed
     urls: [
-      'https://explodingtopics.com/topics',
+      'https://explodingtopics.com/topic',
       'https://explodingtopics.com/',
       'https://explodingtopics.com/blog',
     ],
-    url: 'https://explodingtopics.com/topics',   // kept for logging
+    url: 'https://explodingtopics.com/topic',   // kept for logging
     limit: 8,
   },
   {
@@ -290,7 +293,7 @@ export function parseExplodingTopics(html, limit) {
   const titleCase = (slug) =>
     slug.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
 
-  const push = (slug, title, growth, volume, path = 'topic') => {
+  const push = (slug, title, growth, volume, path = 'topic', desc = '') => {
     if (!slug || seen.has(slug) || out.length >= limit) return;
     // Reject obvious non-topic slugs picked up from nav/footer links.
     if (SLUG_BLOCKLIST.has(slug)) return;
@@ -298,10 +301,12 @@ export function parseExplodingTopics(html, limit) {
     const bits = [];
     if (growth) bits.push(`${growth} growth`);
     if (volume) bits.push(`${volume} monthly searches`);
+    // "+233% growth · 2.4K monthly searches — A 20K power bank is a…"
+    const summary = desc ? (bits.length ? `${bits.join(' · ')} — ${desc}` : desc) : bits.join(' · ');
     out.push({
       title: title || titleCase(slug),
       url: `https://explodingtopics.com/${path}/${slug}`,
-      summary: bits.join(' · '),
+      summary,
       image: null,
       author: null,
       publishedAt: null,
@@ -367,23 +372,49 @@ export function parseExplodingTopics(html, limit) {
     if (out.length) return out;
   }
 
-  // ── Strategy 3: plain HTML anchors to /topic/<slug> ──────────────────────
-  // Pull the anchor plus a chunk of following markup so we can scavenge the
-  // growth / volume figures that sit in sibling elements on the card.
-  const anchorRe = /href="(?:https:\/\/explodingtopics\.com)?\/topic\/([a-z0-9-]{2,60})"[^>]*>([\s\S]{0,600}?)<\/a>/gi;
-  for (const m of html.matchAll(anchorRe)) {
-    const chunk = m[2] || '';
-    const text = spacedText(chunk, 160);
-    const growth = (chunk.match(/([+\-]?\d[\d,.]*\s*%)/) || [])[1] || '';
-    const volume = (chunk.match(/\b(\d[\d,.]*\s*[KMB]?)\s*(?:volume|searches|\/mo)/i) || [])[1] || '';
-    // The anchor text often includes the figures; strip them off the title.
-    const title = text
-      .replace(/[+\-]?\d[\d,.]*\s*%/g, '')
-      .replace(/\b\d[\d,.]*\s*[KMB]?\s*(?:volume|searches)/gi, '')
-      .replace(/\b(?:growth|volume|view topic|searches)\b/gi, '')
-      .replace(/\s{2,}/g, ' ')
-      .trim();
-    push(m[1], title, growth, volume);
+  // ── Strategy 3: card scan around each /topic/<slug> link ────────────────
+  // The cards on /topic read, in DOM order:
+  //   title · "2.4K Volume" · "+233% Growth" · sparkline (with 2025/2026
+  //   axis labels) · one-line description
+  // The description sits outside the <a>, so scan a window of markup after
+  // each link rather than only the anchor's own contents.
+  const linkRe = /href="(?:https:\/\/explodingtopics\.com)?\/topic\/([a-z0-9-]{2,60})"/gi;
+  for (const m of html.matchAll(linkRe)) {
+    const slug = m[1];
+    if (seen.has(slug) || SLUG_BLOCKLIST.has(slug)) continue;
+
+    // Start the window *after* the opening tag closes, otherwise the leftover
+    // attributes (class="…" etc.) aren't inside <> and survive tag-stripping,
+    // gluing markup onto the title.
+    const rest = html.slice(m.index + m[0].length, m.index + m[0].length + 1700);
+    const gt = rest.indexOf('>');
+    const text = spacedText(gt > -1 ? rest.slice(gt + 1) : rest, 0);
+
+    const volume = (text.match(/(\d[\d,.]*\s*[KMB]?)\s*(?:Volume|searches|\/\s*mo)\b/i) || [])[1] || '';
+    const growth = (text.match(/([+\-]?\d[\d,.]*\s*%)\s*Growth\b/i) || [])[1]
+                || (text.match(/([+\-]?\d[\d,.]*\s*%)/) || [])[1] || '';
+
+    // Title: whatever sits before the first figure. Falls back to the slug.
+    const figureAt = text.search(/\d[\d,.]*\s*[KMB]?\s*(?:Volume|searches)|[+\-]?\d[\d,.]*\s*%/i);
+    let title = (figureAt > 0 ? text.slice(0, figureAt) : '').trim();
+    if (!title || title.length > 90 || /^[\d\s.,%+-]*$/.test(title)) title = '';
+
+    // Description: the prose after the figures and the chart's year labels.
+    let desc = '';
+    const growthAt = text.search(/Growth\b/i);
+    if (growthAt > -1) {
+      desc = text.slice(growthAt + 6)
+        .replace(/\b(19|20)\d{2}\b/g, ' ')        // sparkline axis years
+        .replace(/\s{2,}/g, ' ')
+        .trim();
+      // Keep the first sentence or so, and only if it reads like prose.
+      const stop = desc.search(/(?<=[.!?])\s/);
+      if (stop > 20) desc = desc.slice(0, stop + 1);
+      desc = clean(desc, 180);
+      if (desc.split(' ').length < 4) desc = '';
+    }
+
+    push(slug, title, growth, volume, 'topic', desc);
     if (out.length >= limit) return out;
   }
   if (out.length) return out;
