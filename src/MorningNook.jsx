@@ -45,6 +45,7 @@ export const MORNING_NOOK_SOURCES = [
   { id: 'trends-ie',    name: 'Trending in Ireland', emoji: '🔥', group: 'Trends',    tint: P.peachLight,  accent: P.peach,    blurb: "What Ireland's searching for today",  defaultOn: false },
   { id: 'hackernews',   name: 'Hacker News',         emoji: '🧠', group: 'Tech',      tint: P.lavenderLight, accent: P.lavender, blurb: 'Front page, 100+ points',           defaultOn: false },
   { id: 'techcrunch',   name: 'TechCrunch',          emoji: '⚡', group: 'Tech',      tint: P.lavenderLight, accent: P.lavender, blurb: 'Startups and funding',              defaultOn: false },
+  { id: 'evolvingai',   name: 'Evolving AI',         emoji: '🧬', group: 'Tech',      tint: P.lavenderLight, accent: P.lavender, blurb: 'Daily AI news from @evolving.ai',   defaultOn: false },
 ];
 
 const SOURCE_BY_ID = Object.fromEntries(MORNING_NOOK_SOURCES.map(s => [s.id, s]));

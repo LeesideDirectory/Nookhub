@@ -112,6 +112,20 @@ export const SOURCES = [
     url: 'https://techcrunch.com/feed/',
     limit: 6,
   },
+  {
+    id: 'evolvingai',
+    name: 'Evolving AI',
+    kind: 'beehiiv',              // no RSS — beehiiv archive page, scraped
+    // The Instagram account @evolving.ai can't be read (robots-disallowed, no
+    // public API), so this follows the same team's daily newsletter instead.
+    urls: [
+      'https://newsletter.evolvingai.io/archive',
+      'https://newsletter.evolvingai.io/',
+    ],
+    url: 'https://newsletter.evolvingai.io/archive',
+    origin: 'https://newsletter.evolvingai.io',
+    limit: 6,
+  },
 ];
 
 // Pretend to be a normal browser. Several publishers (RTÉ in particular)
@@ -548,12 +562,77 @@ const SLUG_BLOCKLIST = new Set([
 ]);
 
 // ─────────────────────────────────────────────────────────────────────────────
+// beehiiv archive pages
+//
+// beehiiv newsletters only expose RSS if the publisher switches it on, and
+// Evolving AI hasn't (/feed, /rss.xml, /feed.xml all 404). Their archive page
+// is straightforward though: every post is an anchor to /p/<slug> carrying the
+// full title in an aria-label, e.g.
+//   <a href="/p/anthropic-opens-its-ai-school-free-for-everyone"
+//      aria-label="🎓 Anthropic Opens Its AI School Free for Everyone">
+// aria-label is an accessibility attribute, so it's far less likely to churn
+// than a class name — screen readers depend on it.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const MONTHS = 'Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec';
+
+export function parseBeehiivArchive(html, limit, origin = '') {
+  const out = [];
+  const seen = new Set();
+  const base = String(origin).replace(/\/$/, '');
+
+  const anchorRe = /<a\s+href="(\/p\/[a-zA-Z0-9-]{3,120})"[^>]*?aria-label="([^"]*)"/gi;
+  const hits = [...html.matchAll(anchorRe)];
+
+  for (let i = 0; i < hits.length; i++) {
+    const m = hits[i];
+    const slug = m[1];
+    if (seen.has(slug)) continue;
+    seen.add(slug);
+
+    const title = clean(m[2], 180);
+    if (!title) continue;
+
+    // Bound the card at the next post link so nothing bleeds across.
+    const from = m.index;
+    const to = i + 1 < hits.length ? hits[i + 1].index : Math.min(html.length, from + 12000);
+    const win = html.slice(from, to);
+
+    // Post artwork only — author avatars come from the same CDN, so match the
+    // uploaded-asset path and skip the avatar/profile ones.
+    const img = (win.match(
+      /<img[^>]+src="(https:\/\/media\.beehiiv\.com\/[^"]*\/uploads\/asset\/file\/[^"]+)"/i
+    ) || [])[1] || '';
+
+    const dateTxt = (win.match(
+      new RegExp(`\\b((?:${MONTHS})[a-z]*\\s+\\d{1,2},\\s+(?:19|20)\\d\\d)\\b`)
+    ) || [])[1] || '';
+
+    out.push({
+      title,
+      url: safeUrl(base + slug),
+      summary: '',
+      image: safeUrl(decodeEntities(img)) || null,
+      author: null,
+      publishedAt: toIso(dateTxt),
+      meta: null,
+    });
+    if (out.length >= limit) break;
+  }
+
+  return out.filter(x => x.url);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Fetch one source
 // ─────────────────────────────────────────────────────────────────────────────
 
 export async function fetchSource(source) {
   const started = Date.now();
-  const parse = source.kind === 'exploding' ? parseExplodingTopics : parseFeed;
+  const parse =
+    source.kind === 'exploding' ? parseExplodingTopics :
+    source.kind === 'beehiiv'   ? ((html, n) => parseBeehiivArchive(html, n, source.origin)) :
+    parseFeed;
   const limit = source.limit || 8;
 
   // Most sources have one URL. Exploding Topics has several, tried in order,
